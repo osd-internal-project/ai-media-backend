@@ -10,17 +10,74 @@ datasource db {
 }
 
 model users {
-  id        Int      @unique @default(autoincrement())
-  userId    String   @unique @default(uuid()) @map("user_id") @db.VarChar(50)
-  username  String   @db.VarChar(100)
-  password  String?
-  fullname String?  @map("fullname") @db.VarChar(100)
-  email     String?  @db.VarChar(100)
-  phone     String?  @map("phone") @db.VarChar(20)
-  status    Boolean  @default(true) @map("status")
-  clientId  String?  @map("client_id") @db.VarChar(50)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @map("updated_at")
-  token     String?  @db.VarChar(50)
+  id              Int               @unique @default(autoincrement())
+  userId          String            @unique @default(uuid()) @map("user_id") @db.VarChar(50)
+  username        String            @db.VarChar(100)
+  password        String?
+  fullname        String?           @map("fullname") @db.VarChar(100)
+  email           String?           @db.VarChar(100)
+  phone           String?           @map("phone") @db.VarChar(20)
+  status          Boolean           @default(true) @map("status")
+  clientId        String?           @map("client_id") @db.VarChar(50)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @default(now()) @map("updated_at")
+  token           String?           @db.VarChar(50)
+  tokenImagesMaps TokenImagesMaps[]
 }
 
+model MasterModelType {
+  id          Int      @unique @default(autoincrement()) @map("id")
+  modelType   String?  @map("model_type") @db.VarChar(150)
+  type        String?  @map("type") @db.VarChar(150)
+  description String?  @map("description") @db.VarChar(150)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@map("master_model_type")
+}
+
+model GenerateImage {
+  id              Int       @unique @default(autoincrement()) @map("id")
+  fileName        String?   @map("file_name") @db.VarChar(150)
+  filePath        String?   @map("file_path") @db.VarChar(150)
+  fileType        String?   @map("file_type") @db.VarChar(150)
+  createdAt       DateTime? @default(now()) @map("created_at")
+  updatedAt       DateTime? @default(now()) @map("updated_at")
+  generateImageId String?   @map("generate_image_id") @db.VarChar(150)
+
+  @@map("generate_image")
+}
+
+model HistoryLogsImages {
+  id        Int      @unique @default(autoincrement()) @map("id")
+  userId    String?  @map("user_id") @db.VarChar(50)
+  modelType String?  @map("model_type") @db.VarChar(150)
+  imageId   String?  @map("image_id") @db.VarChar(150)
+  status    String?  @map("status") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("history_logs_images")
+}
+
+model TokenImages {
+  id              Int               @unique @default(autoincrement()) @map("id")
+  token           Int?              @map("token")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @default(now()) @map("updated_at")
+  tokenImagesMaps TokenImagesMaps[]
+
+  @@map("token_images")
+}
+
+model TokenImagesMaps {
+  id           Int      @unique @default(autoincrement()) @map("id")
+  userId       String?  @map("user_id") @db.VarChar(50)
+  tokenImageId Int?     @map("token_image_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @map("updated_at")
+  user       users?       @relation(fields: [userId], references: [userId])
+  tokenImage TokenImages? @relation(fields: [tokenImageId], references: [id])
+
+  @@map("token_images_maps")
+}

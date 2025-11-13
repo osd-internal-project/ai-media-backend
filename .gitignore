@@ -31,9 +31,14 @@ rad.json
 # Test results file
 TestResults.xml
 
+
 ### Node.js ###
 # Node modules
 node_modules/
+
+# Next.js build output
+.next/
+out/
 
 # Optional: common Node.js build artifacts
 dist/
