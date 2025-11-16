@@ -1,2 +1,5 @@
 export * from './generate-image.repository'
 export * from './master-model-type.repository'
+export * from './groups.repository'
+export * from './roles.repository'
+export * from './users.repository' 

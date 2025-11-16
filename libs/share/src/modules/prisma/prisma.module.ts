@@ -4,6 +4,9 @@ import { AccessService } from 'src/access';
 import {
   GenerateImageRepository,
   MasterdataModelTypeRepository,
+  UsersRepository,
+  GroupsRepository,
+  RolesRepository,
 } from 'src/repositories';
 
 const services = [
@@ -11,10 +14,13 @@ const services = [
   AccessService,
   GenerateImageRepository,
   MasterdataModelTypeRepository,
+  UsersRepository,
+  GroupsRepository,
+  RolesRepository,
 ];
 
 @Module({
   providers: [...services],
   exports: [...services],
 })
-export class PrismaModule {}
+export class PrismaModule { }

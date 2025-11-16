@@ -10,50 +10,71 @@ datasource db {
 }
 
 model users {
-  id              Int               @unique @default(autoincrement())
-  userId          String            @unique @default(uuid()) @map("user_id") @db.VarChar(50)
-  username        String            @db.VarChar(100)
-  password        String?
-  fullname        String?           @map("fullname") @db.VarChar(100)
-  email           String?           @db.VarChar(100)
-  phone           String?           @map("phone") @db.VarChar(20)
-  status          Boolean           @default(true) @map("status")
-  clientId        String?           @map("client_id") @db.VarChar(50)
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @default(now()) @map("updated_at")
-  token           String?           @db.VarChar(50)
-  tokenImagesMaps TokenImagesMaps[]
+  id          Int         @id @default(autoincrement())
+  userId      String      @unique @default(uuid()) @db.VarChar(50)
+  username    String      @unique @db.VarChar(100)
+  fullname    String      @db.VarChar(200)
+  description String?     @db.Text
+  status      String      @default("active") @db.VarChar(50)
+  lastOn      DateTime?   @map("last_on")
+  maxToken    Int         @default(0)
+  maxImages   Int         @default(0) @map("max_images")
+  apiKeys     String?     @map("api_keys") @db.Text
+  token       String?     @db.VarChar(50)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  groups      UserGroup[]
 }
 
 model groups {
-  id          Int           @unique @default(autoincrement())
-  groupId     String        @unique @default(uuid()) @map("group_id") @db.VarChar(50)
-  name        String        @db.VarChar(100)
-  description String        @db.Text
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @default(now()) @map("updated_at")
-  GroupOfRole GroupOfRole[]
+  id          Int      @id @default(autoincrement())
+  groupId     String   @unique @default(uuid()) @map("group_id") @db.VarChar(50)
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  roles GroupRole[]
+  users UserGroup[]
 }
 
 model role {
-  id          Int           @unique @default(autoincrement())
-  roleId      String        @unique @default(uuid()) @map("group_id") @db.VarChar(50)
-  name        String        @db.VarChar(100)
-  description String        @db.Text
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @default(now()) @map("updated_at")
-  GroupOfRole GroupOfRole[]
+  id          Int      @id @default(autoincrement())
+  roleId      String   @unique @default(uuid()) @map("role_id") @db.VarChar(50)
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  groups GroupRole[]
 }
 
-model GroupOfRole {
-  id      Int    @id @default(autoincrement())
+model GroupRole {
+  id Int @id @default(autoincrement())
+
   groupId String @db.VarChar(50)
   roleId  String @db.VarChar(50)
-  group   groups @relation(fields: [groupId], references: [groupId])
-  role    role   @relation(fields: [roleId], references: [roleId])
+
+  group groups @relation(fields: [groupId], references: [groupId])
+  role  role   @relation(fields: [roleId], references: [roleId])
+
+  createdAt DateTime @default(now())
 
   @@unique([groupId, roleId])
-  @@map("group_of_role")
+  @@map("group_role")
+}
+
+model UserGroup {
+  id      Int    @id @default(autoincrement())
+  userId  String @db.VarChar(50)
+  groupId String @db.VarChar(50)
+  users   users  @relation(fields: [userId], references: [userId])
+  group   groups @relation(fields: [groupId], references: [groupId])
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, groupId])
+  @@map("user_group")
 }
 
 model MasterModelType {
@@ -68,13 +89,12 @@ model MasterModelType {
 }
 
 model GenerateImage {
-  id              Int       @unique @default(autoincrement()) @map("id")
-  fileName        String?   @map("file_name") @db.VarChar(150)
-  filePath        String?   @map("file_path") @db.VarChar(150)
-  fileType        String?   @map("file_type") @db.VarChar(150)
-  createdAt       DateTime? @default(now()) @map("created_at")
-  updatedAt       DateTime? @default(now()) @map("updated_at")
-  generateImageId String?   @map("generate_image_id") @db.VarChar(150)
+  id        Int       @unique @default(autoincrement()) @map("id")
+  fileName  String?   @map("file_name") @db.VarChar(150)
+  filePath  String?   @map("file_path") @db.VarChar(150)
+  fileType  String?   @map("file_type") @db.VarChar(150)
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @default(now()) @map("updated_at")
 
   @@map("generate_image")
 }
@@ -82,6 +102,7 @@ model GenerateImage {
 model HistoryLogsImages {
   id        Int      @unique @default(autoincrement()) @map("id")
   userId    String?  @map("user_id") @db.VarChar(50)
+  token     String?  @map("token") @db.VarChar(50)
   modelType String?  @map("model_type") @db.VarChar(150)
   imageId   String?  @map("image_id") @db.VarChar(150)
   status    String?  @map("status") @db.VarChar(50)
@@ -89,26 +110,4 @@ model HistoryLogsImages {
   updatedAt DateTime @default(now()) @map("updated_at")
 
   @@map("history_logs_images")
-}
-
-model TokenImages {
-  id              Int               @unique @default(autoincrement()) @map("id")
-  token           Int?              @map("token")
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @default(now()) @map("updated_at")
-  tokenImagesMaps TokenImagesMaps[]
-
-  @@map("token_images")
-}
-
-model TokenImagesMaps {
-  id           Int          @unique @default(autoincrement()) @map("id")
-  userId       String?      @map("user_id") @db.VarChar(50)
-  tokenImageId Int?         @map("token_image_id")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @default(now()) @map("updated_at")
-  user         users?       @relation(fields: [userId], references: [userId])
-  tokenImage   TokenImages? @relation(fields: [tokenImageId], references: [id])
-
-  @@map("token_images_maps")
 }
