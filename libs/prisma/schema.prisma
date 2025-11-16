@@ -25,6 +25,37 @@ model users {
   tokenImagesMaps TokenImagesMaps[]
 }
 
+model groups {
+  id          Int           @unique @default(autoincrement())
+  groupId     String        @unique @default(uuid()) @map("group_id") @db.VarChar(50)
+  name        String        @db.VarChar(100)
+  description String        @db.Text
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @map("updated_at")
+  GroupOfRole GroupOfRole[]
+}
+
+model role {
+  id          Int           @unique @default(autoincrement())
+  roleId      String        @unique @default(uuid()) @map("group_id") @db.VarChar(50)
+  name        String        @db.VarChar(100)
+  description String        @db.Text
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @map("updated_at")
+  GroupOfRole GroupOfRole[]
+}
+
+model GroupOfRole {
+  id      Int    @id @default(autoincrement())
+  groupId String @db.VarChar(50)
+  roleId  String @db.VarChar(50)
+  group   groups @relation(fields: [groupId], references: [groupId])
+  role    role   @relation(fields: [roleId], references: [roleId])
+
+  @@unique([groupId, roleId])
+  @@map("group_of_role")
+}
+
 model MasterModelType {
   id          Int      @unique @default(autoincrement()) @map("id")
   modelType   String?  @map("model_type") @db.VarChar(150)
@@ -71,13 +102,13 @@ model TokenImages {
 }
 
 model TokenImagesMaps {
-  id           Int      @unique @default(autoincrement()) @map("id")
-  userId       String?  @map("user_id") @db.VarChar(50)
-  tokenImageId Int?     @map("token_image_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @default(now()) @map("updated_at")
-  user       users?       @relation(fields: [userId], references: [userId])
-  tokenImage TokenImages? @relation(fields: [tokenImageId], references: [id])
+  id           Int          @unique @default(autoincrement()) @map("id")
+  userId       String?      @map("user_id") @db.VarChar(50)
+  tokenImageId Int?         @map("token_image_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @default(now()) @map("updated_at")
+  user         users?       @relation(fields: [userId], references: [userId])
+  tokenImage   TokenImages? @relation(fields: [tokenImageId], references: [id])
 
   @@map("token_images_maps")
 }

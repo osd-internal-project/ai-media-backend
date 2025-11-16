@@ -13,7 +13,7 @@ export class GenerateImageService {
   constructor(
     private readonly generateimagerepo: GenerateImageRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
-  ) { }
+  ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const agent = new https.Agent({ rejectUnauthorized: false });
     const axiosConfig = {
@@ -42,13 +42,13 @@ export class GenerateImageService {
           },
           ...(createGenerateImageDto.image
             ? [
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `https://econnect.osd.co.th/namecard/public/api/core/public/generate-image/${createGenerateImageDto.image}`,
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `https://econnect.osd.co.th/namecard/public/api/core/public/generate-image/${createGenerateImageDto.image}`,
+                  },
                 },
-              },
-            ]
+              ]
             : []),
         ],
       };
@@ -61,7 +61,6 @@ export class GenerateImageService {
     } else {
       const base = {
         model: getModelType.modelType,
-        // : 'seedream-3-0-t2i-250415',
         prompt: `${createGenerateImageDto.text}`,
         ...(createGenerateImageDto.image && {
           image: `https://econnect.osd.co.th/namecard/public/api/core/public/generate-image/${createGenerateImageDto.image}`,

@@ -1,17 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  Query,
-  UploadedFile,
-  UseInterceptors,
-  StreamableFile,
-  Res,
-} from '@nestjs/common';
+import { Controller, Get, Param, Res } from '@nestjs/common';
 import { join } from 'path';
 import { createReadStream } from 'fs';
 import { Response } from 'express';
