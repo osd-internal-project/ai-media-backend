@@ -1,26 +1,62 @@
+import { Prisma } from '@prisma/client';
 import { Injectable } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UsersRepository, GroupsRepository } from '@ai-media/share';
 
 @Injectable()
 export class UsersService {
-  create(createUserDto: CreateUserDto) {
-    return 'This action adds a new user';
+  constructor(
+    private readonly userRepo: UsersRepository,
+    private readonly groupRepo: GroupsRepository,
+  ) {}
+
+  create(createUserDto: Prisma.usersCreateInput) {
+    return this.userRepo.create({ data: createUserDto });
   }
 
   findAll() {
-    return `This action returns all users`;
+    return this.userRepo.findMany({
+      include: { groups: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+  async summaryData() {
+    const [totalUsers, activeUsers, unabledUsers, totalGroups] =
+      await Promise.all([
+        this.userRepo.count({}),
+        this.userRepo.count({ where: { status: 'active' } }),
+        this.userRepo.count({ where: { status: 'unabled' } }),
+        this.groupRepo.count({}),
+      ]);
+    return {
+      total: totalUsers,
+      active: activeUsers,
+      unabled: unabledUsers,
+      userGroup: totalGroups,
+    };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  findOne(userId: string) {
+    return this.userRepo.findMany({
+      where: {
+        userId,
+      },
+    });
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
+  update(userId: string, updateUserDto: Prisma.usersUpdateInput) {
+    return this.userRepo.update({
+      where: { userId },
+      data: {
+        ...updateUserDto,
+      },
+    });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  remove(userId: string) {
+    return this.userRepo.delete({
+      where: {
+        userId,
+      },
+    });
   }
 }

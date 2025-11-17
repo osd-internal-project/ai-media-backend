@@ -1,26 +1,56 @@
 import { Injectable } from '@nestjs/common';
-import { CreateGroupDto } from './dto/create-group.dto';
-import { UpdateGroupDto } from './dto/update-group.dto';
+import { Prisma } from '@prisma/client';
+import { GroupsRepository } from '@ai-media/share';
+import type { CreateGroupDto } from './dto/create-group.dto';
 
 @Injectable()
 export class GroupsService {
+  constructor(private readonly groupsRepo: GroupsRepository) {}
   create(createGroupDto: CreateGroupDto) {
-    return 'This action adds a new group';
+    const condition = {
+      data: {
+        name: createGroupDto.name,
+        // Add Users to Group (only if exists)
+        ...(createGroupDto.users?.length && {
+          users: {
+            create: createGroupDto.users.map((userId) => ({
+              user: { connect: { userId } },
+            })),
+          },
+        }),
+        // Add Roles to Group (only if exists)
+        ...(createGroupDto.roles?.length && {
+          roles: {
+            create: createGroupDto.roles.map((roleId) => ({
+              role: { connect: { roleId } },
+            })),
+          },
+        }),
+      },
+    } as any;
+    return this.groupsRepo.create(condition);
   }
 
   findAll() {
-    return `This action returns all groups`;
+    return this.groupsRepo.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} group`;
+  findOne(groupId: string) {
+    return this.groupsRepo.findOne({ where: { groupId } });
   }
 
-  update(id: number, updateGroupDto: UpdateGroupDto) {
-    return `This action updates a #${id} group`;
+  update(groupId: string, updateGroupDto: Prisma.groupsUpdateInput) {
+    return this.groupsRepo.update({
+      where: {
+        groupId,
+      },
+      data: { ...updateGroupDto },
+    });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} group`;
+  remove(groupId: string) {
+    return this.groupsRepo.delete({ where: { groupId } });
   }
 }

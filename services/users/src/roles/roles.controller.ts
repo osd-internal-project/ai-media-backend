@@ -1,14 +1,21 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { RolesService } from './roles.service';
-import { CreateRoleDto } from './dto/create-role.dto';
-import { UpdateRoleDto } from './dto/update-role.dto';
+import type { Prisma } from '@prisma/client';
 
 @Controller('roles')
 export class RolesController {
-  constructor(private readonly rolesService: RolesService) {}
+  constructor(private readonly rolesService: RolesService) { }
 
   @Post()
-  create(@Body() createRoleDto: CreateRoleDto) {
+  create(@Body('body') createRoleDto: Prisma.roleCreateInput) {
     return this.rolesService.create(createRoleDto);
   }
 
@@ -17,18 +24,21 @@ export class RolesController {
     return this.rolesService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.rolesService.findOne(+id);
+  @Get(':roleId')
+  findOne(@Param('roleId') roleId: string) {
+    return this.rolesService.findOne(roleId);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateRoleDto: UpdateRoleDto) {
-    return this.rolesService.update(+id, updateRoleDto);
+  @Patch(':roleId')
+  update(
+    @Param('roleId') roleId: string,
+    @Body('body') updateRoleDto: Prisma.roleUpdateInput,
+  ) {
+    return this.rolesService.update(roleId, updateRoleDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.rolesService.remove(+id);
+  @Delete(':roleId')
+  remove(@Param('roleId') roleId: string) {
+    return this.rolesService.remove(roleId);
   }
 }

@@ -14,7 +14,10 @@ model users {
   userId      String      @unique @default(uuid()) @db.VarChar(50)
   username    String      @unique @db.VarChar(100)
   fullname    String      @db.VarChar(200)
+  email       String      @db.VarChar(200)
+  tier        String      @db.VarChar(200)
   description String?     @db.Text
+  phoneNumber String      @default("phone_number") @db.VarChar(50)
   status      String      @default("active") @db.VarChar(50)
   lastOn      DateTime?   @map("last_on")
   maxToken    Int         @default(0)
@@ -30,6 +33,7 @@ model groups {
   id          Int      @id @default(autoincrement())
   groupId     String   @unique @default(uuid()) @map("group_id") @db.VarChar(50)
   name        String   @db.VarChar(100)
+  displayName String?  @map("display_name") @db.VarChar(100)
   description String?  @db.Text
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -43,6 +47,7 @@ model role {
   roleId      String   @unique @default(uuid()) @map("role_id") @db.VarChar(50)
   name        String   @db.VarChar(100)
   description String?  @db.Text
+  type        String?  @db.Text
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

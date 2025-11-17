@@ -1,26 +1,37 @@
 import { Injectable } from '@nestjs/common';
-import { CreateRoleDto } from './dto/create-role.dto';
-import { UpdateRoleDto } from './dto/update-role.dto';
+import { RolesRepository } from '@ai-media/share';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class RolesService {
-  create(createRoleDto: CreateRoleDto) {
-    return 'This action adds a new role';
+  constructor(private readonly rolesRepo: RolesRepository) {}
+
+  create(createRoleDto: Prisma.roleCreateInput) {
+    return this.rolesRepo.create({ data: createRoleDto });
   }
 
   findAll() {
-    return `This action returns all roles`;
+    return this.rolesRepo.findMany({ orderBy: { createdAt: 'asc' } });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} role`;
+  findOne(roleId: string) {
+    return this.rolesRepo.findOne({ where: { roleId } });
   }
 
-  update(id: number, updateRoleDto: UpdateRoleDto) {
-    return `This action updates a #${id} role`;
+  update(roleId: string, updateRoleDto: Prisma.roleUpdateInput) {
+    return this.rolesRepo.update({
+      where: {
+        roleId,
+      },
+      data: updateRoleDto,
+    });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} role`;
+  remove(roleId: string) {
+    return this.rolesRepo.delete({
+      where: {
+        roleId,
+      },
+    });
   }
 }

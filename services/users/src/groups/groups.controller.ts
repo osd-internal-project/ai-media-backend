@@ -1,14 +1,22 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { GroupsService } from './groups.service';
-import { CreateGroupDto } from './dto/create-group.dto';
-import { UpdateGroupDto } from './dto/update-group.dto';
+import type { Prisma } from '@prisma/client';
+import type { CreateGroupDto } from './dto/create-group.dto';
 
 @Controller('groups')
 export class GroupsController {
   constructor(private readonly groupsService: GroupsService) {}
 
   @Post()
-  create(@Body() createGroupDto: CreateGroupDto) {
+  create(@Body('body') createGroupDto: CreateGroupDto) {
     return this.groupsService.create(createGroupDto);
   }
 
@@ -17,18 +25,21 @@ export class GroupsController {
     return this.groupsService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.groupsService.findOne(+id);
+  @Get(':groupId')
+  findOne(@Param('groupId') groupId: string) {
+    return this.groupsService.findOne(groupId);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateGroupDto: UpdateGroupDto) {
-    return this.groupsService.update(+id, updateGroupDto);
+  @Patch(':groupId')
+  update(
+    @Param('groupId') groupId: string,
+    @Body() updateGroupDto: Prisma.groupsUpdateInput,
+  ) {
+    return this.groupsService.update(groupId, updateGroupDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.groupsService.remove(+id);
+  @Delete(':groupId')
+  remove(@Param('groupId') groupId: string) {
+    return this.groupsService.remove(groupId);
   }
 }

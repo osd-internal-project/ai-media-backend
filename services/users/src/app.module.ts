@@ -10,8 +10,18 @@ import { HttpModule } from '@nestjs/axios';
 import { UsersModule } from './users/users.module';
 import { GroupsModule } from './groups/groups.module';
 import { RolesModule } from './roles/roles.module';
+import { RolesOfGroupsModule } from './roles-of-groups/roles-of-groups.module';
+import { UsersOfGroupsModule } from './users-of-groups/users-of-groups.module';
 @Module({
-  imports: [PrismaModule, HttpModule, UsersModule, GroupsModule, RolesModule],
+  imports: [
+    PrismaModule,
+    HttpModule,
+    UsersModule,
+    GroupsModule,
+    RolesModule,
+    RolesOfGroupsModule,
+    UsersOfGroupsModule,
+  ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
 })
