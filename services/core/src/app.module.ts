@@ -8,8 +8,12 @@ import { PublicController } from './public/public.controller';
 import { PrismaModule } from '@ai-media/share';
 import { GenerateImageModule } from './generate-image/generate-image.module';
 import { HttpModule } from '@nestjs/axios';
+import { ProjectModule } from './project/project.module';
+import { LogsModule } from './logs/logs.module';
+import { GalleryModule } from './gallery/gallery.module';
+import { ProjectMemberModule } from './project-member/project-member.module';
 @Module({
-  imports: [PrismaModule, GenerateImageModule, HttpModule],
+  imports: [PrismaModule, GenerateImageModule, HttpModule, ProjectModule, LogsModule, GalleryModule, ProjectMemberModule],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
 })
