@@ -5,4 +5,6 @@ export class CreateGenerateImageDto {
   duration: string;
   image?: any;
   ratio: string;
+  images: number;
+  images_select:number
 }

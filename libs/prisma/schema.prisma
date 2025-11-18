@@ -80,6 +80,7 @@ model Log {
   userId    String
   prompt    String
   tokenUsed Int
+  ImageUsed Int
   createdAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id])
