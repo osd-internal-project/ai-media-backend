@@ -100,8 +100,6 @@ export class GenerateImageService {
         base,
         axiosConfig,
       );
-      console.log(generateImage.data);
-
       if (generateImage.data) {
         await this.logrepo.create({
           data: {
