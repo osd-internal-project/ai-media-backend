@@ -10,6 +10,8 @@ import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
 import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import axios from 'axios';
 import * as https from 'https';
+import configs from 'src/configs';
+const baseUrl = configs().pathDomain;
 @Injectable()
 export class GenerateImageService {
   constructor(
@@ -19,6 +21,8 @@ export class GenerateImageService {
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
   ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
+    console.log(createGenerateImageDto);
+
     const agent = new https.Agent({ rejectUnauthorized: false });
     const axiosConfig = {
       headers: {
@@ -58,7 +62,7 @@ export class GenerateImageService {
                 {
                   type: 'image_url',
                   image_url: {
-                    url: `http://192.168.31.181/public/api/core/public/generate-image/${createGenerateImageDto.image}`,
+                    url: `${baseUrl}/public/api/core/public/generate-image/${createGenerateImageDto.image}`,
                   },
                 },
               ]
@@ -76,7 +80,7 @@ export class GenerateImageService {
         model: getModelType.modelType,
         prompt: `${createGenerateImageDto.text} ช่วยออกแบบมา ${createGenerateImageDto.images} รูป`,
         ...(createGenerateImageDto.image && {
-          image: `http://192.168.31.181/public/api/core/public/generate-image/${createGenerateImageDto.image} `,
+          image: `${baseUrl}/public/api/core/public/generate-image/${createGenerateImageDto.image}`,
         }),
         response_format: 'url',
         ...(createGenerateImageDto.resolution && {
@@ -154,6 +158,7 @@ export class GenerateImageService {
     return `This action removes a #${id} GenerateImage`;
   }
   async upload(data) {
+    console.log(data);
     return await this.generateimagerepo.create({
       data: {
         ...data,

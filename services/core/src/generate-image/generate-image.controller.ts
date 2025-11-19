@@ -79,7 +79,6 @@ export class GenerateImageController {
         filePath: `${config.pathMountDirUpload}/generate-images/${files[0].filename}`,
         fileType: files[0].mimetype,
         fileName: Buffer.from(files[0].filename, 'latin1').toString('utf8'),
-        generateImageId: '',
       } as Prisma.GenerateImageCreateInput;
       return this.GenerateImageService.upload(data);
     }
