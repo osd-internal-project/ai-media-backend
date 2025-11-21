@@ -52,6 +52,7 @@ export class GroupsService {
   }
 
   update(groupId: string, updateGroupDto: UpdateGroupDto) {
+    console.log(groupId, updateGroupDto);
     const { createdAt, id, users, roles, ...values } = updateGroupDto || {};
     return this.groupsRepo.update({
       where: {
@@ -59,15 +60,17 @@ export class GroupsService {
       },
       data: {
         ...values,
-        ...(users?.length && {
+        ...(users && {
           users: {
+            deleteMany: { groupId },
             create: updateGroupDto.users.map((userId) => ({
               users: { connect: { userId } },
             })),
           },
         }),
-        ...(roles?.length && {
+        ...(roles && {
           roles: {
+            deleteMany: { groupId },
             create: updateGroupDto.roles.map((roleId) => ({
               role: { connect: { roleId } },
             })),
