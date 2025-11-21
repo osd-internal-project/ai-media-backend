@@ -10,6 +10,7 @@ import {
 import { GroupsService } from './groups.service';
 import type { Prisma } from '@prisma/client';
 import type { CreateGroupDto } from './dto/create-group.dto';
+import type { UpdateGroupDto } from './dto/update-group.dto';
 
 @Controller('groups')
 export class GroupsController {
@@ -24,16 +25,28 @@ export class GroupsController {
   findAll() {
     return this.groupsService.findAll();
   }
-
+  @Get('relation-by-group/:groupId')
+  relationByGroup(@Param('groupId') groupId: string) {
+    return this.groupsService.relationByGroup(groupId);
+  }
   @Get(':groupId')
   findOne(@Param('groupId') groupId: string) {
     return this.groupsService.findOne(groupId);
   }
 
+  @Get('user-by-groupId/:groupId')
+  findUserByGroupsId(@Param('groupId') groupId: string) {
+    return this.groupsService.findUserByGroupsId(groupId);
+  }
+  @Get('roles-by-groupId/:groupId')
+  findRolesByGroupsId(@Param('groupId') groupId: string) {
+    return this.groupsService.findRolesByGroupsId(groupId);
+  }
+
   @Patch(':groupId')
   update(
     @Param('groupId') groupId: string,
-    @Body() updateGroupDto: Prisma.groupsUpdateInput,
+    @Body('body') updateGroupDto: UpdateGroupDto,
   ) {
     return this.groupsService.update(groupId, updateGroupDto);
   }

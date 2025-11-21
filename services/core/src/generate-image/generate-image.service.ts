@@ -62,7 +62,7 @@ export class GenerateImageService {
                 {
                   type: 'image_url',
                   image_url: {
-                    url: `${baseUrl}/public/api/core/public/generate-image/${createGenerateImageDto.image}`,
+                    image: `${baseUrl}/${createGenerateImageDto.image}`,
                   },
                 },
               ]
@@ -80,7 +80,7 @@ export class GenerateImageService {
         model: getModelType.modelType,
         prompt: `${createGenerateImageDto.text} ช่วยออกแบบมา ${createGenerateImageDto.images} รูป`,
         ...(createGenerateImageDto.image && {
-          image: `${baseUrl}/public/api/core/public/generate-image/${createGenerateImageDto.image}`,
+          image: `${baseUrl}/${createGenerateImageDto.image}`,
         }),
         response_format: 'url',
         ...(createGenerateImageDto.resolution && {
@@ -98,12 +98,14 @@ export class GenerateImageService {
         },
         watermark: false,
       };
+      console.log(base);
 
       const generateImage = await axios.post(
         'https://ark.ap-southeast.bytepluses.com/api/v3/images/generations',
         base,
         axiosConfig,
       );
+      console.log(generateImage.data);
       if (generateImage.data) {
         await this.logrepo.create({
           data: {

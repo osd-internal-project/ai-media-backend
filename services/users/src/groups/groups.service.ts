@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { GroupsRepository } from '@ai-media/share';
 import type { CreateGroupDto } from './dto/create-group.dto';
+import type { UpdateGroupDto } from './dto/update-group.dto';
 
 @Injectable()
 export class GroupsService {
@@ -9,23 +10,7 @@ export class GroupsService {
   create(createGroupDto: CreateGroupDto) {
     const condition = {
       data: {
-        name: createGroupDto.name,
-        // Add Users to Group (only if exists)
-        ...(createGroupDto.users?.length && {
-          users: {
-            create: createGroupDto.users.map((userId) => ({
-              user: { connect: { userId } },
-            })),
-          },
-        }),
-        // Add Roles to Group (only if exists)
-        ...(createGroupDto.roles?.length && {
-          roles: {
-            create: createGroupDto.roles.map((roleId) => ({
-              role: { connect: { roleId } },
-            })),
-          },
-        }),
+        ...createGroupDto,
       },
     } as any;
     return this.groupsRepo.create(condition);
@@ -33,6 +18,10 @@ export class GroupsService {
 
   findAll() {
     return this.groupsRepo.findMany({
+      include: {
+        users: true,
+        roles: true,
+      },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -40,13 +29,51 @@ export class GroupsService {
   findOne(groupId: string) {
     return this.groupsRepo.findOne({ where: { groupId } });
   }
+  findUserByGroupsId(groupId: string) {
+    return this.groupsRepo.findOne({
+      where: { groupId },
+      include: { users: { include: { users: true } } },
+    });
+  }
+  findRolesByGroupsId(groupId: string) {
+    return this.groupsRepo.findOne({
+      where: { groupId },
+      include: { roles: { include: { role: true } } },
+    });
+  }
+  relationByGroup(groupId: string) {
+    return this.groupsRepo.findOne({
+      where: { groupId },
+      include: {
+        roles: { include: { role: true } },
+        users: { include: { users: true } },
+      },
+    });
+  }
 
-  update(groupId: string, updateGroupDto: Prisma.groupsUpdateInput) {
+  update(groupId: string, updateGroupDto: UpdateGroupDto) {
+    const { createdAt, id, users, roles, ...values } = updateGroupDto || {};
     return this.groupsRepo.update({
       where: {
         groupId,
       },
-      data: { ...updateGroupDto },
+      data: {
+        ...values,
+        ...(users?.length && {
+          users: {
+            create: updateGroupDto.users.map((userId) => ({
+              users: { connect: { userId } },
+            })),
+          },
+        }),
+        ...(roles?.length && {
+          roles: {
+            create: updateGroupDto.roles.map((roleId) => ({
+              role: { connect: { roleId } },
+            })),
+          },
+        }),
+      },
     });
   }
 

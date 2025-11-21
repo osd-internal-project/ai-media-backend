@@ -5,6 +5,7 @@ export class CreateGroupDto {
   description?: string;
   createdAt?: string;
   updatedAt?: string;
+  displayName?: string;
   users: string[];
   roles: string[];
 }
