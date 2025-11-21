@@ -6,5 +6,7 @@ export class CreateGenerateImageDto {
   image?: any;
   ratio: string;
   images: number;
-  images_select:number
+  images_select: number;
+  width: number;
+  height: number;
 }
