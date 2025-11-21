@@ -21,8 +21,6 @@ export class GenerateImageService {
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
   ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
-    console.log(createGenerateImageDto);
-
     const agent = new https.Agent({ rejectUnauthorized: false });
     const axiosConfig = {
       headers: {
@@ -83,9 +81,10 @@ export class GenerateImageService {
           image: `${baseUrl}/${createGenerateImageDto.image}`,
         }),
         response_format: 'url',
-        ...(createGenerateImageDto.resolution && {
-          size: createGenerateImageDto.resolution,
-        }),
+        ...(createGenerateImageDto.width &&
+          createGenerateImageDto.height && {
+            size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
+          }),
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
@@ -98,14 +97,13 @@ export class GenerateImageService {
         },
         watermark: false,
       };
-      console.log(base);
-
+      console.log('body =>', base);
       const generateImage = await axios.post(
         'https://ark.ap-southeast.bytepluses.com/api/v3/images/generations',
         base,
         axiosConfig,
       );
-      console.log(generateImage.data);
+      console.log('response data', generateImage.data);
       if (generateImage.data) {
         await this.logrepo.create({
           data: {
