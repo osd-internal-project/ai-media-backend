@@ -15,7 +15,7 @@ export class UsersService {
 
   findAll() {
     return this.userRepo.findMany({
-      include: { groups: true },
+      include: { groups: { include: { group: true } } },
       orderBy: { createdAt: 'asc' },
     });
   }
