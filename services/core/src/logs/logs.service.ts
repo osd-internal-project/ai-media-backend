@@ -9,17 +9,13 @@ export class LogsService {
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
   ) {}
-  create(createLogDto: CreateLogDto) {
-    return 'This action adds a new log';
-  }
-
-  findAll() {
-    return `This action returns all logs`;
-  }
-
   async findOne(projectId: string) {
     const data = await this.galleryRepo.findMany({
-      where: { projectId: projectId, taskId: { not: null } },
+      where: {
+        projectId: projectId,
+        taskId: { not: null },
+        typeGenerate: 'image',
+      },
       include: { users: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -35,17 +31,74 @@ export class LogsService {
         map.get(item.taskId).imageUrls.push(item.imageUrl);
       }
     }
-
     const result = Array.from(map.values());
-
     return result;
   }
-
-  update(id: number, updateLogDto: UpdateLogDto) {
-    return `This action updates a #${id} log`;
+  async findOneVDO(projectId: string) {
+    const data = await this.galleryRepo.findMany({
+      where: {
+        projectId: projectId,
+        taskId: { not: null },
+        typeGenerate: 'vdo',
+      },
+      include: { users: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const map = new Map();
+    for (const item of data) {
+      if (!map.has(item.taskId)) {
+        map.set(item.taskId, {
+          ...item,
+          imageUrls: [item.imageUrl],
+        });
+        delete map.get(item.taskId).imageUrl;
+      } else {
+        map.get(item.taskId).imageUrls.push(item.imageUrl);
+      }
+    }
+    const result = Array.from(map.values());
+    return result;
   }
+  async findByTaskId(taskId: string, query: any) {
+    const data = await this.logrepo.findOne({
+      where: {
+        taskId,
+      },
+    });
+    const update = await this.logrepo.update({
+      where: { id: data.id },
+      data: {
+        status: query.status,
+        tokenUsed: +query.tokenUsed,
+      },
+    });
+    if (update) {
+      if (Array.isArray(query.content)) {
+        const dataToSave = query.content.map((item: any) => ({
+          taskId: data.taskId,
+          projectId: data.projectId,
+          userId: data.userId,
+          imageUrl: item.video_url,
+          prompt: data.prompt,
+          typeGenerate: 'vdo',
+        }));
 
-  remove(id: number) {
-    return `This action removes a #${id} log`;
+        await this.galleryRepo.createMany({
+          data: dataToSave,
+        });
+      } else {
+        await this.galleryRepo.create({
+          data: {
+            taskId: data.taskId,
+            projectId: data.projectId,
+            userId: data.userId,
+            imageUrl: query.content.video_url,
+            prompt: data.prompt,
+            typeGenerate: 'vdo',
+          },
+        });
+      }
+      return data;
+    }
   }
 }

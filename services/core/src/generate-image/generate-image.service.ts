@@ -51,18 +51,7 @@ export class GenerateImageService {
         description: description,
       },
     } as Prisma.MasterModelTypeFindFirstArgs);
-    const dataLogs = await this.logrepo.create({
-      data: {
-        taskId: uuid,
-        projectId: createGenerateImageDto.projectId,
-        userId: user.userId,
-        prompt: `${createGenerateImageDto.text} `,
-        typeGenerate: createGenerateImageDto.type,
-        status: 'pending',
-        tokenUsed: 0,
-        ImageUsed: 0,
-      },
-    });
+
     if (createGenerateImageDto.type === 'vdo') {
       const base = {
         model: getModelType.modelType,
@@ -84,13 +73,36 @@ export class GenerateImageService {
         ],
       };
       const generateImage = await axios.post(
-        // 'https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks',
         `${getConfigApi.apiCreateTaskVdo}`,
         base,
         axiosConfig,
       );
+      await this.logrepo.create({
+        data: {
+          taskId: generateImage.data.id,
+          projectId: createGenerateImageDto.projectId,
+          userId: user.userId,
+          prompt: `${createGenerateImageDto.text} `,
+          typeGenerate: createGenerateImageDto.type,
+          status: 'pending',
+          tokenUsed: 0,
+          ImageUsed: 0,
+        },
+      });
       return generateImage.data;
     } else {
+      const dataLogs = await this.logrepo.create({
+        data: {
+          taskId: uuid,
+          projectId: createGenerateImageDto.projectId,
+          userId: user.userId,
+          prompt: `${createGenerateImageDto.text} `,
+          typeGenerate: createGenerateImageDto.type,
+          status: 'pending',
+          tokenUsed: 0,
+          ImageUsed: 0,
+        },
+      });
       const base = {
         model: getModelType.modelType,
         prompt: `${createGenerateImageDto.text} ช่วยออกแบบมา ${createGenerateImageDto.images} รูป`,
@@ -114,20 +126,11 @@ export class GenerateImageService {
         },
         watermark: getConfigApi.watermark,
       };
-      // console.log('body =>', base);
-      // console.log('createGenerateImageDto', createGenerateImageDto);
-
-      // console.log(getConfigApi.apiCreateImage);
-      // console.log(axiosConfig);
-
-      // 'https://ark.ap-southeast.bytepluses.com/api/v3/images/generations',
       const generateImage = await axios.post(
         `${getConfigApi.apiCreateImage}`,
         base,
         axiosConfig,
       );
-
-      console.log('response data', generateImage.data);
       if (generateImage.data) {
         await this.logrepo.update({
           where: { id: dataLogs.id },
@@ -150,6 +153,7 @@ export class GenerateImageService {
               userId: user.userId,
               prompt: `${createGenerateImageDto.text}`,
               imageUrl: e.url,
+              typeGenerate: 'image',
             },
           });
         });
