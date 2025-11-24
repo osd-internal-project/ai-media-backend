@@ -9,4 +9,6 @@ export class CreateGenerateImageDto {
   images_select: number;
   width: number;
   height: number;
+  projectId: string;
+  userId: string;
 }

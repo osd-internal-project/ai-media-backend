@@ -4,8 +4,10 @@ import {
   MasterdataModelTypeRepository,
   LogRepository,
   GalleryRepository,
+  MasterDataConfigApiRepository,
+  UsersRepository,
 } from '@ai-media/share';
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
 import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import axios from 'axios';
@@ -19,13 +21,22 @@ export class GenerateImageService {
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
+    private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
+    private readonly userRepo: UsersRepository,
   ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const agent = new https.Agent({ rejectUnauthorized: false });
+    const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+      where: { id: 1 },
+    } as Prisma.MasterDataConfigApiFindFirstArgs);
+
+    const user = await this.userRepo.findOne({
+      where: { token: createGenerateImageDto.userId },
+    });
     const axiosConfig = {
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer e7bcde05-22d1-479d-9afb-2870ba7d97ec',
+        'Content-Type': `${getConfigApi.configType}`,
+        Authorization: `${getConfigApi.authorization}`,
       },
       httpsAgent: agent,
     };
@@ -40,9 +51,11 @@ export class GenerateImageService {
     } as Prisma.MasterModelTypeFindFirstArgs);
     await this.logrepo.create({
       data: {
-        projectId: 'a4e7e905-b338-4f7a-8be1-7b5fdb748038',
-        userId: '40a3e520-94bc-46ff-b892-527ea27dae4b',
-        prompt: `${createGenerateImageDto.text} status:pending`,
+        projectId: createGenerateImageDto.projectId,
+        userId: user.userId,
+        prompt: `${createGenerateImageDto.text} `,
+        typeGenerate: createGenerateImageDto.type,
+        status: 'pending',
         tokenUsed: 0,
         ImageUsed: 0,
       },
@@ -68,7 +81,8 @@ export class GenerateImageService {
         ],
       };
       const generateImage = await axios.post(
-        'https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks',
+        // 'https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks',
+        `${getConfigApi.apiCreateTaskVdo}`,
         base,
         axiosConfig,
       );
@@ -88,28 +102,37 @@ export class GenerateImageService {
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
-            max_images: 10,
+            max_images: getConfigApi.maxImage,
           },
         }),
-        stream: false,
+        stream: getConfigApi.stream,
         optimize_prompt_options: {
           mode: 'fast',
         },
-        watermark: false,
+        watermark: getConfigApi.watermark,
       };
       console.log('body =>', base);
+      console.log('createGenerateImageDto', createGenerateImageDto);
+
+      // console.log(getConfigApi.apiCreateImage);
+      // console.log(axiosConfig);
+
+      // 'https://ark.ap-southeast.bytepluses.com/api/v3/images/generations',
       const generateImage = await axios.post(
-        'https://ark.ap-southeast.bytepluses.com/api/v3/images/generations',
+        `${getConfigApi.apiCreateImage}`,
         base,
         axiosConfig,
       );
+
       console.log('response data', generateImage.data);
       if (generateImage.data) {
         await this.logrepo.create({
           data: {
-            projectId: 'a4e7e905-b338-4f7a-8be1-7b5fdb748038',
-            userId: '40a3e520-94bc-46ff-b892-527ea27dae4b',
-            prompt: `${createGenerateImageDto.text} status:success`,
+            projectId: createGenerateImageDto.projectId,
+            userId: user.userId,
+            prompt: `${createGenerateImageDto.text}`,
+            status: 'success',
+            typeGenerate: createGenerateImageDto.type,
             tokenUsed: generateImage.data.usage.total_tokens,
             ImageUsed: generateImage.data.usage.generated_images,
           },
@@ -117,9 +140,9 @@ export class GenerateImageService {
         generateImage.data.data.map(async (e) => {
           return await this.galleryRepo.create({
             data: {
-              projectId: 'a4e7e905-b338-4f7a-8be1-7b5fdb748038',
-              userId: '40a3e520-94bc-46ff-b892-527ea27dae4b',
-              prompt: `${createGenerateImageDto.text} status:success`,
+              projectId: createGenerateImageDto.projectId,
+              userId: user.userId,
+              prompt: `${createGenerateImageDto.text}`,
               imageUrl: e.url,
             },
           });
