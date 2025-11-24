@@ -1,14 +1,22 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { GalleryService } from './gallery.service';
-import { CreateGalleryDto } from './dto/create-gallery.dto';
-import { UpdateGalleryDto } from './dto/update-gallery.dto';
+import { Prisma } from '@prisma/client';
 
 @Controller('gallery')
 export class GalleryController {
   constructor(private readonly galleryService: GalleryService) {}
 
   @Post()
-  create(@Body() createGalleryDto: CreateGalleryDto) {
+  create(@Body('body') createGalleryDto: Prisma.GalleryCreateInput) {
     return this.galleryService.create(createGalleryDto);
   }
 
@@ -17,18 +25,24 @@ export class GalleryController {
     return this.galleryService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.galleryService.findOne(+id);
+  @Get(':projectId')
+  findOne(@Param('projectId') projectId: string, @Query() query: any) {
+    return this.galleryService.findMany(projectId, query);
   }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateGalleryDto: UpdateGalleryDto) {
-    return this.galleryService.update(+id, updateGalleryDto);
+  @Get('activity/:projectId')
+  findByActivity(@Param('projectId') projectId: string, @Query() query: any) {
+    return this.galleryService.findByActivity(projectId, query);
+  }
+  @Patch(':taskId')
+  update(
+    @Param('taskId') taskId: string,
+    @Body('body') updateGalleryDto: Prisma.GalleryUpdateInput,
+  ) {
+    return this.galleryService.update(taskId, updateGalleryDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.galleryService.remove(+id);
+    return this.galleryService.remove(id);
   }
 }

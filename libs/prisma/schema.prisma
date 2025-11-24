@@ -62,29 +62,30 @@ model ProjectMember {
 
 model Gallery {
   id        String   @id @default(uuid())
+  taskId    String?
   projectId String
   userId    String
   imageUrl  String
   prompt    String?
   createdAt DateTime @default(now())
-
-  project Project @relation(fields: [projectId], references: [id])
-  users   users   @relation(fields: [userId], references: [userId])
+  status    Boolean? @default(false)
+  project   Project  @relation(fields: [projectId], references: [id])
+  users     users    @relation(fields: [userId], references: [userId])
 
   @@map("gallery")
 }
 
 model Log {
-  id              String   @id @default(uuid())
-  generateImageId String?
-  status          String?
-  typeGenerate    String?
-  projectId       String
-  userId          String
-  prompt          String
-  tokenUsed       Int
-  ImageUsed       Int
-  createdAt       DateTime @default(now())
+  id           String   @id @default(uuid())
+  taskId       String?
+  status       String?
+  typeGenerate String?
+  projectId    String
+  userId       String
+  prompt       String
+  tokenUsed    Int
+  ImageUsed    Int
+  createdAt    DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id])
   users   users   @relation(fields: [userId], references: [userId])

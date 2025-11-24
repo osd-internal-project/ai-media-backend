@@ -7,12 +7,13 @@ import {
   MasterDataConfigApiRepository,
   UsersRepository,
 } from '@ai-media/share';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
 import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import axios from 'axios';
 import * as https from 'https';
 import configs from 'src/configs';
+import { v4 as uuidv4 } from 'uuid';
 const baseUrl = configs().pathDomain;
 @Injectable()
 export class GenerateImageService {
@@ -25,6 +26,7 @@ export class GenerateImageService {
     private readonly userRepo: UsersRepository,
   ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
+    const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
     const getConfigApi = await this.masterdataconfigapiRepo.findOne({
       where: { id: 1 },
@@ -49,8 +51,9 @@ export class GenerateImageService {
         description: description,
       },
     } as Prisma.MasterModelTypeFindFirstArgs);
-    await this.logrepo.create({
+    const dataLogs = await this.logrepo.create({
       data: {
+        taskId: uuid,
         projectId: createGenerateImageDto.projectId,
         userId: user.userId,
         prompt: `${createGenerateImageDto.text} `,
@@ -111,8 +114,8 @@ export class GenerateImageService {
         },
         watermark: getConfigApi.watermark,
       };
-      console.log('body =>', base);
-      console.log('createGenerateImageDto', createGenerateImageDto);
+      // console.log('body =>', base);
+      // console.log('createGenerateImageDto', createGenerateImageDto);
 
       // console.log(getConfigApi.apiCreateImage);
       // console.log(axiosConfig);
@@ -126,8 +129,10 @@ export class GenerateImageService {
 
       console.log('response data', generateImage.data);
       if (generateImage.data) {
-        await this.logrepo.create({
+        await this.logrepo.update({
+          where: { id: dataLogs.id },
           data: {
+            taskId: uuid,
             projectId: createGenerateImageDto.projectId,
             userId: user.userId,
             prompt: `${createGenerateImageDto.text}`,
@@ -140,6 +145,7 @@ export class GenerateImageService {
         generateImage.data.data.map(async (e) => {
           return await this.galleryRepo.create({
             data: {
+              taskId: uuid,
               projectId: createGenerateImageDto.projectId,
               userId: user.userId,
               prompt: `${createGenerateImageDto.text}`,
