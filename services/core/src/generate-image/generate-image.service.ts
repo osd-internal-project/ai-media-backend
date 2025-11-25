@@ -31,7 +31,6 @@ export class GenerateImageService {
     const getConfigApi = await this.masterdataconfigapiRepo.findOne({
       where: { id: 1 },
     } as Prisma.MasterDataConfigApiFindFirstArgs);
-
     const user = await this.userRepo.findOne({
       where: { token: createGenerateImageDto.userId },
     });
@@ -53,6 +52,23 @@ export class GenerateImageService {
     } as Prisma.MasterModelTypeFindFirstArgs);
 
     if (createGenerateImageDto.type === 'vdo') {
+      const totalVDOGenerate = await this.logrepo.findMany({
+        where: {
+          userId: user.userId,
+          typeGenerate: createGenerateImageDto.type,
+          status: 'success',
+        },
+      });
+      const totalTokenUsed = totalVDOGenerate.reduce(
+        (sum, item) => sum + item.tokenUsed,
+        0,
+      );
+      if (totalTokenUsed > user.maxToken) {
+        return {
+          status: 400,
+          data: 'Token ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Token',
+        };
+      }
       const base = {
         model: getModelType.modelType,
         content: [
@@ -65,7 +81,7 @@ export class GenerateImageService {
                 {
                   type: 'image_url',
                   image_url: {
-                    image: `${baseUrl}/${createGenerateImageDto.image}`,
+                    url: `${baseUrl}/${createGenerateImageDto.image}`,
                   },
                 },
               ]
@@ -89,8 +105,29 @@ export class GenerateImageService {
           ImageUsed: 0,
         },
       });
-      return generateImage.data;
+      return { status: 200, data: generateImage.data };
     } else {
+      const totalVDOGenerate = await this.logrepo.findMany({
+        where: {
+          userId: user.userId,
+          typeGenerate: createGenerateImageDto.type,
+          status: 'success',
+        },
+      });
+      const totalTokenUsed = totalVDOGenerate.reduce(
+        (sum, item) => sum + item.ImageUsed,
+        0,
+      );
+
+      if (
+        totalTokenUsed + Number(createGenerateImageDto.images) >
+        user.maxImages
+      ) {
+        return {
+          status: 400,
+          data: 'Image ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Image',
+        };
+      }
       const dataLogs = await this.logrepo.create({
         data: {
           taskId: uuid,
@@ -158,7 +195,7 @@ export class GenerateImageService {
           });
         });
       }
-      return generateImage.data;
+      return { status: 200, data: generateImage.data };
     }
   }
 
