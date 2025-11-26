@@ -12,13 +12,13 @@ export class DashboardService {
   findAll() {
     return `This action returns all dashboard`;
   }
-  testExport() {
+  testExport(query: any, subject: string) {
     //Query Get Data
     const data = [
       { id: 1, name: 'Alice', age: 15 },
       { id: 2, name: 'Bob', age: 16 },
     ];
-    return generateExcelBuffer(data, 'TestExcel');
+    return generateExcelBuffer(data, subject);
   }
   findOne(id: number) {
     return `This action returns a #${id} dashboard`;

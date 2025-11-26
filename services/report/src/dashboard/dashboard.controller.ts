@@ -13,6 +13,7 @@ import { Response } from 'express';
 import { DashboardService } from './dashboard.service';
 import { CreateDashboardDto } from './dto/create-dashboard.dto';
 import { UpdateDashboardDto } from './dto/update-dashboard.dto';
+import * as dayjs from 'dayjs';
 
 @Controller('dashboard')
 export class DashboardController {
@@ -23,16 +24,24 @@ export class DashboardController {
     return this.dashboardService.create(createDashboardDto);
   }
   @Post('download')
-  async downloadExcel(@Res() res: Response) {
-    const buffer = await this.dashboardService.testExport();
+  async downloadExcel(@Body() query: any, @Res() res: Response) {
+    const subject = 'test';
+    const excel = await this.dashboardService.testExport(query, subject);
+    const date = dayjs().toISOString();
+    const fileName = `report_${subject}_${date}.xlsx`;
+    const encoded = encodeURIComponent(fileName);
 
+    console.log(fileName);
     res
       .setHeader(
         'Content-Type',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       )
-      .setHeader('Content-Disposition', 'attachment; filename="data.xlsx"')
-      .send(buffer);
+      .setHeader(
+        'Content-Disposition',
+        `attachment; filename*=UTF-8''${encoded}`,
+      )
+      .send(excel);
   }
   @Get()
   findAll() {
