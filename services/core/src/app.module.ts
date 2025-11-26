@@ -12,8 +12,9 @@ import { ProjectModule } from './project/project.module';
 import { LogsModule } from './logs/logs.module';
 import { GalleryModule } from './gallery/gallery.module';
 import { ProjectMemberModule } from './project-member/project-member.module';
+import { MasteradataConfigApiModule } from './masteradata-config-api/masteradata-config-api.module';
 @Module({
-  imports: [PrismaModule, GenerateImageModule, HttpModule, ProjectModule, LogsModule, GalleryModule, ProjectMemberModule],
+  imports: [PrismaModule, GenerateImageModule, HttpModule, ProjectModule, LogsModule, GalleryModule, ProjectMemberModule, MasteradataConfigApiModule],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
 })

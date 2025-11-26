@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { LogsService } from './logs.service';
 import { CreateLogDto } from './dto/create-log.dto';
 import { UpdateLogDto } from './dto/update-log.dto';
@@ -7,28 +16,17 @@ import { UpdateLogDto } from './dto/update-log.dto';
 export class LogsController {
   constructor(private readonly logsService: LogsService) {}
 
-  @Post()
-  create(@Body() createLogDto: CreateLogDto) {
-    return this.logsService.create(createLogDto);
+  @Get(':projectId')
+  findOne(@Param('projectId') projectId: string) {
+    return this.logsService.findOne(projectId);
+  }
+  @Get('find-vdo/:projectId')
+  findOneVDO(@Param('projectId') projectId: string) {
+    return this.logsService.findOneVDO(projectId);
   }
 
-  @Get()
-  findAll() {
-    return this.logsService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.logsService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateLogDto: UpdateLogDto) {
-    return this.logsService.update(+id, updateLogDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.logsService.remove(+id);
+  @Get('generate-vdo-logs/:taskId')
+  findByTaskId(@Param('taskId') taskId: string, @Query() query: any) {
+    return this.logsService.findByTaskId(taskId, query);
   }
 }

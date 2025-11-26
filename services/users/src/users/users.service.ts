@@ -36,11 +36,30 @@ export class UsersService {
   }
 
   findOne(userId: string) {
-    return this.userRepo.findMany({
+    const getdataUser = this.groupRepo.findOne({
       where: {
-        userId,
+        users: {
+          some: {
+            users: {
+              token: userId,
+            },
+          },
+        },
+      },
+      include: {
+        users: {
+          include: {
+            users: true,
+          },
+        },
+        roles: {
+          include: {
+            role: true,
+          },
+        },
       },
     });
+    return getdataUser;
   }
 
   update(userId: string, updateUserDto: Prisma.usersUpdateInput) {

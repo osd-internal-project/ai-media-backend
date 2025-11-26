@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { CreateProjectDto } from './dto/create-project.dto';
-import { UpdateProjectDto } from './dto/update-project.dto';
-import { ProjectRepository } from '@ai-media/share';
+import { ProjectRepository, UsersRepository } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ProjectService {
-  constructor(private readonly projectRepo: ProjectRepository) {}
+  constructor(
+    private readonly projectRepo: ProjectRepository,
+    private readonly usersRepo: UsersRepository,
+  ) {}
   create(createProjectDto: any) {
     return this.projectRepo.create({
       data: {
@@ -27,7 +28,18 @@ export class ProjectService {
     return this.projectRepo.findMany({ include: { members: true } });
   }
 
-  findOne(id: string) {
+  async findOne(id: string) {
+    const user = await this.usersRepo.findOne({
+      where: { token: id },
+    });
+    if (!user) {
+      throw new Error('User not found for this token');
+    }
+    return this.projectRepo.findMany({
+      where: { members: { some: { userId: user.userId } } },
+    });
+  }
+  async findById(id: string) {
     return this.projectRepo.findOne({ where: { id } });
   }
 

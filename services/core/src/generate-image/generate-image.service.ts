@@ -4,6 +4,8 @@ import {
   MasterdataModelTypeRepository,
   LogRepository,
   GalleryRepository,
+  MasterDataConfigApiRepository,
+  UsersRepository,
 } from '@ai-media/share';
 import { Injectable } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -11,6 +13,7 @@ import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import axios from 'axios';
 import * as https from 'https';
 import configs from 'src/configs';
+import { v4 as uuidv4 } from 'uuid';
 const baseUrl = configs().pathDomain;
 @Injectable()
 export class GenerateImageService {
@@ -19,13 +22,22 @@ export class GenerateImageService {
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
+    private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
+    private readonly userRepo: UsersRepository,
   ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
+    const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
+    const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+      where: { id: 1 },
+    } as Prisma.MasterDataConfigApiFindFirstArgs);
+    const user = await this.userRepo.findOne({
+      where: { token: createGenerateImageDto.userId },
+    });
     const axiosConfig = {
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer e7bcde05-22d1-479d-9afb-2870ba7d97ec',
+        'Content-Type': `${getConfigApi.configType}`,
+        Authorization: `${getConfigApi.authorization}`,
       },
       httpsAgent: agent,
     };
@@ -38,16 +50,25 @@ export class GenerateImageService {
         description: description,
       },
     } as Prisma.MasterModelTypeFindFirstArgs);
-    await this.logrepo.create({
-      data: {
-        projectId: 'a4e7e905-b338-4f7a-8be1-7b5fdb748038',
-        userId: '40a3e520-94bc-46ff-b892-527ea27dae4b',
-        prompt: `${createGenerateImageDto.text} status:pending`,
-        tokenUsed: 0,
-        ImageUsed: 0,
-      },
-    });
+
     if (createGenerateImageDto.type === 'vdo') {
+      const totalVDOGenerate = await this.logrepo.findMany({
+        where: {
+          userId: user.userId,
+          typeGenerate: createGenerateImageDto.type,
+          status: 'success',
+        },
+      });
+      const totalTokenUsed = totalVDOGenerate.reduce(
+        (sum, item) => sum + item.tokenUsed,
+        0,
+      );
+      if (totalTokenUsed > user.maxToken) {
+        return {
+          status: 400,
+          data: 'Token ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Token',
+        };
+      }
       const base = {
         model: getModelType.modelType,
         content: [
@@ -60,7 +81,7 @@ export class GenerateImageService {
                 {
                   type: 'image_url',
                   image_url: {
-                    image: `${baseUrl}/${createGenerateImageDto.image}`,
+                    url: `${baseUrl}/${createGenerateImageDto.image}`,
                   },
                 },
               ]
@@ -68,12 +89,57 @@ export class GenerateImageService {
         ],
       };
       const generateImage = await axios.post(
-        'https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks',
+        `${getConfigApi.apiCreateTaskVdo}`,
         base,
         axiosConfig,
       );
-      return generateImage.data;
+      await this.logrepo.create({
+        data: {
+          taskId: generateImage.data.id,
+          projectId: createGenerateImageDto.projectId,
+          userId: user.userId,
+          prompt: `${createGenerateImageDto.text} `,
+          typeGenerate: createGenerateImageDto.type,
+          status: 'pending',
+          tokenUsed: 0,
+          ImageUsed: 0,
+        },
+      });
+      return { status: 200, data: generateImage.data };
     } else {
+      const totalVDOGenerate = await this.logrepo.findMany({
+        where: {
+          userId: user.userId,
+          typeGenerate: createGenerateImageDto.type,
+          status: 'success',
+        },
+      });
+      const totalTokenUsed = totalVDOGenerate.reduce(
+        (sum, item) => sum + item.ImageUsed,
+        0,
+      );
+
+      if (
+        totalTokenUsed + Number(createGenerateImageDto.images) >
+        user.maxImages
+      ) {
+        return {
+          status: 400,
+          data: 'Image ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Image',
+        };
+      }
+      const dataLogs = await this.logrepo.create({
+        data: {
+          taskId: uuid,
+          projectId: createGenerateImageDto.projectId,
+          userId: user.userId,
+          prompt: `${createGenerateImageDto.text} `,
+          typeGenerate: createGenerateImageDto.type,
+          status: 'pending',
+          tokenUsed: 0,
+          ImageUsed: 0,
+        },
+      });
       const base = {
         model: getModelType.modelType,
         prompt: `${createGenerateImageDto.text} ช่วยออกแบบมา ${createGenerateImageDto.images} รูป`,
@@ -88,28 +154,30 @@ export class GenerateImageService {
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
-            max_images: 10,
+            max_images: getConfigApi.maxImage,
           },
         }),
-        stream: false,
+        stream: getConfigApi.stream,
         optimize_prompt_options: {
           mode: 'fast',
         },
-        watermark: false,
+        watermark: getConfigApi.watermark,
       };
-      console.log('body =>', base);
       const generateImage = await axios.post(
-        'https://ark.ap-southeast.bytepluses.com/api/v3/images/generations',
+        `${getConfigApi.apiCreateImage}`,
         base,
         axiosConfig,
       );
-      console.log('response data', generateImage.data);
       if (generateImage.data) {
-        await this.logrepo.create({
+        await this.logrepo.update({
+          where: { id: dataLogs.id },
           data: {
-            projectId: 'a4e7e905-b338-4f7a-8be1-7b5fdb748038',
-            userId: '40a3e520-94bc-46ff-b892-527ea27dae4b',
-            prompt: `${createGenerateImageDto.text} status:success`,
+            taskId: uuid,
+            projectId: createGenerateImageDto.projectId,
+            userId: user.userId,
+            prompt: `${createGenerateImageDto.text}`,
+            status: 'success',
+            typeGenerate: createGenerateImageDto.type,
             tokenUsed: generateImage.data.usage.total_tokens,
             ImageUsed: generateImage.data.usage.generated_images,
           },
@@ -117,15 +185,17 @@ export class GenerateImageService {
         generateImage.data.data.map(async (e) => {
           return await this.galleryRepo.create({
             data: {
-              projectId: 'a4e7e905-b338-4f7a-8be1-7b5fdb748038',
-              userId: '40a3e520-94bc-46ff-b892-527ea27dae4b',
-              prompt: `${createGenerateImageDto.text} status:success`,
+              taskId: uuid,
+              projectId: createGenerateImageDto.projectId,
+              userId: user.userId,
+              prompt: `${createGenerateImageDto.text}`,
               imageUrl: e.url,
+              typeGenerate: 'image',
             },
           });
         });
       }
-      return generateImage.data;
+      return { status: 200, data: generateImage.data };
     }
   }
 

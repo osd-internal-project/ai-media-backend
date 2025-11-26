@@ -8,8 +8,6 @@ import {
   Delete,
 } from '@nestjs/common';
 import { ProjectService } from './project.service';
-import { CreateProjectDto } from './dto/create-project.dto';
-import { UpdateProjectDto } from './dto/update-project.dto';
 import { Prisma } from '@prisma/client';
 
 @Controller('project')
@@ -29,6 +27,11 @@ export class ProjectController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.projectService.findOne(id);
+  }
+
+  @Get('manage/:id')
+  findManageRoles(@Param('id') id: string) {
+    return this.projectService.findById(id);
   }
 
   @Patch(':id')
