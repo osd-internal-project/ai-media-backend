@@ -1,13 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { CreateLogDto } from './dto/create-log.dto';
 import { UpdateLogDto } from './dto/update-log.dto';
-import { LogRepository, GalleryRepository } from '@ai-media/share';
+import {
+  LogRepository,
+  GalleryRepository,
+  UsersRepository,
+} from '@ai-media/share';
 
 @Injectable()
 export class LogsService {
   constructor(
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
+    private readonly userRepo: UsersRepository,
   ) {}
   async findOne(projectId: string) {
     const data = await this.galleryRepo.findMany({
@@ -100,5 +105,22 @@ export class LogsService {
       }
       return data;
     }
+  }
+  async findByUserId(userId: string, skip: number, take: number) {
+    const findUser = await this.userRepo.findOne({ where: { token: userId } });
+    const data = await this.logrepo.findMany({
+      where: {
+        userId: findUser.userId,
+        taskId: { not: null },
+      },
+      ...(skip && take && { skip, take }),
+    });
+    const count = await this.logrepo.count({
+      where: {
+        userId: findUser.userId,
+        taskId: { not: null },
+      },
+    });
+    return { data, count };
   }
 }

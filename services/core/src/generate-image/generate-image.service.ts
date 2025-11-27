@@ -158,9 +158,9 @@ export class GenerateImageService {
           },
         }),
         stream: getConfigApi.stream,
-        optimize_prompt_options: {
-          mode: 'fast',
-        },
+        // optimize_prompt_options: {
+        //   mode: 'fast',
+        // },
         watermark: getConfigApi.watermark,
       };
       const generateImage = await axios.post(
