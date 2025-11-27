@@ -107,18 +107,17 @@ export class GenerateImageService {
       });
       return { status: 200, data: generateImage.data };
     } else {
-      const totalVDOGenerate = await this.logrepo.findMany({
+      const totalImageGenerate = await this.logrepo.findMany({
         where: {
           userId: user.userId,
           typeGenerate: createGenerateImageDto.type,
           status: 'success',
         },
       });
-      const totalTokenUsed = totalVDOGenerate.reduce(
+      const totalTokenUsed = totalImageGenerate.reduce(
         (sum, item) => sum + item.ImageUsed,
         0,
       );
-
       if (
         totalTokenUsed + Number(createGenerateImageDto.images) >
         user.maxImages
@@ -128,6 +127,8 @@ export class GenerateImageService {
           data: 'Image ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Image',
         };
       }
+      console.log(createGenerateImageDto.image);
+
       const dataLogs = await this.logrepo.create({
         data: {
           taskId: uuid,
@@ -143,9 +144,15 @@ export class GenerateImageService {
       const base = {
         model: getModelType.modelType,
         prompt: `${createGenerateImageDto.text} ช่วยออกแบบมา ${createGenerateImageDto.images} รูป`,
-        ...(createGenerateImageDto.image && {
-          image: `${baseUrl}/${createGenerateImageDto.image}`,
-        }),
+        ...(createGenerateImageDto.image &&
+          createGenerateImageDto.image.length > 0 && {
+            image:
+              createGenerateImageDto.image.length === 1
+                ? `${baseUrl}/${createGenerateImageDto.image[0]}`
+                : createGenerateImageDto.image.map(
+                    (img) => `${baseUrl}/${img}`,
+                  ),
+          }),
         response_format: 'url',
         ...(createGenerateImageDto.width &&
           createGenerateImageDto.height && {
@@ -163,6 +170,8 @@ export class GenerateImageService {
         // },
         watermark: getConfigApi.watermark,
       };
+      console.log(base);
+
       const generateImage = await axios.post(
         `${getConfigApi.apiCreateImage}`,
         base,
@@ -228,11 +237,18 @@ export class GenerateImageService {
     return `This action removes a #${id} GenerateImage`;
   }
   async upload(data) {
-    console.log(data);
-    return await this.generateimagerepo.create({
-      data: {
-        ...data,
-      },
-    });
+    const results = await Promise.all(
+      data.map((item) =>
+        this.generateimagerepo.create({
+          data: {
+            ...item,
+          },
+        }),
+      ),
+    );
+    // ดึงเฉพาะ fileName
+    const fileNames = results.map((r) => r.fileName);
+
+    return fileNames;
   }
 }

@@ -18,7 +18,6 @@ import { diskStorage } from 'multer';
 import configs from 'src/configs';
 import { extname, join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import type { Prisma } from '@prisma/client';
 const config = configs();
 
 @Controller('generate-image')
@@ -59,7 +58,7 @@ export class GenerateImageController {
 
   @Post('upload-images')
   @UseInterceptors(
-    FilesInterceptor('files', 1, {
+    FilesInterceptor('files', 10, {
       storage: diskStorage({
         destination: `${config.pathMountDirUpload}/generate-images`,
         filename: (req, file, callback) => {
@@ -70,17 +69,31 @@ export class GenerateImageController {
       }),
     }),
   )
+  // async uploadImage(
+  //   @UploadedFiles() files: Express.Multer.File[],
+  //   @Body('type') type,
+  // ) {
+  //   if (type && files.length > 0) {
+  //     const data = {
+  //       filePath: `${config.pathMountDirUpload}/generate-images/${files[0].filename}`,
+  //       fileType: files[0].mimetype,
+  //       fileName: Buffer.from(files[0].filename, 'latin1').toString('utf8'),
+  //     } as Prisma.GenerateImageCreateInput;
+  //     return this.GenerateImageService.upload(data);
+  //   }
+  // }
   async uploadImage(
     @UploadedFiles() files: Express.Multer.File[],
     @Body('type') type,
   ) {
     if (type && files.length > 0) {
-      const data = {
-        filePath: `${config.pathMountDirUpload}/generate-images/${files[0].filename}`,
-        fileType: files[0].mimetype,
-        fileName: Buffer.from(files[0].filename, 'latin1').toString('utf8'),
-      } as Prisma.GenerateImageCreateInput;
-      return this.GenerateImageService.upload(data);
+      const data = files.map((file) => ({
+        filePath: `${config.pathMountDirUpload}/generate-images/${file.filename}`,
+        fileType: file.mimetype,
+        fileName: Buffer.from(file.filename, 'latin1').toString('utf8'),
+      }));
+      // 👇 ส่ง array เข้า service
+      return await this.GenerateImageService.upload(data);
     }
   }
 }
