@@ -77,12 +77,10 @@ export class DashboardService {
     const sumPriceTokenUsedDateNow =
       totalPriceUsedImageDateNow + totalPriceUsedVdoDateNow;
     const totalImageUsedDateLast = sumBy(dataLogsDateLast, 'ImageUsed');
-    // console.log('totalImageUsedDateLast', totalImageUsedDateLast);
     const totalTokenUsedDateLast = sumBy(
       dataLogsDateLast.filter((log) => log.typeGenerate === 'vdo'),
       'tokenUsed',
     );
-    // console.log('totalImageUsedDateLast', totalImageUsedDateLast);
     const totalPriceUsedImageDateLast =
       totalImageUsedDateLast * initialPriceImage;
     const totalPriceUsedVdoDateLast =
@@ -139,16 +137,14 @@ export class DashboardService {
         if (product === 'image') {
           group.totalImageUsed += log.ImageUsed ?? 0;
         }
-
         if (product === 'vdo') {
           group.totalTokenUsed += log.tokenUsed ?? 0;
         }
-
         return owners;
       }, {}),
     ).map((owner: any) => ({
       ...owner,
-      products: Object.values(owner.products), // แปลง products object เป็น array
+      products: Object.values(owner.products),
     }));
 
     return result;
@@ -166,11 +162,9 @@ export class DashboardService {
         users: true,
       },
     });
-
     const result = Object.values(
       dataLogs.reduce((products, log: any) => {
         const product = log.typeGenerate;
-
         if (!products[product]) {
           products[product] = {
             type: product,
@@ -180,18 +174,13 @@ export class DashboardService {
               product === 'image' ? 0.03 : product === 'vdo' ? 0.0025 : null,
           };
         }
-
         const group = products[product];
-
-        // รวมค่าแต่ละประเภท
         if (product === 'image') {
           group.totalImageUsed += log.ImageUsed ?? 0;
         }
-
         if (product === 'vdo') {
           group.totalTokenUsed += log.tokenUsed ?? 0;
         }
-
         return products;
       }, {}),
     );
