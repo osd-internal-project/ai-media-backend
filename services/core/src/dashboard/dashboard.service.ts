@@ -10,7 +10,9 @@ export class DashboardService {
     private readonly logRepo: LogRepository,
     private readonly userRepo: UsersRepository,
   ) {}
-  async findSummaryDashboard(token: string) {
+  async findSummaryDashboard(token: string, query: any) {
+    const { projectId, createdAt } = query || {};
+
     const findUser = await this.userRepo.findOne({ where: { token } });
     const initialPriceImage = 0.03;
     const initialPriceVideo = 0.0025;
@@ -25,6 +27,13 @@ export class DashboardService {
         userId: findUser.userId,
         status: 'success',
         taskId: { not: null },
+        ...(projectId && { projectId: projectId }),
+        ...(createdAt && {
+          createdAt: {
+            gte: dayjs(createdAt).startOf('month').toDate(),
+            lte: dayjs(createdAt).endOf('month').toDate(),
+          },
+        }),
       },
     });
     const summaryPriceImage = findUser.maxImages * initialPriceImage;
@@ -97,13 +106,21 @@ export class DashboardService {
 
     return data;
   }
-  async findOwnerTableDashboard(token) {
+  async findOwnerTableDashboard(token, query) {
+    const { projectId, createdAt } = query || {};
     const findUser = await this.userRepo.findOne({ where: { token } });
     const dataLogs = await this.logRepo.findMany({
       where: {
         userId: findUser.userId,
         status: 'success',
         taskId: { not: null },
+        ...(projectId && { projectId: projectId }),
+        ...(createdAt && {
+          createdAt: {
+            gte: dayjs(createdAt).startOf('month').toDate(),
+            lte: dayjs(createdAt).endOf('month').toDate(),
+          },
+        }),
       },
       include: {
         users: true,
@@ -150,13 +167,21 @@ export class DashboardService {
     return result;
   }
 
-  async findProductTableDashboard(token) {
+  async findProductTableDashboard(token, query) {
+    const { projectId, createdAt } = query || {};
     const findUser = await this.userRepo.findOne({ where: { token } });
     const dataLogs = await this.logRepo.findMany({
       where: {
         userId: findUser.userId,
         status: 'success',
         taskId: { not: null },
+        ...(projectId && { projectId: projectId }),
+        ...(createdAt && {
+          createdAt: {
+            gte: dayjs(createdAt).startOf('month').toDate(),
+            lte: dayjs(createdAt).endOf('month').toDate(),
+          },
+        }),
       },
       include: {
         users: true,

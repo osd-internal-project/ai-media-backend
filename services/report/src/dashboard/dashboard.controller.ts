@@ -27,11 +27,10 @@ export class DashboardController {
   async downloadExcel(@Body() query: any, @Res() res: Response) {
     const subject = 'test';
     const excel = await this.dashboardService.testExport(query, subject);
+    console.log(excel);
     const date = dayjs().toISOString();
     const fileName = `report_${subject}_${date}.xlsx`;
     const encoded = encodeURIComponent(fileName);
-
-    console.log(fileName);
     res
       .setHeader(
         'Content-Type',

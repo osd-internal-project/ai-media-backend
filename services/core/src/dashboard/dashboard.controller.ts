@@ -16,15 +16,18 @@ import { UpdateDashboardDto } from './dto/update-dashboard.dto';
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
   @Get('find-owner/:token')
-  findOwnerTableDashboard(@Param('token') token: string) {
-    return this.dashboardService.findOwnerTableDashboard(token);
+  findOwnerTableDashboard(@Param('token') token: string, @Query() query: any) {
+    return this.dashboardService.findOwnerTableDashboard(token, query);
   }
   @Get('find-product/:token')
-  findProductTableDashboard(@Param('token') token: string) {
-    return this.dashboardService.findProductTableDashboard(token);
+  findProductTableDashboard(
+    @Param('token') token: string,
+    @Query() query: any,
+  ) {
+    return this.dashboardService.findProductTableDashboard(token, query);
   }
   @Get(':token')
-  findSummaryDashboard(@Param('token') token: string) {
-    return this.dashboardService.findSummaryDashboard(token);
+  findSummaryDashboard(@Param('token') token: string, @Query() query: any) {
+    return this.dashboardService.findSummaryDashboard(token, query);
   }
 }

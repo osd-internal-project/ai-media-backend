@@ -35,10 +35,12 @@ export class ProjectService {
     if (!user) {
       throw new Error('User not found for this token');
     }
-    return this.projectRepo.findMany({
+    const res = await this.projectRepo.findMany({
       where: { members: { some: { userId: user.userId } } },
     });
+    return res;
   }
+
   async findById(id: string) {
     return this.projectRepo.findOne({ where: { id } });
   }

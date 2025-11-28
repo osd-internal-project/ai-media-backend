@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { GroupsRepository } from '@ai-media/share';
+import { GroupsRepository, UsersRepository } from '@ai-media/share';
 import type { CreateGroupDto } from './dto/create-group.dto';
 import type { UpdateGroupDto } from './dto/update-group.dto';
 
 @Injectable()
 export class GroupsService {
-  constructor(private readonly groupsRepo: GroupsRepository) {}
+  constructor(
+    private readonly groupsRepo: GroupsRepository,
+    private readonly usersRepo: UsersRepository,
+  ) {}
   create(createGroupDto: CreateGroupDto) {
     const condition = {
       data: {
@@ -50,7 +53,17 @@ export class GroupsService {
       },
     });
   }
+  async findByUserId(userId: string) {
+    const finddataUser = await this.usersRepo.findOne({
+      where: { token: userId },
+    });
+    const res = await this.groupsRepo.findOne({
+      where: { users: { some: { userId: finddataUser.userId } } },
+    });
+    console.log(res);
 
+    return res;
+  }
   update(groupId: string, updateGroupDto: UpdateGroupDto) {
     console.log(groupId, updateGroupDto);
     const { createdAt, id, users, roles, ...values } = updateGroupDto || {};

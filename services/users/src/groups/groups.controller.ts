@@ -43,6 +43,13 @@ export class GroupsController {
     return this.groupsService.findRolesByGroupsId(groupId);
   }
 
+  @Get('users/:userId')
+  findById(@Param('userId') userId: string) {
+    console.log(userId);
+
+    return this.groupsService.findByUserId(userId);
+  }
+
   @Patch(':groupId')
   update(
     @Param('groupId') groupId: string,
