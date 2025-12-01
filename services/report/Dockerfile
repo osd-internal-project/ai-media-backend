@@ -15,7 +15,7 @@ ENV YARN_CACHE_FOLDER=.yarn-cache
 FROM base AS pruner
 RUN yarn global add turbo@1.5.5
 COPY . .
-RUN turbo prune --scope="@ai-media/users" --docker
+RUN turbo prune --scope="@ai-media/report" --docker
 RUN yarn global remove turbo
 
 # ===== Development dependencies =====
@@ -37,7 +37,7 @@ FROM base AS builder
 COPY --from=dev-deps /app/ .
 COPY --from=pruner /app/out/full/ .
 RUN yarn generate
-RUN yarn turbo run build --scope="@ai-media/users" --include-dependencies --no-deps
+RUN yarn turbo run build --scope="@ai-media/report" --include-dependencies --no-deps
 RUN find . -name node_modules | xargs rm -rf
 
 # ===== Clean dependencies (reduce size) =====
@@ -52,6 +52,6 @@ RUN yarn global remove modclean
 # ===== Final image (runner) =====
 FROM base AS runner
 COPY --from=cleaner /app/ .
-WORKDIR /app/services/users
+WORKDIR /app/services/report
 USER node
 CMD node dist/main
