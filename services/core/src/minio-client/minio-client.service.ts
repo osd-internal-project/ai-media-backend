@@ -1,9 +1,6 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { MinioService } from 'nestjs-minio-client';
-import { Stream } from 'stream';
-import { BufferedFile } from './file.model';
-import * as crypto from 'crypto';
-import configs from '../configs';
+import configs from 'src/configs';
 @Injectable()
 export class MinioClientService {
   constructor(private readonly minio: MinioService) {}
@@ -17,21 +14,12 @@ export class MinioClientService {
     baseBucket: string,
     path: string,
   ) {
-    Logger.debug(`Bucket : ${baseBucket}`);
-    Logger.debug(`Path : ${path}`);
-    Logger.error('file:', file);
-    const metaData = {
-      'Content-Type':
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'X-Amz-Meta-Testing': '1234',
-    } as any;
     const fileBuffer = file;
     return this.minioClient.putObject(
       configs().minioBucket,
       path,
       fileBuffer,
       size,
-      metaData,
     );
   }
   async deleteFile(objetName: string, baseBucket: string) {
@@ -41,6 +29,17 @@ export class MinioClientService {
   public async downloadFile(bucket: string, fileName: string) {
     Logger.debug(`Bucket : ${bucket}`);
     Logger.debug(`Path : ${fileName}`);
-    return await this.minioClient.getObject(bucket, fileName);
+    const res = await this.minioClient.getObject(bucket, fileName);
+    return res;
+  }
+
+  public async statFile(bucket: string, fileName: string) {
+    try {
+      const stat = await this.minioClient.statObject(bucket, fileName);
+      return stat; // stat.metaData['content-type'] สามารถใช้ได้
+    } catch (err) {
+      console.error('MinIO statObject error:', err);
+      return null; // ถ้าไม่มีไฟล์
+    }
   }
 }

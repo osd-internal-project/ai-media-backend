@@ -9,6 +9,7 @@ import {
   UploadedFiles,
   UseInterceptors,
   Query,
+  Res,
 } from '@nestjs/common';
 import { GenerateImageService } from './generate-image.service';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -17,12 +18,17 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import configs from 'src/configs';
 import { extname, join } from 'path';
+import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { MinioClientService } from 'src/minio-client/minio-client.service';
 const config = configs();
 
 @Controller('generate-image')
 export class GenerateImageController {
-  constructor(private readonly GenerateImageService: GenerateImageService) {}
+  constructor(
+    private readonly GenerateImageService: GenerateImageService,
+    private readonly minioclientSerives: MinioClientService,
+  ) {}
 
   @Post()
   create(@Body('body') createGenerateImageDto: CreateGenerateImageDto) {
@@ -41,6 +47,65 @@ export class GenerateImageController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.GenerateImageService.findOne(id);
+  }
+
+  @Get('download/:imageName')
+  async download(@Param('imageName') imageName: string, @Res() res: Response) {
+    try {
+      const decoded = decodeURIComponent(imageName);
+      const bucket = config.minioBucket;
+      const stream = await this.minioclientSerives.downloadFile(
+        bucket,
+        decoded,
+      );
+      stream.on('data', () => console.log('Receiving data chunk...'));
+      stream.on('end', () =>
+        console.log('Stream ended - file fully read from MinIO'),
+      );
+      stream.on('error', (err) => console.error('Stream error:', err));
+      res.on('finish', () => console.log('Response finished sending file'));
+      res.on('close', () => console.log('Connection closed by client'));
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${imageName}"`,
+      );
+      res.setHeader('Content-Type', 'application/octet-stream');
+      stream.on('error', () => {
+        return res.status(404).send('File not found');
+      });
+      stream.pipe(res);
+    } catch (err) {
+      res.status(500).send('Internal Server Error');
+    }
+  }
+
+  @Get('get-image/:imageName')
+  async GetImageFind(
+    @Param('imageName') imageName: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const decoded = decodeURIComponent(imageName);
+      const bucket = config.minioBucket;
+      const stream = await this.minioclientSerives.downloadFile(
+        bucket,
+        decoded,
+      );
+      stream.on('data', () => console.log('Receiving data chunk...'));
+      stream.on('end', () =>
+        console.log('Stream ended - file fully read from MinIO'),
+      );
+      stream.on('error', (err) => console.error('Stream error:', err));
+      res.on('finish', () => console.log('Response finished sending file'));
+      res.on('close', () => console.log('Connection closed by client'));
+      res.setHeader('Content-Type', 'image/jpeg');
+      stream.on('error', () => {
+        return res.status(404).send('File not found');
+      });
+      stream.pipe(res);
+    } catch (err) {
+      res.status(500).send('Internal Server Error');
+    }
   }
 
   @Patch(':id')
@@ -69,19 +134,6 @@ export class GenerateImageController {
       }),
     }),
   )
-  // async uploadImage(
-  //   @UploadedFiles() files: Express.Multer.File[],
-  //   @Body('type') type,
-  // ) {
-  //   if (type && files.length > 0) {
-  //     const data = {
-  //       filePath: `${config.pathMountDirUpload}/generate-images/${files[0].filename}`,
-  //       fileType: files[0].mimetype,
-  //       fileName: Buffer.from(files[0].filename, 'latin1').toString('utf8'),
-  //     } as Prisma.GenerateImageCreateInput;
-  //     return this.GenerateImageService.upload(data);
-  //   }
-  // }
   async uploadImage(
     @UploadedFiles() files: Express.Multer.File[],
     @Body('type') type,
@@ -92,7 +144,6 @@ export class GenerateImageController {
         fileType: file.mimetype,
         fileName: Buffer.from(file.filename, 'latin1').toString('utf8'),
       }));
-      // 👇 ส่ง array เข้า service
       return await this.GenerateImageService.upload(data);
     }
   }

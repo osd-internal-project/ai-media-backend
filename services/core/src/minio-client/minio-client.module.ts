@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { MinioClientService } from './minio-client.service';
 import { MinioModule } from 'nestjs-minio-client';
 import { ConfigModule } from '@nestjs/config';
-import configs from 'configs';
+import configs from 'src/configs';
 const { minioEndpoint, minioPort, minioAccesskey, minioSecretKey } = configs();
 @Module({
   imports: [

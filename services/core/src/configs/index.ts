@@ -1,8 +1,11 @@
-import path from 'path';
-
 export default () => ({
   env: process.env.NODE_ENV ?? 'local',
   port: process.env.PORT || 4002,
   pathMountDirUpload: process.env.PATH_MOUNTDIR_UPLOAD,
   pathDomain: process.env.PATH_DOMAIN,
+  minioEndpoint: (process.env.MINIO_ENDPOINT || '192.168.31.91').trim(),
+  minioPort: parseInt(process.env.MINIO_PORT || '9000', 10),
+  minioAccesskey: process.env.MINIO_ACCESSKEY,
+  minioSecretKey: process.env.MINIO_SECRETKEY,
+  minioBucket: process.env.MINIO_BUCKET,
 });

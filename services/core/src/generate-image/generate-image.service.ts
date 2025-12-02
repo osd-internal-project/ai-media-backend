@@ -14,7 +14,10 @@ import axios from 'axios';
 import * as https from 'https';
 import configs from 'src/configs';
 import { v4 as uuidv4 } from 'uuid';
+import { MinioClientService } from 'src/minio-client/minio-client.service';
+import { extname } from 'path';
 const baseUrl = configs().pathDomain;
+const { minioBucket } = configs();
 @Injectable()
 export class GenerateImageService {
   constructor(
@@ -24,6 +27,7 @@ export class GenerateImageService {
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly userRepo: UsersRepository,
+    private readonly minioclientSerives: MinioClientService,
   ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const uuid = uuidv4();
@@ -127,8 +131,6 @@ export class GenerateImageService {
           data: 'Image ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Image',
         };
       }
-      console.log(createGenerateImageDto.image);
-
       const dataLogs = await this.logrepo.create({
         data: {
           taskId: uuid,
@@ -170,8 +172,6 @@ export class GenerateImageService {
         // },
         watermark: getConfigApi.watermark,
       };
-      console.log(base);
-
       const generateImage = await axios.post(
         `${getConfigApi.apiCreateImage}`,
         base,
@@ -192,13 +192,33 @@ export class GenerateImageService {
           },
         });
         generateImage.data.data.map(async (e) => {
+          const res = await axios.get(e.url, {
+            responseType: 'arraybuffer',
+            httpsAgent: agent,
+          });
+          const buffer = Buffer.from(res.data);
+          const uuidName = uuidv4();
+          const pathname = e.url;
+          const fileNameFromPath = pathname.split('/').pop(); // '021763417932265c5f50319cb4d4388d7836967b82aebe55a0b1e_0.jpeg'
+          let ext = fileNameFromPath.split('.').pop(); // 'jpeg'
+          if (!ext || ext.length > 5) {
+            ext = 'jpg';
+          }
+          const objectName = `${uuid}/${uuidName}.${ext}`;
+          await this.minioclientSerives.uploadFile(
+            buffer,
+            buffer.length,
+            minioBucket,
+            objectName,
+          );
           return await this.galleryRepo.create({
             data: {
               taskId: uuid,
               projectId: createGenerateImageDto.projectId,
               userId: user.userId,
               prompt: `${createGenerateImageDto.text}`,
-              imageUrl: e.url,
+              // imageUrl: e.url,
+              imageUrl: objectName,
               typeGenerate: 'image',
             },
           });
@@ -251,4 +271,15 @@ export class GenerateImageService {
 
     return fileNames;
   }
+
+  // async download() {
+  //   const bucket = minioBucket;
+  //   const fileName = 'reports/bb09c64dd8671f24c5b8f317e7108e3c.xlsx';
+  //   const resDownload = await this.minioclientSerives.downloadFile(
+  //     bucket,
+  //     fileName,
+  //   );
+  //   console.log('resDownload', resDownload);
+  //   return resDownload;
+  // }
 }

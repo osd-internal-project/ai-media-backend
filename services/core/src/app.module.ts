@@ -14,8 +14,10 @@ import { GalleryModule } from './gallery/gallery.module';
 import { ProjectMemberModule } from './project-member/project-member.module';
 import { MasteradataConfigApiModule } from './masteradata-config-api/masteradata-config-api.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { MinioClientModule } from './minio-client/minio-client.module';
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true, load: [configs] }),
     PrismaModule,
     GenerateImageModule,
     HttpModule,
@@ -25,6 +27,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     ProjectMemberModule,
     MasteradataConfigApiModule,
     DashboardModule,
+    MinioClientModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
