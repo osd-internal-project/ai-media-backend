@@ -91,17 +91,6 @@ export class LogsService {
         await this.galleryRepo.createMany({
           data: dataToSave,
         });
-      } else {
-        await this.galleryRepo.create({
-          data: {
-            taskId: data.taskId,
-            projectId: data.projectId,
-            userId: data.userId,
-            imageUrl: query.content.video_url,
-            prompt: data.prompt,
-            typeGenerate: 'vdo',
-          },
-        });
       }
       return data;
     }

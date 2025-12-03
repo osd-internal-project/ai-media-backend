@@ -48,7 +48,7 @@ export class DashboardService {
       'ImageUsed',
     );
     const summarPriceImageUsed = totalImageUsed * initialPriceImage;
-    const summarPriceTokenUsed = totalTokenUsed * initialPriceVideo;
+    const summarPriceTokenUsed = (totalTokenUsed / 1000) * initialPriceVideo;
     const summaryUsed = summarPriceImageUsed + summarPriceTokenUsed;
     const todayRange = betweenDates(
       dayjs().startOf('month'),
@@ -82,7 +82,8 @@ export class DashboardService {
     );
     const totalPriceUsedImageDateNow =
       totalImageUsedDateNow * initialPriceImage;
-    const totalPriceUsedVdoDateNow = totalTokenUsedDateNow * initialPriceVideo;
+    const totalPriceUsedVdoDateNow =
+      (totalTokenUsedDateNow / 1000) * initialPriceVideo;
     const sumPriceTokenUsedDateNow =
       totalPriceUsedImageDateNow + totalPriceUsedVdoDateNow;
     const totalImageUsedDateLast = sumBy(dataLogsDateLast, 'ImageUsed');
@@ -93,7 +94,7 @@ export class DashboardService {
     const totalPriceUsedImageDateLast =
       totalImageUsedDateLast * initialPriceImage;
     const totalPriceUsedVdoDateLast =
-      totalTokenUsedDateLast * initialPriceVideo;
+      (totalTokenUsedDateLast / 1000) * initialPriceVideo;
     const sumPriceTokenUsedDateLast =
       totalPriceUsedImageDateLast + totalPriceUsedVdoDateLast;
 

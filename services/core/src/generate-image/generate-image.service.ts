@@ -15,9 +15,8 @@ import * as https from 'https';
 import configs from 'src/configs';
 import { v4 as uuidv4 } from 'uuid';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
-import { extname } from 'path';
 const baseUrl = configs().pathDomain;
-const { minioBucket } = configs();
+const { minioBucket, minioBucketUpload, minioBucketVdo } = configs();
 @Injectable()
 export class GenerateImageService {
   constructor(
@@ -145,7 +144,7 @@ export class GenerateImageService {
       });
       const base = {
         model: getModelType.modelType,
-        prompt: `${createGenerateImageDto.text} ช่วยออกแบบมา ${createGenerateImageDto.images} รูป`,
+        prompt: `create ${createGenerateImageDto.images} images ${createGenerateImageDto.text} `,
         ...(createGenerateImageDto.image &&
           createGenerateImageDto.image.length > 0 && {
             image:
@@ -167,11 +166,10 @@ export class GenerateImageService {
           },
         }),
         stream: getConfigApi.stream,
-        // optimize_prompt_options: {
-        //   mode: 'fast',
-        // },
         watermark: getConfigApi.watermark,
       };
+      console.log(base);
+
       const generateImage = await axios.post(
         `${getConfigApi.apiCreateImage}`,
         base,
@@ -233,6 +231,7 @@ export class GenerateImageService {
   }
 
   async findOne(id: string) {
+    const logByTaskId = await this.logrepo.findOne({ where: { taskId: id } });
     const agent = new https.Agent({
       rejectUnauthorized: false,
     });
@@ -246,6 +245,40 @@ export class GenerateImageService {
         httpsAgent: agent,
       },
     );
+    if (responseImage.data.status === 'succeeded') {
+      const res = await axios.get(responseImage.data.content.video_url, {
+        responseType: 'arraybuffer',
+        httpsAgent: agent,
+      });
+      const buffer = Buffer.from(res.data);
+      const uuidName = uuidv4();
+      const pathname = responseImage.data.content.video_url;
+      const fileNameFromPath = pathname.split('/').pop();
+      let ext = fileNameFromPath.split('.').pop();
+      if (!ext || ext.length > 5) {
+        ext = 'mp4';
+      }
+      const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
+      console.log('objectName', objectName);
+      await this.minioclientSerives.uploadFile(
+        buffer,
+        buffer.length,
+        minioBucketVdo,
+        objectName,
+      );
+      await this.galleryRepo.create({
+        data: {
+          taskId: logByTaskId.taskId,
+          projectId: logByTaskId.projectId,
+          userId: logByTaskId.userId,
+          imageUrl: objectName,
+          prompt: logByTaskId.prompt,
+          typeGenerate: 'vdo',
+        },
+      });
+      console.log('final');
+    }
+
     return responseImage.data;
   }
 
@@ -266,20 +299,8 @@ export class GenerateImageService {
         }),
       ),
     );
-    // ดึงเฉพาะ fileName
     const fileNames = results.map((r) => r.fileName);
 
     return fileNames;
   }
-
-  // async download() {
-  //   const bucket = minioBucket;
-  //   const fileName = 'reports/bb09c64dd8671f24c5b8f317e7108e3c.xlsx';
-  //   const resDownload = await this.minioclientSerives.downloadFile(
-  //     bucket,
-  //     fileName,
-  //   );
-  //   console.log('resDownload', resDownload);
-  //   return resDownload;
-  // }
 }

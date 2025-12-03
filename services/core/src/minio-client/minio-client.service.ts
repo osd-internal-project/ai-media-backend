@@ -15,12 +15,7 @@ export class MinioClientService {
     path: string,
   ) {
     const fileBuffer = file;
-    return this.minioClient.putObject(
-      configs().minioBucket,
-      path,
-      fileBuffer,
-      size,
-    );
+    return this.minioClient.putObject(baseBucket, path, fileBuffer, size);
   }
   async deleteFile(objetName: string, baseBucket: string) {
     return await this.minioClient.removeObject(baseBucket, objetName);
