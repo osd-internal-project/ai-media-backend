@@ -9,3 +9,4 @@ export * from './project.repository';
 export * from './projectMember.repository';
 export * from './gallery.repository';
 export * from './masterdataConfigApi.repository';
+export * from './promptGuide.repository';

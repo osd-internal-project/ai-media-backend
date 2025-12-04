@@ -196,3 +196,16 @@ model MasterDataConfigApi {
 
   @@map("master_data_config_api")
 }
+
+model PromptGuide {
+  id         Int      @unique @default(autoincrement()) @map("id")
+  title      String?  @map("title") @db.VarChar(150)
+  textPrompt String?  @map("text_prompt") @db.Text
+  type       String?  @map("type") @db.VarChar(150)
+  typeName   String?  @map("type_name") @db.VarChar(150)
+  status     Boolean  @map("status") @db.Boolean
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @map("updated_at")
+
+  @@map("prompt_guide")
+}

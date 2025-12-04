@@ -15,6 +15,7 @@ import { ProjectMemberModule } from './project-member/project-member.module';
 import { MasteradataConfigApiModule } from './masteradata-config-api/masteradata-config-api.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { MinioClientModule } from './minio-client/minio-client.module';
+import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configs] }),
@@ -28,6 +29,7 @@ import { MinioClientModule } from './minio-client/minio-client.module';
     MasteradataConfigApiModule,
     DashboardModule,
     MinioClientModule,
+    PromptGuideModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

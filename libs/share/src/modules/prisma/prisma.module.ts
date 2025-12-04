@@ -12,6 +12,7 @@ import {
   ProjectRepository,
   LogRepository,
   MasterDataConfigApiRepository,
+  PromptGuideRepository,
 } from 'src/repositories';
 
 const services = [
@@ -27,6 +28,7 @@ const services = [
   ProjectRepository,
   LogRepository,
   MasterDataConfigApiRepository,
+  PromptGuideRepository,
 ];
 
 @Module({
