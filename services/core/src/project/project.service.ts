@@ -29,14 +29,36 @@ export class ProjectService {
   }
 
   async findOne(id: string) {
-    const user = await this.usersRepo.findOne({
+    // const user = await this.usersRepo.findOne({
+    //   where: { token: id },
+    // });
+
+    const user = (await this.usersRepo.findOne({
       where: { token: id },
-    });
+      include: {
+        groups: {
+          include: {
+            group: {
+              select: {
+                name: true,
+                displayName: true,
+                id: true,
+              },
+            },
+          },
+        },
+      },
+    })) as any;
+    const isAdmin = user.groups.some(
+      (g: any) => g.group?.name === 'admin-user',
+    );
     if (!user) {
       throw new Error('User not found for this token');
     }
     const res = await this.projectRepo.findMany({
-      where: { members: { some: { userId: user.userId } } },
+      where: {
+        members: { some: { ...(!isAdmin && { userId: user.userId }) } },
+      },
     });
     return res;
   }
