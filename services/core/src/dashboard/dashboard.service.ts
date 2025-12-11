@@ -13,7 +13,25 @@ export class DashboardService {
   async findSummaryDashboard(token: string, query: any) {
     const { projectId, createdAt } = query || {};
 
-    const findUser = await this.userRepo.findOne({ where: { token } });
+    const findUser = (await this.userRepo.findOne({
+      where: { token },
+      include: {
+        groups: {
+          include: {
+            group: {
+              select: {
+                name: true,
+                displayName: true,
+                id: true,
+              },
+            },
+          },
+        },
+      },
+    })) as any;
+    const isAdmin = findUser.groups.some(
+      (g: any) => g.group?.name === 'admin-user',
+    );
     const initialPriceImage = 0.03;
     const initialPriceVideo = 0.0025;
     const sumBy = (arr, key) =>
@@ -24,7 +42,7 @@ export class DashboardService {
     });
     const dataLogs = await this.logRepo.findMany({
       where: {
-        userId: findUser.userId,
+        ...(!isAdmin && { userId: findUser.userId }),
         status: 'success',
         taskId: { not: null },
         ...(projectId && { projectId: projectId }),
@@ -36,9 +54,20 @@ export class DashboardService {
         }),
       },
     });
-    const summaryPriceImage = findUser.maxImages * initialPriceImage;
-    const summaryPriceToken = findUser.maxToken * initialPriceVideo;
-    const quota = summaryPriceImage + summaryPriceToken;
+    let quota = 0;
+
+    if (isAdmin) {
+      const allUsers = await this.userRepo.findMany({});
+      quota = allUsers.reduce((sum, user: any) => {
+        const priceImage = user.maxImages * initialPriceImage;
+        const priceToken = user.maxToken * initialPriceVideo;
+        return sum + priceImage + priceToken;
+      }, 0);
+    } else {
+      const priceImage = findUser.maxImages * initialPriceImage;
+      const priceToken = findUser.maxToken * initialPriceVideo;
+      quota = priceImage + priceToken;
+    }
     const totalTokenUsed = sumBy(
       dataLogs.filter((log) => log.typeGenerate === 'vdo'),
       'tokenUsed',
@@ -60,7 +89,8 @@ export class DashboardService {
     const [dataLogsDateNow, dataLogsDateLast] = await Promise.all([
       this.logRepo.findMany({
         where: {
-          userId: findUser.userId,
+          ...(!isAdmin && { userId: findUser.userId }),
+          ...(projectId && { projectId: projectId }),
           createdAt: todayRange,
           status: 'success',
           taskId: { not: null },
@@ -68,7 +98,8 @@ export class DashboardService {
       }),
       this.logRepo.findMany({
         where: {
-          userId: findUser.userId,
+          ...(!isAdmin && { userId: findUser.userId }),
+          ...(projectId && { projectId: projectId }),
           createdAt: lastMonthRange,
           status: 'success',
           taskId: { not: null },
@@ -109,10 +140,28 @@ export class DashboardService {
   }
   async findOwnerTableDashboard(token, query) {
     const { projectId, createdAt } = query || {};
-    const findUser = await this.userRepo.findOne({ where: { token } });
+    const findUser = (await this.userRepo.findOne({
+      where: { token },
+      include: {
+        groups: {
+          include: {
+            group: {
+              select: {
+                name: true,
+                displayName: true,
+                id: true,
+              },
+            },
+          },
+        },
+      },
+    })) as any;
+    const isAdmin = findUser.groups.some(
+      (g: any) => g.group?.name === 'admin-user',
+    );
     const dataLogs = await this.logRepo.findMany({
       where: {
-        userId: findUser.userId,
+        ...(!isAdmin && { userId: findUser.userId }),
         status: 'success',
         taskId: { not: null },
         ...(projectId && { projectId: projectId }),
@@ -170,10 +219,28 @@ export class DashboardService {
 
   async findProductTableDashboard(token, query) {
     const { projectId, createdAt } = query || {};
-    const findUser = await this.userRepo.findOne({ where: { token } });
+    const findUser = (await this.userRepo.findOne({
+      where: { token },
+      include: {
+        groups: {
+          include: {
+            group: {
+              select: {
+                name: true,
+                displayName: true,
+                id: true,
+              },
+            },
+          },
+        },
+      },
+    })) as any;
+    const isAdmin = findUser.groups.some(
+      (g: any) => g.group?.name === 'admin-user',
+    );
     const dataLogs = await this.logRepo.findMany({
       where: {
-        userId: findUser.userId,
+        ...(!isAdmin && { userId: findUser.userId }),
         status: 'success',
         taskId: { not: null },
         ...(projectId && { projectId: projectId }),
