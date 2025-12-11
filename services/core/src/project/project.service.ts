@@ -29,10 +29,6 @@ export class ProjectService {
   }
 
   async findOne(id: string) {
-    // const user = await this.usersRepo.findOne({
-    //   where: { token: id },
-    // });
-
     const user = (await this.usersRepo.findOne({
       where: { token: id },
       include: {

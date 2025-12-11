@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { CreateLogDto } from './dto/create-log.dto';
-import { UpdateLogDto } from './dto/update-log.dto';
 import {
   LogRepository,
   GalleryRepository,
   UsersRepository,
 } from '@ai-media/share';
+import * as dayjs from 'dayjs';
 
 @Injectable()
 export class LogsService {
@@ -15,11 +14,17 @@ export class LogsService {
     private readonly userRepo: UsersRepository,
   ) {}
   async findOne(projectId: string) {
+    const startDate = dayjs().subtract(3, 'day').startOf('day').toDate(); // 3 วันก่อน
+    const endDate = dayjs().endOf('day').toDate();
     const data = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'image',
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
       include: { users: true },
       orderBy: { createdAt: 'asc' },
@@ -40,11 +45,17 @@ export class LogsService {
     return result;
   }
   async findOneVDO(projectId: string) {
+    const startDate = dayjs().subtract(3, 'day').startOf('day').toDate(); // 3 วันก่อน
+    const endDate = dayjs().endOf('day').toDate();
     const data = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'vdo',
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
       include: { users: true },
       orderBy: { createdAt: 'asc' },
