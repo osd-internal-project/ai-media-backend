@@ -16,7 +16,7 @@ import configs from 'src/configs';
 import { v4 as uuidv4 } from 'uuid';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
 const baseUrl = configs().pathDomain;
-const { minioBucket, minioBucketUpload, minioBucketVdo } = configs();
+const { minioBucket, minioBucketVdo } = configs();
 @Injectable()
 export class GenerateImageService {
   constructor(
@@ -72,6 +72,32 @@ export class GenerateImageService {
           data: 'Token ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Token',
         };
       }
+      const imageArray = createGenerateImageDto.image;
+      const imageCount =
+        imageArray && Array.isArray(imageArray) ? imageArray.length : 0;
+      let imageContents: any[] = [];
+
+      if (imageCount === 1) {
+        imageContents.push({
+          type: 'image_url',
+          image_url: {
+            url: `${baseUrl}/${imageArray[0]}`,
+          },
+        });
+      } else if (imageCount >= 2) {
+        imageContents.push(
+          {
+            type: 'image_url',
+            image_url: { url: `${baseUrl}/${imageArray[0]}` },
+            role: 'first_frame',
+          },
+          {
+            type: 'image_url',
+            image_url: { url: `${baseUrl}/${imageArray[1]}` },
+            role: 'last_frame',
+          },
+        );
+      }
       const base = {
         model: getModelType.modelType,
         content: [
@@ -79,18 +105,10 @@ export class GenerateImageService {
             type: 'text',
             text: `${createGenerateImageDto.text} --resolution ${createGenerateImageDto.resolution} --duration ${createGenerateImageDto.duration} --ratio ${createGenerateImageDto.ratio} --camerafixed false`,
           },
-          ...(createGenerateImageDto.image
-            ? [
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `${baseUrl}/${createGenerateImageDto.image}`,
-                  },
-                },
-              ]
-            : []),
+          ...imageContents,
         ],
       };
+
       const generateImage = await axios.post(
         `${getConfigApi.apiCreateTaskVdo}`,
         base,
@@ -168,7 +186,6 @@ export class GenerateImageService {
         stream: getConfigApi.stream,
         watermark: getConfigApi.watermark,
       };
-      console.log(base);
 
       const generateImage = await axios.post(
         `${getConfigApi.apiCreateImage}`,
