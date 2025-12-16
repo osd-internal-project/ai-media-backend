@@ -55,6 +55,10 @@ export class ProjectService {
       where: {
         members: { some: { ...(!isAdmin && { userId: user.userId }) } },
       },
+      include: { members: true },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
     return res;
   }
@@ -63,8 +67,21 @@ export class ProjectService {
     return this.projectRepo.findOne({ where: { id } });
   }
 
-  update(id: string, updateProjectDto: Prisma.ProjectUpdateInput) {
-    return this.projectRepo.update({ where: { id }, data: updateProjectDto });
+  update(id: string, updateProjectDto: any) {
+    return this.projectRepo.update({
+      where: { id },
+      data: {
+        ...updateProjectDto,
+        members: updateProjectDto.members?.length
+          ? {
+              deleteMany: {},
+              create: updateProjectDto.members.map((userId) => ({
+                users: { connect: { userId: userId } },
+              })),
+            }
+          : undefined,
+      },
+    });
   }
 
   remove(id: string) {
