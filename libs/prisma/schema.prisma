@@ -33,15 +33,15 @@ model users {
 }
 
 model Project {
-  id          String   @id @default(uuid())
+  id          String          @id @default(uuid())
   name        String
   description String?
-  createdAt   DateTime @default(now())
-
+  createdAt   DateTime        @default(now())
+  status      String?         @default("active") @db.VarChar(10)
   // Relations
-  members   ProjectMember[]
-  galleries Gallery[]
-  logs      Log[]
+  members     ProjectMember[]
+  galleries   Gallery[]
+  logs        Log[]
 
   @@map("project")
 }
