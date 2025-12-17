@@ -53,6 +53,7 @@ export class ProjectService {
     }
     const res = await this.projectRepo.findMany({
       where: {
+        ...(!isAdmin && { status: { not: 'deleted' } }),
         members: { some: { ...(!isAdmin && { userId: user.userId }) } },
       },
       include: { members: true },
