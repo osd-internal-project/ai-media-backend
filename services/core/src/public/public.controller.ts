@@ -4,7 +4,8 @@ import { createReadStream } from 'fs';
 import { Response } from 'express';
 import configs from 'src/configs';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
-const { minioBucket, minioBucketVdo, minioBucketUpload } = configs();
+const { minioBucket, minioBucketVdo, minioBucketUpload, minioBucketFile } =
+  configs();
 
 @Controller('public')
 export class PublicController {
@@ -93,6 +94,40 @@ export class PublicController {
     try {
       const decodedName = decodeURIComponent(vdoName);
       const bucket = minioBucketVdo;
+
+      // เช็คไฟล์ใน MinIO
+      const stat = await this.minioService.statFile(bucket, decodedName);
+      if (!stat) return res.status(404).send('File not found');
+
+      const fileSize = stat.size;
+      const contentType =
+        stat.metaData?.['content-type'] ||
+        stat.metaData?.['Content-Type'] ||
+        'video/mp4'; // default
+
+      // ไม่มี Range → ส่งทั้งไฟล์
+      const stream = await this.minioService.downloadFile(bucket, decodedName);
+
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type': contentType,
+      });
+
+      return stream.pipe(res);
+    } catch (err) {
+      console.error('Public Controller Error:', err);
+      if (!res.headersSent) res.status(500).send('Internal Server Error');
+    }
+  }
+
+  @Get('minio-file/:file')
+  async getPublicFileContent(
+    @Param('file') file: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const decodedName = decodeURIComponent(file);
+      const bucket = minioBucketFile;
 
       // เช็คไฟล์ใน MinIO
       const stat = await this.minioService.statFile(bucket, decodedName);
