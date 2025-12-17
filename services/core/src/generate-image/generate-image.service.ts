@@ -27,7 +27,7 @@ export class GenerateImageService {
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioclientSerives: MinioClientService,
-  ) {}
+  ) { }
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -165,18 +165,18 @@ export class GenerateImageService {
         prompt: `create ${createGenerateImageDto.images} images ${createGenerateImageDto.text} `,
         ...(createGenerateImageDto.image &&
           createGenerateImageDto.image.length > 0 && {
-            image:
-              createGenerateImageDto.image.length === 1
-                ? `${baseUrl}/${createGenerateImageDto.image[0]}`
-                : createGenerateImageDto.image.map(
-                    (img) => `${baseUrl}/${img}`,
-                  ),
-          }),
+          image:
+            createGenerateImageDto.image.length === 1
+              ? `${baseUrl}/${createGenerateImageDto.image[0]}`
+              : createGenerateImageDto.image.map(
+                (img) => `${baseUrl}/${img}`,
+              ),
+        }),
         response_format: 'url',
         ...(createGenerateImageDto.width &&
           createGenerateImageDto.height && {
-            size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
-          }),
+          size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
+        }),
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
@@ -206,7 +206,7 @@ export class GenerateImageService {
             ImageUsed: generateImage.data.usage.generated_images,
           },
         });
-        generateImage.data.data.map(async (e) => {
+        await Promise.all(generateImage.data.data.map(async (e) => {
           const res = await axios.get(e.url, {
             responseType: 'arraybuffer',
             httpsAgent: agent,
@@ -237,7 +237,7 @@ export class GenerateImageService {
               typeGenerate: 'image',
             },
           });
-        });
+        }));
       }
       return { status: 200, data: generateImage.data };
     }
