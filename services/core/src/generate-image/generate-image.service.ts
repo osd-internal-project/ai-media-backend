@@ -7,7 +7,7 @@ import {
   MasterDataConfigApiRepository,
   UsersRepository,
 } from '@ai-media/share';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
 import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import axios from 'axios';
@@ -76,7 +76,6 @@ export class GenerateImageService {
       const imageCount =
         imageArray && Array.isArray(imageArray) ? imageArray.length : 0;
       let imageContents: any[] = [];
-
       if (imageCount === 1) {
         imageContents.push({
           type: 'image_url',

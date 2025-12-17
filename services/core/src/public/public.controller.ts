@@ -9,7 +9,7 @@ const { minioBucket, minioBucketVdo, minioBucketUpload, minioBucketFile } =
 
 @Controller('public')
 export class PublicController {
-  constructor(private readonly minioService: MinioClientService) { }
+  constructor(private readonly minioService: MinioClientService) {}
 
   @Get('generate-image/:id')
   async getNewsImageFile(@Param('id') id: string, @Res() res: Response) {
@@ -121,10 +121,7 @@ export class PublicController {
   }
 
   @Get('minio-file/:file')
-  async getPublicFileContent(
-    @Param('file') file: string,
-    @Res() res: Response,
-  ) {
+  async getPublicFile(@Param('file') file: string, @Res() res: Response) {
     try {
       const decodedName = decodeURIComponent(file);
       const bucket = minioBucketFile;

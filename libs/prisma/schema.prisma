@@ -220,3 +220,22 @@ model PromptGuideType {
 
   @@map("prompt_guide_type")
 }
+
+model OmnihumenTask {
+  id            Int      @unique @default(autoincrement()) @map("id")
+  uuid          String?  @default(uuid()) @map("uuid") @db.VarChar(50)
+  status        Boolean  @map("status") @db.Boolean
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  taskId        String   @map("task_id") @db.VarChar(100)
+  taskRequestId String?  @map("task_request_id") @db.VarChar(100)
+  taskMessage   String?  @map("task_message") @db.VarChar(20)
+  fileId        String?  @map("file_id") @db.VarChar(100)
+  filePath      String?  @map("file_path") @db.Text
+  projectId     String   @map("project_id") @db.VarChar(100)
+  userId        String?  @map("user_id") @db.VarChar(100)
+  avatarName    String?  @map("avatar_name") @db.VarChar(150)
+  prompt        String?  @map("prompt") @db.Text
+
+  @@map("omnihumen_task")
+}

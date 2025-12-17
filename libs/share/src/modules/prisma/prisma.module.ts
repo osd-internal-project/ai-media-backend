@@ -14,6 +14,7 @@ import {
   MasterDataConfigApiRepository,
   PromptGuideRepository,
   PromptGuideTypeRepository,
+  OmnihumenTaskRepository,
 } from 'src/repositories';
 
 const services = [
@@ -31,6 +32,7 @@ const services = [
   MasterDataConfigApiRepository,
   PromptGuideRepository,
   PromptGuideTypeRepository,
+  OmnihumenTaskRepository,
 ];
 
 @Module({
