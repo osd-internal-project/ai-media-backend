@@ -8,7 +8,7 @@ const { minioBucket, minioBucketVdo, minioBucketUpload } = configs();
 
 @Controller('public')
 export class PublicController {
-  constructor(private readonly minioService: MinioClientService) {}
+  constructor(private readonly minioService: MinioClientService) { }
 
   @Get('generate-image/:id')
   async getNewsImageFile(@Param('id') id: string, @Res() res: Response) {
