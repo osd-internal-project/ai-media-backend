@@ -16,7 +16,7 @@ export class PromptGuideService {
   }
 
   findOne(id: number) {
-    return `This action returns a #${id} promptGuide`;
+    return this.promptguideRepo.findOne({ where: { id } });
   }
 
   update(id: number, updatePromptGuideDto: Prisma.PromptGuideUpdateInput) {

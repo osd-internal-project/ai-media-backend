@@ -198,14 +198,25 @@ model MasterDataConfigApi {
 }
 
 model PromptGuide {
-  id         Int      @unique @default(autoincrement()) @map("id")
-  title      String?  @map("title") @db.VarChar(150)
-  textPrompt String?  @map("text_prompt") @db.Text
-  type       String?  @map("type") @db.VarChar(150)
-  typeName   String?  @map("type_name") @db.VarChar(150)
-  status     Boolean  @map("status") @db.Boolean
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @default(now()) @map("updated_at")
+  id                Int              @unique @default(autoincrement()) @map("id")
+  title             String?          @map("title") @db.VarChar(150)
+  textPrompt        String?          @map("text_prompt") @db.Text
+  status            Boolean          @map("status") @db.Boolean
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @default(now()) @map("updated_at")
+  promptGuideType   PromptGuideType? @relation(fields: [promptGuideTypeId], references: [id])
+  promptGuideTypeId Int?             @map("prompt_guide_type_id")
 
   @@map("prompt_guide")
+}
+
+model PromptGuideType {
+  id          Int           @unique @default(autoincrement()) @map("id")
+  title       String?       @map("title") @db.VarChar(150)
+  status      Boolean       @map("status") @db.Boolean
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @map("updated_at")
+  promptGuide PromptGuide[]
+
+  @@map("prompt_guide_type")
 }

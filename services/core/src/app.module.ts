@@ -16,6 +16,7 @@ import { MasteradataConfigApiModule } from './masteradata-config-api/masteradata
 import { DashboardModule } from './dashboard/dashboard.module';
 import { MinioClientModule } from './minio-client/minio-client.module';
 import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
+import { PromptGuideTypeModule } from './prompt-guide-type/prompt-guide-type.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configs] }),
@@ -30,6 +31,7 @@ import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
     DashboardModule,
     MinioClientModule,
     PromptGuideModule,
+    PromptGuideTypeModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
