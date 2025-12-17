@@ -10,5 +10,13 @@ export default () => ({
   minioSecretKey: process.env.MINIO_SECRETKEY,
   minioBucket: process.env.MINIO_BUCKET,
   minioBucketUpload: process.env.MINIO_BUCKET_UPLOAD,
+  minioBucketFile: process.env.MINIO_BUCKET_FILE || 'ai-media-file',
+
   minioBucketVdo: process.env.MINIO_BUCKET_VDO,
+  byteplusAccessKeyId:
+    process.env.BYTEPLUS_ACCESS_KEY ||
+    'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM',
+  byteplusSecretKey:
+    process.env.BYTEPLUS_SECRET_KEY ||
+    'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==',
 });

@@ -320,4 +320,12 @@ export class GenerateImageService {
 
     return fileNames;
   }
+
+  async createFileLogs(data) {
+    return this.generateimagerepo.create({
+      data: {
+        ...data,
+      },
+    });
+  }
 }

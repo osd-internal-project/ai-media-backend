@@ -19,6 +19,8 @@ import { memoryStorage } from 'multer';
 import configs from 'src/configs';
 import { Response } from 'express';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
+import { v4 as uuidv4 } from 'uuid';
+import * as path from 'path';
 const config = configs();
 
 @Controller('generate-image')
@@ -161,9 +163,8 @@ export class GenerateImageController {
       const bucketname = config.minioBucketUpload;
       await Promise.all(
         files.map((file) => {
-          const fileName = Buffer.from(file.originalname, 'latin1').toString(
-            'utf8',
-          );
+          const ext = path.extname(file.originalname); // นามสกุลไฟล์
+          const fileName = `${uuidv4()}${ext}`;
           return this.minioclientSerives.uploadFile(
             file.buffer,
             file.buffer.length,
