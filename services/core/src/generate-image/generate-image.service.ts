@@ -29,6 +29,7 @@ export class GenerateImageService {
     private readonly minioclientSerives: MinioClientService,
   ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
+    console.log(createGenerateImageDto.type);
     const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
     const getConfigApi = await this.masterdataconfigapiRepo.findOne({
@@ -162,7 +163,7 @@ export class GenerateImageService {
       });
       const base = {
         model: getModelType.modelType,
-        prompt: `create ${createGenerateImageDto.images} images ${createGenerateImageDto.text} `,
+        prompt: `${createGenerateImageDto.text} `,
         ...(createGenerateImageDto.image &&
           createGenerateImageDto.image.length > 0 && {
             image:
@@ -177,21 +178,23 @@ export class GenerateImageService {
           createGenerateImageDto.height && {
             size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
           }),
-        ...(createGenerateImageDto.images && {
-          sequential_image_generation: 'auto',
-          sequential_image_generation_options: {
-            max_images: getConfigApi.maxImage,
-          },
-        }),
+        sequential_image_generation: 'auto',
+        sequential_image_generation_options: {
+          max_images: getConfigApi.maxImage,
+        },
         stream: getConfigApi.stream,
         watermark: getConfigApi.watermark,
       };
+      console.log(base);
+
+      console.log('before');
 
       const generateImage = await axios.post(
         `${getConfigApi.apiCreateImage}`,
         base,
         axiosConfig,
       );
+      console.log('after');
       if (generateImage.data) {
         await this.logrepo.update({
           where: { id: dataLogs.id },
@@ -214,8 +217,8 @@ export class GenerateImageService {
           const buffer = Buffer.from(res.data);
           const uuidName = uuidv4();
           const pathname = e.url;
-          const fileNameFromPath = pathname.split('/').pop(); // '021763417932265c5f50319cb4d4388d7836967b82aebe55a0b1e_0.jpeg'
-          let ext = fileNameFromPath.split('.').pop(); // 'jpeg'
+          const fileNameFromPath = pathname.split('/').pop();
+          let ext = fileNameFromPath.split('.').pop();
           if (!ext || ext.length > 5) {
             ext = 'jpg';
           }
