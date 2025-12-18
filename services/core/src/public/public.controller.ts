@@ -95,25 +95,31 @@ export class PublicController {
       const decodedName = decodeURIComponent(vdoName);
       const bucket = minioBucketVdo;
 
-      // เช็คไฟล์ใน MinIO
-      const stat = await this.minioService.statFile(bucket, decodedName);
-      if (!stat) return res.status(404).send('File not found');
+      // // เช็คไฟล์ใน MinIO
+      // const stat = await this.minioService.statFile(bucket, decodedName);
+      // if (!stat) return res.status(404).send('File not found');
 
-      const fileSize = stat.size;
-      const contentType =
-        stat.metaData?.['content-type'] ||
-        stat.metaData?.['Content-Type'] ||
-        'video/mp4'; // default
+      // const fileSize = stat.size;
+      // const contentType =
+      //   stat.metaData?.['content-type'] ||
+      //   stat.metaData?.['Content-Type'] ||
+      //   'video/mp4'; // default
 
-      // ไม่มี Range → ส่งทั้งไฟล์
-      const stream = await this.minioService.downloadFile(bucket, decodedName);
+      // // ไม่มี Range → ส่งทั้งไฟล์
+      // const stream = await this.minioService.downloadFile(bucket, decodedName);
 
-      res.writeHead(200, {
-        'Content-Length': fileSize,
-        'Content-Type': contentType,
-      });
+      // res.writeHead(200, {
+      //   'Content-Length': fileSize,
+      //   'Content-Type': contentType,
+      // });
 
-      return stream.pipe(res);
+      // return stream.pipe(res);
+      const url = await this.minioService.getPresignedUrl(
+        bucket,
+        decodedName,
+      );
+      console.log(url)
+      return { url };
     } catch (err) {
       console.error('Public Controller Error:', err);
       if (!res.headersSent) res.status(500).send('Internal Server Error');
