@@ -229,7 +229,7 @@ model OmnihumenTask {
   updatedAt     DateTime @updatedAt @map("updated_at")
   taskId        String   @map("task_id") @db.VarChar(100)
   taskRequestId String?  @map("task_request_id") @db.VarChar(100)
-  taskMessage   String?  @map("task_message") @db.VarChar(20)
+  taskMessage   String?  @map("task_message") @db.Text
   fileId        String?  @map("file_id") @db.VarChar(100)
   filePath      String?  @map("file_path") @db.Text
   fileOrgPath   String?  @map("file_org_path") @db.Text
