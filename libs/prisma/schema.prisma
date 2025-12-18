@@ -66,6 +66,7 @@ model Gallery {
   projectId    String
   userId       String
   imageUrl     String
+  thumbnailUrl String?
   prompt       String?
   typeGenerate String?
   createdAt    DateTime @default(now())
