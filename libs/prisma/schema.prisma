@@ -67,6 +67,7 @@ model Gallery {
   userId       String
   imageUrl     String
   prompt       String?
+  thumbnailUrl String?
   typeGenerate String?
   createdAt    DateTime @default(now())
   status       Boolean? @default(false)
