@@ -5,6 +5,9 @@ import {
   UsersRepository,
 } from '@ai-media/share';
 import * as dayjs from 'dayjs';
+import { MinioClientService } from '../minio-client/minio-client.service';
+import configs from 'src/configs';
+const { minioBucket, minioBucketVdo } = configs();
 
 @Injectable()
 export class LogsService {
@@ -12,6 +15,7 @@ export class LogsService {
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly userRepo: UsersRepository,
+    private readonly minioService: MinioClientService,
   ) { }
   async findOne(projectId: string, skip?: number, take?: number) {
     const startDate = dayjs().subtract(3, 'day').startOf('day').toDate(); // 3 วันก่อน
@@ -101,16 +105,26 @@ export class LogsService {
       include: { users: true },
       orderBy: { createdAt: 'desc' }, // Consistent ordering
     });
+
     const map = new Map();
     for (const item of data) {
+      const url = await this.minioService.getPresignedUrl(minioBucketVdo, item.imageUrl);
+      let thumbnailUrl = item.thumbnailUrl ? await this.minioService.getPresignedUrl(minioBucketVdo, item.thumbnailUrl) : null;
       if (!map.has(item.taskId)) {
         map.set(item.taskId, {
           ...item,
-          imageUrls: [item.imageUrl],
+          imageUrls: [{
+            imageUrl: url,
+            thumbnailUrl: thumbnailUrl
+          }],
         });
         delete map.get(item.taskId).imageUrl;
+        delete map.get(item.taskId).thumbnailUrl;
       } else {
-        map.get(item.taskId).imageUrls.push(item.imageUrl);
+        map.get(item.taskId).imageUrls.push({
+          imageUrl: url,
+          thumbnailUrl: thumbnailUrl
+        });
       }
     }
     const result = Array.from(map.values());

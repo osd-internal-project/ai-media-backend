@@ -9,7 +9,7 @@ const { minioBucket, minioBucketVdo, minioBucketUpload, minioBucketFile } =
 
 @Controller('public')
 export class PublicController {
-  constructor(private readonly minioService: MinioClientService) {}
+  constructor(private readonly minioService: MinioClientService) { }
 
   @Get('generate-image/:id')
   async getNewsImageFile(@Param('id') id: string, @Res() res: Response) {
@@ -161,8 +161,8 @@ export class PublicController {
 
       // return stream.pipe(res);
       const url = await this.minioService.getPresignedUrl(bucket, decodedName);
-      console.log(url);
-      return { url };
+      console.log(`url`, url);
+      return url
     } catch (err) {
       console.error('Public Controller Error:', err);
       if (!res.headersSent) res.status(500).send('Internal Server Error');

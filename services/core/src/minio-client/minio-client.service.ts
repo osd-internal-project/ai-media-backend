@@ -52,14 +52,11 @@ export class MinioClientService {
     const objectName = `${id}/${videoFileName}`;
     const thumbnailObjectName = `${id}/${thumbnailFileName}`;
 
-    // Path สำหรับไฟล์ชั่วคราว (จำเป็นสำหรับ ffmpeg ในบางกรณี)
-    const tempVideoPath = path.join(__dirname, '../../temp', videoFileName);
-    const tempThumbPath = path.join(__dirname, '../../temp', thumbnailFileName);
-
-    // ตรวจสอบว่ามีโฟลเดอร์ temp หรือไม่
-    if (!fs.existsSync(path.join(__dirname, '../../temp'))) {
-      fs.mkdirSync(path.join(__dirname, '../../temp'), { recursive: true });
-    }
+    // Use os.tmpdir() for better compatibility
+    const os = require('os');
+    const tempDir = os.tmpdir();
+    const tempVideoPath = path.join(tempDir, videoFileName);
+    const tempThumbPath = path.join(tempDir, thumbnailFileName);
 
     // 2. เขียนไฟล์วิดีโอลง Disk ชั่วคราวเพื่อให้ FFmpeg อ่าน
     fs.writeFileSync(tempVideoPath, file.buffer);
@@ -79,18 +76,19 @@ export class MinioClientService {
           .on('error', reject);
       });
 
-      // 4. Upload Video ขึ้น MinIO
-      await this.minioClient.fPutObject(bucket, videoFileName, tempVideoPath, {
+      // 4. Upload Video ขึ้น MinIO (ใช้ putObject แทน fPutObject)
+      await this.minioClient.putObject(bucket, objectName, file.buffer, file.size, {
         'Content-Type': file.mimetype
       });
 
       // 5. Upload Thumbnail ขึ้น MinIO
-      await this.minioClient.fPutObject(bucket, thumbnailFileName, tempThumbPath, {
+      // อ่านไฟล์ thumbnail ขึ้นมาเป็น buffer ก่อน
+      const thumbBuffer = fs.readFileSync(tempThumbPath);
+      await this.minioClient.putObject(bucket, thumbnailObjectName, thumbBuffer, thumbBuffer.length, {
         'Content-Type': 'image/png'
       });
 
-      // 6. (Optional) สร้าง Presigned URL หรือ Public URL
-      // สมมติว่าเป็น Public Bucket หรือใช้ Presigned
+      // 6. (Optional) สร้าง Presigned URL แบบ Public (ถ้า bucket เป็น public ไม่ต้องใช้ presigned ก็ได้ แต่ code เดิมใช้)
       const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
       const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
 
@@ -102,12 +100,16 @@ export class MinioClientService {
       };
 
     } catch (error) {
-      console.error(error);
-      throw new BadRequestException('Error processing video');
+      console.error('Error in uploadVideoWithThumbnail:', error);
+      throw new BadRequestException('Error processing video: ' + error.message);
     } finally {
       // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
-      if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
-      if (fs.existsSync(tempThumbPath)) fs.unlinkSync(tempThumbPath);
+      try {
+        if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
+        if (fs.existsSync(tempThumbPath)) fs.unlinkSync(tempThumbPath);
+      } catch (cleanupError) {
+        console.error('Error cleaning up temp files:', cleanupError);
+      }
     }
   }
 }
