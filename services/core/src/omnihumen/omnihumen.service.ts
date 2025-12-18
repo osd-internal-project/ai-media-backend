@@ -85,12 +85,23 @@ export class OmnihumenService {
           return this.generateImageService.createFileLogs(data);
         });
       Logger.debug(audio, image);
+      if (!audio || !image) {
+        throw new BadRequestException('No Image or Audio');
+      }
+      // const imageUrl = await this.minioclientSerives.getPresignedUrl(
+      //   bucketname,
+      //   image.fileName,
+      // );
+      // const audioUrl = await this.minioclientSerives.getPresignedUrl(
+      //   bucketname,
+      //   image.fileName,
+      // );
       const generateTask = await this.submitTask({
         req_key: 'realman_avatar_picture_omni15_cv',
-        // image_url: `${baseUrl}/stream-image/${imageFileName}`,
-        // audio_url: `${baseUrl}/stream-image/${audioFileName}`,
-        image_url: `${baseUrl}/${imageFileName}`,
-        audio_url: `${baseUrl}/${audioFileName}`,
+        image_url: `${baseUrl}/stream-image/${imageFileName}`,
+        audio_url: `${baseUrl}/stream-image/${audioFileName}`,
+        // image_url: `${imageUrl}`,
+        // audio_url: `${audioUrl}`,
         prompt: createOmnihumanDto.prompt || '',
       });
       if (generateTask?.data?.task_id) {

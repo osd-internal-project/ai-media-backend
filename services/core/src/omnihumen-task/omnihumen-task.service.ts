@@ -56,7 +56,7 @@ export class OmnihumenTaskService {
     return this.omnihumenTaskRepo.delete({ where: { id } });
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  // @Cron(CronExpression.EVERY_5_MINUTES)
   async handleCron(): Promise<void> {
     const tasks = await this.omnihumenTaskRepo.findMany({
       where: { status: false },
@@ -147,7 +147,6 @@ export class OmnihumenTaskService {
       //   httpsAgent: agent,
       // });
       const data = response.data;
-      Logger.debug(data);
       if (data?.code === 10000 && data?.data?.resp_data) {
         // Assuming success status means it's done
         // Need to map response to task updates
@@ -159,8 +158,6 @@ export class OmnihumenTaskService {
         const fileOrgPath = JSON.parse(data.data.resp_data);
         Logger.debug('fileOrgPath', fileOrgPath);
 
-        let objectName = fileOrgPath?.video_url;
-
         try {
           if (!fileOrgPath?.video_url) {
             return;
@@ -169,20 +166,22 @@ export class OmnihumenTaskService {
             responseType: 'arraybuffer',
             httpsAgent: agent,
           });
+
           const buffer = Buffer.from(getFile.data);
           const uuidName = uuidv4();
           const pathname = fileOrgPath?.video_url;
-
+          Logger.debug('buffer', buffer);
           let ext = 'mp4';
-          try {
-            const urlObj = new URL(pathname);
-            const pathOnly = urlObj.pathname;
-            const possibleExt = pathOnly.split('.').pop();
-            if (possibleExt && possibleExt.length <= 5) {
-              ext = possibleExt;
-            }
-          } catch (e) {}
-
+          Logger.debug('1', 1);
+          const urlObj = new URL(pathname);
+          const pathOnly = urlObj.pathname;
+          const possibleExt = pathOnly.split('.').pop();
+          if (possibleExt && possibleExt.length <= 5) {
+            ext = possibleExt;
+          }
+          console.log('buffer', buffer);
+          console.log('length', buffer.length);
+          console.log('ext', ext);
           const newObjectName = `${taskId}/${uuidName}.${ext}`;
           console.log('objectName', newObjectName);
           await this.minioClientService.uploadFile(
@@ -191,30 +190,29 @@ export class OmnihumenTaskService {
             config.minioBucketVdo,
             newObjectName,
           );
-          objectName = newObjectName;
+          Logger.debug(newObjectName);
+          const task = await this.update(id, {
+            status: true,
+            taskMessage: 'Success',
+            filePath: newObjectName, // Store result if unsure
+            taskCode: data?.data?.code,
+            fileOrgPath: fileOrgPath?.video_url,
+          } as any);
+          await this.galleryRepo.create({
+            data: {
+              taskId: taskId,
+              projectId: task.projectId,
+              userId: task.userId,
+              imageUrl: newObjectName,
+              prompt: task.prompt,
+              typeGenerate: 'vdo',
+            },
+          });
         } catch (uploadError) {
           Logger.warn(
             `Failed to upload to MinIO, using original URL: ${uploadError.message}`,
           );
         }
-
-        const task = await this.update(id, {
-          status: true,
-          taskMessage: 'Success',
-          filePath: objectName, // Store result if unsure
-          taskCode: data?.data?.code,
-          fileOrgPath: fileOrgPath?.video_url,
-        } as any);
-        await this.galleryRepo.create({
-          data: {
-            taskId: taskId,
-            projectId: task.projectId,
-            userId: task.userId,
-            imageUrl: objectName,
-            prompt: task.prompt,
-            typeGenerate: 'vdo',
-          },
-        });
 
         this.logger.log(`Task ${taskId} completed.`);
       } else if (data?.data?.status === 'failed') {
