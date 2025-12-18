@@ -56,7 +56,7 @@ export class OmnihumenTaskService {
     return this.omnihumenTaskRepo.delete({ where: { id } });
   }
 
-  // @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron(CronExpression.EVERY_5_MINUTES)
   async handleCron(): Promise<void> {
     const tasks = await this.omnihumenTaskRepo.findMany({
       where: { status: false },
@@ -220,7 +220,7 @@ export class OmnihumenTaskService {
       } else if (data?.data?.status === 'failed') {
         await this.update(id, {
           status: true, // Mark as processed? Or handle failed state
-          taskMessage: 'Failed: ' + (data?.data?.message || 'Unknown'),
+          taskMessage: 'Failed ',
           taskCode: data?.data?.code,
         } as any);
       }
@@ -231,7 +231,7 @@ export class OmnihumenTaskService {
       );
       await this.update(id, {
         status: true, // Mark as processed? Or handle failed state
-        taskMessage: 'Failed: ' + (error?.response?.data.message || 'Unknown'),
+        taskMessage: 'Failed ',
         taskCode: String(error?.response?.data.code),
       } as any);
     }

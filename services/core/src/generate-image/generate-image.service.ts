@@ -31,7 +31,7 @@ export class GenerateImageService {
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioclientSerives: MinioClientService,
-  ) { }
+  ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -70,6 +70,7 @@ export class GenerateImageService {
         (sum, item) => sum + item.tokenUsed,
         0,
       );
+
       if (totalTokenUsed > user.maxToken) {
         return {
           status: 400,
@@ -80,6 +81,7 @@ export class GenerateImageService {
       const imageCount =
         imageArray && Array.isArray(imageArray) ? imageArray.length : 0;
       let imageContents: any[] = [];
+      Logger.debug(imageArray);
       if (imageCount === 1) {
         Logger.debug(`${baseUrl}/${imageArray[0]}`);
         imageContents.push({
@@ -132,6 +134,7 @@ export class GenerateImageService {
       });
       return { status: 200, data: generateImage.data };
     } else {
+      Logger.debug(user);
       const totalImageGenerate = await this.logrepo.findMany({
         where: {
           userId: user.userId,
@@ -164,23 +167,24 @@ export class GenerateImageService {
           ImageUsed: 0,
         },
       });
+      Logger.debug(createGenerateImageDto);
       const base = {
         model: getModelType.modelType,
         prompt: `create ${createGenerateImageDto.images} images ${createGenerateImageDto.text} `,
         ...(createGenerateImageDto.image &&
           createGenerateImageDto.image.length > 0 && {
-          image:
-            createGenerateImageDto.image.length === 1
-              ? `${baseUrl}/${createGenerateImageDto.image[0]}`
-              : createGenerateImageDto.image.map(
-                (img) => `${baseUrl}/${img}`,
-              ),
-        }),
+            image:
+              createGenerateImageDto.image.length === 1
+                ? `${baseUrl}/${createGenerateImageDto.image[0]}`
+                : createGenerateImageDto.image.map(
+                    (img) => `${baseUrl}/${img}`,
+                  ),
+          }),
         response_format: 'url',
         ...(createGenerateImageDto.width &&
           createGenerateImageDto.height && {
-          size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
-        }),
+            size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
+          }),
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
@@ -210,38 +214,40 @@ export class GenerateImageService {
             ImageUsed: generateImage.data.usage.generated_images,
           },
         });
-        await Promise.all(generateImage.data.data.map(async (e) => {
-          const res = await axios.get(e.url, {
-            responseType: 'arraybuffer',
-            httpsAgent: agent,
-          });
-          const buffer = Buffer.from(res.data);
-          const uuidName = uuidv4();
-          const pathname = e.url;
-          const fileNameFromPath = pathname.split('/').pop(); // '021763417932265c5f50319cb4d4388d7836967b82aebe55a0b1e_0.jpeg'
-          let ext = fileNameFromPath.split('.').pop(); // 'jpeg'
-          if (!ext || ext.length > 5) {
-            ext = 'jpg';
-          }
-          const objectName = `${uuid}/${uuidName}.${ext}`;
-          await this.minioclientSerives.uploadFile(
-            buffer,
-            buffer.length,
-            minioBucket,
-            objectName,
-          );
-          return await this.galleryRepo.create({
-            data: {
-              taskId: uuid,
-              projectId: createGenerateImageDto.projectId,
-              userId: user.userId,
-              prompt: `${createGenerateImageDto.text}`,
-              // imageUrl: e.url,
-              imageUrl: objectName,
-              typeGenerate: 'image',
-            },
-          });
-        }));
+        await Promise.all(
+          generateImage.data.data.map(async (e) => {
+            const res = await axios.get(e.url, {
+              responseType: 'arraybuffer',
+              httpsAgent: agent,
+            });
+            const buffer = Buffer.from(res.data);
+            const uuidName = uuidv4();
+            const pathname = e.url;
+            const fileNameFromPath = pathname.split('/').pop(); // '021763417932265c5f50319cb4d4388d7836967b82aebe55a0b1e_0.jpeg'
+            let ext = fileNameFromPath.split('.').pop(); // 'jpeg'
+            if (!ext || ext.length > 5) {
+              ext = 'jpg';
+            }
+            const objectName = `${uuid}/${uuidName}.${ext}`;
+            await this.minioclientSerives.uploadFile(
+              buffer,
+              buffer.length,
+              minioBucket,
+              objectName,
+            );
+            return await this.galleryRepo.create({
+              data: {
+                taskId: uuid,
+                projectId: createGenerateImageDto.projectId,
+                userId: user.userId,
+                prompt: `${createGenerateImageDto.text}`,
+                // imageUrl: e.url,
+                imageUrl: objectName,
+                typeGenerate: 'image',
+              },
+            });
+          }),
+        );
       }
       return { status: 200, data: generateImage.data };
     }
@@ -335,9 +341,8 @@ export class GenerateImageService {
     const logByTaskId = await this.logrepo.findOne({ where: { taskId: id } });
     // 1. ตั้งค่า Agent (ถ้าจำเป็นต้อง bypass SSL หรือ config พิเศษ)
     const agent = new https.Agent({
-      rejectUnauthorized: false
+      rejectUnauthorized: false,
     });
-
 
     try {
       // --- CODE ของคุณ ---
@@ -379,13 +384,17 @@ export class GenerateImageService {
           stream: null,
           destination: '',
           filename: '',
-          path: ''
+          path: '',
         };
 
         // 4. ส่งเข้า Service ตัวเดิมเพื่อทำ Thumbnail + Upload MinIO
         const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
         const thumbObjectName = `${responseImage.data.id}/${uuidName}.webp`;
-        const result = await this.minioclientSerives.uploadVideoWithThumbnail(minioBucketVdo, mockFile, responseImage.data.id);
+        const result = await this.minioclientSerives.uploadVideoWithThumbnail(
+          minioBucketVdo,
+          mockFile,
+          responseImage.data.id,
+        );
 
         await this.galleryRepo.create({
           data: {
@@ -400,11 +409,9 @@ export class GenerateImageService {
         });
         return {
           message: 'Download and process complete',
-          data: result
+          data: result,
         };
       }
-
-
     } catch (error) {
       console.error(error);
       throw new Error('Failed to process remote video');
