@@ -102,23 +102,24 @@ export class LogsService {
       include: { users: true },
       orderBy: { createdAt: 'desc' },
     });
-
     const newData = new Map();
     for (const item of data) {
+      const url = item.imageUrl ? await this.minioService.getPresignedUrl(minioBucketVdo, item.imageUrl) : "";
+      const thumbnailUrl = item.thumbnailUrl ? await this.minioService.getPresignedUrl(minioBucketVdo, item.thumbnailUrl) : "";
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
           imageUrls: [{
-            imageUrl: item.imageUrl,
-            thumbnailUrl: item.thumbnailUrl
+            imageUrl: url,
+            thumbnailUrl: thumbnailUrl
           }],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
-          imageUrl: item.imageUrl,
-          thumbnailUrl: item.thumbnailUrl
+          imageUrl: url,
+          thumbnailUrl: thumbnailUrl
         });
       }
     }

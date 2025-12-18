@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { GalleryRepository } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
+import { MinioClientService } from 'src/minio-client/minio-client.service';
+import configs from 'src/configs';
+const { minioBucket, minioBucketVdo } = configs();
 
 @Injectable()
 export class GalleryService {
-  constructor(private readonly galleryRepo: GalleryRepository) {}
+  constructor(private readonly galleryRepo: GalleryRepository, private readonly minioService: MinioClientService) { }
   create(createGalleryDto: Prisma.GalleryCreateInput) {
     return this.galleryRepo.create({ data: createGalleryDto });
   }

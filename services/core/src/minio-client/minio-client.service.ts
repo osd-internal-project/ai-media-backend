@@ -89,14 +89,12 @@ export class MinioClientService {
       });
 
       // 6. (Optional) สร้าง Presigned URL แบบ Public (ถ้า bucket เป็น public ไม่ต้องใช้ presigned ก็ได้ แต่ code เดิมใช้)
-      const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
-      const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
+      // const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
+      // const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
 
       return {
-        videoUrl,
-        thumbnailUrl: thumbUrl,
-        file: videoFileName,
-        thumbnail: thumbnailFileName
+        file: objectName,
+        thumbnail: thumbnailObjectName
       };
 
     } catch (error) {

@@ -31,7 +31,7 @@ export class GenerateImageService {
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioclientSerives: MinioClientService,
-  ) {}
+  ) { }
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -170,18 +170,18 @@ export class GenerateImageService {
         prompt: `create ${createGenerateImageDto.images} images ${createGenerateImageDto.text} `,
         ...(createGenerateImageDto.image &&
           createGenerateImageDto.image.length > 0 && {
-            image:
-              createGenerateImageDto.image.length === 1
-                ? `${baseUrl}/${createGenerateImageDto.image[0]}`
-                : createGenerateImageDto.image.map(
-                    (img) => `${baseUrl}/${img}`,
-                  ),
-          }),
+          image:
+            createGenerateImageDto.image.length === 1
+              ? `${baseUrl}/${createGenerateImageDto.image[0]}`
+              : createGenerateImageDto.image.map(
+                (img) => `${baseUrl}/${img}`,
+              ),
+        }),
         response_format: 'url',
         ...(createGenerateImageDto.width &&
           createGenerateImageDto.height && {
-            size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
-          }),
+          size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
+        }),
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
@@ -385,30 +385,25 @@ export class GenerateImageService {
         };
 
         // 4. ส่งเข้า Service ตัวเดิมเพื่อทำ Thumbnail + Upload MinIO
-        const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
-        const thumbObjectName = `${responseImage.data.id}/${uuidName}.webp`;
-        const result = await this.minioclientSerives.uploadVideoWithThumbnail(
-          minioBucketVdo,
-          mockFile,
-          responseImage.data.id,
-        );
+
+
+        // const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
+        // const thumbnailFileName = `thumb-${Date.now()}.png`;
+        const result = await this.minioclientSerives.uploadVideoWithThumbnail(minioBucketVdo, mockFile, id);
 
         await this.galleryRepo.create({
           data: {
             taskId: logByTaskId.taskId,
             projectId: logByTaskId.projectId,
             userId: logByTaskId.userId,
-            imageUrl: result.videoUrl,
-            thumbnailUrl: result.thumbnailUrl,
+            imageUrl: result.file,
+            thumbnailUrl: result.thumbnail,
             prompt: logByTaskId.prompt,
             typeGenerate: 'vdo',
           },
         });
-        return {
-          message: 'Download and process complete',
-          data: result,
-        };
       }
+      return responseImage.data;
     } catch (error) {
       console.error(error);
       throw new Error('Failed to process remote video');
