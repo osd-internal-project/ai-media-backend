@@ -45,7 +45,53 @@ export class PublicController {
       if (!res.headersSent) res.status(500).send('Internal Server Error');
     }
   }
+  @Get('stream-image/:id')
+  async streamNewsImageFile(@Param('id') id: string, @Res() res: Response) {
+    try {
+      console.log('imageName', id);
+      const decoded = decodeURIComponent(id);
+      console.log('decoded', decoded);
+      const bucket = minioBucketUpload;
+      // ตรวจสอบว่าไฟล์มีอยู่จริง
+      const stat = await this.minioService.statFile(bucket, decoded);
+      if (!stat) return res.status(404).send('File not found');
+      const stream = await this.minioService.downloadFile(bucket, decoded);
+      // ป้องกัน error จาก stream
+      stream.on('error', (err) => {
+        console.error('MinIO Stream Error:', err);
+        if (!res.headersSent) res.status(500).send('Error streaming file');
+      });
+      // ระบุ content-type ให้ถูกต้องที่สุด
+      let contentType =
+        stat.metaData?.['content-type'] || stat.metaData?.['Content-Type'];
 
+      const ext = decoded.split('.').pop()?.toLowerCase();
+
+      if (!contentType || contentType.includes('octet-stream')) {
+        if (ext === 'mp3') contentType = 'audio/mpeg';
+        else if (ext === 'wav') contentType = 'audio/wav';
+        else if (ext === 'mp4') contentType = 'video/mp4';
+        else if (ext === 'webm') contentType = 'video/webm';
+        else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext))
+          contentType = `image/${ext === 'jpeg' ? 'jpg' : ext}`;
+      }
+
+      if (!contentType) contentType = 'application/octet-stream';
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Disposition': `inline; filename="${encodeURIComponent(
+          decoded,
+        )}"`,
+        'Access-Control-Allow-Origin': '*',
+      });
+
+      return stream.pipe(res);
+    } catch (err) {
+      console.error('Public Controller Error:', err);
+      if (!res.headersSent) res.status(500).send('Internal Server Error');
+    }
+  }
   @Get('image-minio/:imageName')
   async getPublicImage(
     @Param('imageName') imageName: string,
@@ -114,11 +160,8 @@ export class PublicController {
       // });
 
       // return stream.pipe(res);
-      const url = await this.minioService.getPresignedUrl(
-        bucket,
-        decodedName,
-      );
-      console.log(url)
+      const url = await this.minioService.getPresignedUrl(bucket, decodedName);
+      console.log(url);
       return { url };
     } catch (err) {
       console.error('Public Controller Error:', err);

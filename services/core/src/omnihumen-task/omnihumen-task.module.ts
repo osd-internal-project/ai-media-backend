@@ -4,9 +4,10 @@ import { OmnihumenTaskController } from './omnihumen-task.controller';
 import { PrismaModule } from '@ai-media/share';
 
 import { HttpModule } from '@nestjs/axios';
+import { MinioClientModule } from 'src/minio-client/minio-client.module';
 
 @Module({
-  imports: [PrismaModule, HttpModule],
+  imports: [PrismaModule, HttpModule, MinioClientModule],
   controllers: [OmnihumenTaskController],
   providers: [OmnihumenTaskService],
 })

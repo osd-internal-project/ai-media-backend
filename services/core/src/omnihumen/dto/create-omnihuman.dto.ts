@@ -1,6 +1,6 @@
 export class CreateOmnihumanDto {
   projectId: string;
-  userId: string;
+  token: string;
   avatarName?: string;
   prompt?: string;
 }

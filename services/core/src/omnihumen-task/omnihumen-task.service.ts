@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CreateOmnihumenTaskDto } from './dto/create-omnihumen-task.dto';
 import { UpdateOmnihumenTaskDto } from './dto/update-omnihumen-task.dto';
-import { OmnihumenTaskRepository } from '@ai-media/share';
+import { GalleryRepository, OmnihumenTaskRepository } from '@ai-media/share';
 import { HttpService } from '@nestjs/axios';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as crypto from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import configs from 'src/configs';
+import axios from 'axios';
+import * as https from 'https';
+import { v4 as uuidv4 } from 'uuid';
+import { MinioClientService } from 'src/minio-client/minio-client.service';
 const config = configs();
 
 @Injectable()
@@ -16,6 +20,8 @@ export class OmnihumenTaskService {
   constructor(
     private readonly omnihumenTaskRepo: OmnihumenTaskRepository,
     private readonly httpService: HttpService,
+    private readonly minioClientService: MinioClientService,
+    private readonly galleryRepo: GalleryRepository,
   ) {}
 
   create(createOmnihumenTaskDto: CreateOmnihumenTaskDto) {
@@ -50,7 +56,7 @@ export class OmnihumenTaskService {
     return this.omnihumenTaskRepo.delete({ where: { id } });
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  // @Cron(CronExpression.EVERY_5_MINUTES)
   async handleCron(): Promise<void> {
     const tasks = await this.omnihumenTaskRepo.findMany({
       where: { status: false },
@@ -72,6 +78,9 @@ export class OmnihumenTaskService {
 
   async checkTaskStatus(id: number, taskId: string) {
     try {
+      const agent = new https.Agent({
+        rejectUnauthorized: false,
+      });
       const accessKeyId = config.byteplusAccessKeyId;
       const secretAccessKey = config.byteplusSecretKey;
       const region = 'ap-singapore-1';
@@ -128,13 +137,18 @@ export class OmnihumenTaskService {
       };
 
       const url = `https://${host}${path}`;
-
+      Logger.debug('url,', url);
       const response = await firstValueFrom(
-        this.httpService.post(url, body, { headers }),
+        this.httpService.post(url, body, { headers, httpsAgent: agent }),
       );
 
+      // const response = await axios.post(url, body, {
+      //   headers,
+      //   httpsAgent: agent,
+      // });
       const data = response.data;
-      if (data?.code === 10000 && data?.data?.status === 'success') {
+      Logger.debug(data);
+      if (data?.code === 10000 && data?.data?.resp_data) {
         // Assuming success status means it's done
         // Need to map response to task updates
         // Example response structure needs to be handled
@@ -142,29 +156,72 @@ export class OmnihumenTaskService {
         // And save the result if needed.
         // Specifically getting video url from data.resp_data if available
 
-        const respData = data.data.resp_data;
+        const fileOrgPath = JSON.parse(data.data.resp_data);
+        Logger.debug('fileOrgPath', fileOrgPath);
 
-        let videoUrl = '';
-        if (respData) {
-          try {
-            const parsedResp = JSON.parse(respData);
-            if (parsedResp?.video_url) videoUrl = parsedResp.video_url;
-            if (parsedResp?.video_key) videoUrl = parsedResp.video_key; // Adjust based on actual response
-          } catch (e) {
-            console.log('Error parsing resp_data', e);
+        let objectName = fileOrgPath?.video_url;
+
+        try {
+          if (!fileOrgPath?.video_url) {
+            return;
           }
+          const getFile = await axios.get(fileOrgPath?.video_url, {
+            responseType: 'arraybuffer',
+            httpsAgent: agent,
+          });
+          const buffer = Buffer.from(getFile.data);
+          const uuidName = uuidv4();
+          const pathname = fileOrgPath?.video_url;
+
+          let ext = 'mp4';
+          try {
+            const urlObj = new URL(pathname);
+            const pathOnly = urlObj.pathname;
+            const possibleExt = pathOnly.split('.').pop();
+            if (possibleExt && possibleExt.length <= 5) {
+              ext = possibleExt;
+            }
+          } catch (e) {}
+
+          const newObjectName = `${taskId}/${uuidName}.${ext}`;
+          console.log('objectName', newObjectName);
+          await this.minioClientService.uploadFile(
+            buffer,
+            buffer.length,
+            config.minioBucketVdo,
+            newObjectName,
+          );
+          objectName = newObjectName;
+        } catch (uploadError) {
+          Logger.warn(
+            `Failed to upload to MinIO, using original URL: ${uploadError.message}`,
+          );
         }
 
-        await this.update(id, {
+        const task = await this.update(id, {
           status: true,
           taskMessage: 'Success',
-          filePath: videoUrl || JSON.stringify(data.data), // Store result if unsure
+          filePath: objectName, // Store result if unsure
+          taskCode: data?.data?.code,
+          fileOrgPath: fileOrgPath?.video_url,
         } as any);
+        await this.galleryRepo.create({
+          data: {
+            taskId: taskId,
+            projectId: task.projectId,
+            userId: task.userId,
+            imageUrl: objectName,
+            prompt: task.prompt,
+            typeGenerate: 'vdo',
+          },
+        });
+
         this.logger.log(`Task ${taskId} completed.`);
       } else if (data?.data?.status === 'failed') {
         await this.update(id, {
           status: true, // Mark as processed? Or handle failed state
-          taskMessage: 'Failed: ' + (data?.data?.reason || 'Unknown'),
+          taskMessage: 'Failed: ' + (data?.data?.message || 'Unknown'),
+          taskCode: data?.data?.code,
         } as any);
       }
     } catch (error) {
@@ -172,6 +229,11 @@ export class OmnihumenTaskService {
         `Error checking task ${taskId}`,
         error?.response?.data || error.message,
       );
+      await this.update(id, {
+        status: true, // Mark as processed? Or handle failed state
+        taskMessage: 'Failed: ' + (error?.response?.data.message || 'Unknown'),
+        taskCode: String(error?.response?.data.code),
+      } as any);
     }
   }
 

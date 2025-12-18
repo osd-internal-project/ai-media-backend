@@ -19,7 +19,10 @@ export class OmnihumenTaskController {
   create(@Body() createOmnihumenTaskDto: CreateOmnihumenTaskDto) {
     return this.omnihumenTaskService.create(createOmnihumenTaskDto);
   }
-
+  @Post('test-cron')
+  handleCron() {
+    return this.omnihumenTaskService.handleCron();
+  }
   @Get()
   findAll() {
     return this.omnihumenTaskService.findAll();
