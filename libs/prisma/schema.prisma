@@ -232,10 +232,12 @@ model OmnihumenTask {
   taskMessage   String?  @map("task_message") @db.VarChar(20)
   fileId        String?  @map("file_id") @db.VarChar(100)
   filePath      String?  @map("file_path") @db.Text
+  fileOrgPath   String?  @map("file_org_path") @db.Text
   projectId     String   @map("project_id") @db.VarChar(100)
   userId        String?  @map("user_id") @db.VarChar(100)
   avatarName    String?  @map("avatar_name") @db.VarChar(150)
   prompt        String?  @map("prompt") @db.Text
+  taskCode      String?  @map("task_code") @db.VarChar(20)
 
   @@map("omnihumen_task")
 }
