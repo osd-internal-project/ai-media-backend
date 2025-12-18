@@ -12,11 +12,13 @@ export class LogsService {
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly userRepo: UsersRepository,
-  ) {}
-  async findOne(projectId: string) {
+  ) { }
+  async findOne(projectId: string, skip?: number, take?: number) {
     const startDate = dayjs().subtract(3, 'day').startOf('day').toDate(); // 3 วันก่อน
     const endDate = dayjs().endOf('day').toDate();
-    const data = await this.galleryRepo.findMany({
+
+    // 1. Fetch paginated Distinct TaskIds
+    const taskIds = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
@@ -26,9 +28,28 @@ export class LogsService {
           lte: endDate,
         },
       },
-      include: { users: true },
-      orderBy: { createdAt: 'asc' },
+      select: { taskId: true },
+      distinct: ['taskId'],
+      orderBy: { createdAt: 'desc' },
+      ...(skip !== undefined && take !== undefined && { skip, take }),
     });
+
+    const targetTaskIds = taskIds.map((t) => t.taskId);
+
+    if (targetTaskIds.length === 0) {
+      return [];
+    }
+
+    // 2. Fetch full data (all images) for these TaskIds
+    const data = await this.galleryRepo.findMany({
+      where: {
+        taskId: { in: targetTaskIds },
+        typeGenerate: 'image',
+      },
+      include: { users: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
     const map = new Map();
     for (const item of data) {
       if (!map.has(item.taskId)) {
@@ -44,10 +65,12 @@ export class LogsService {
     const result = Array.from(map.values());
     return result;
   }
-  async findOneVDO(projectId: string) {
+  async findOneVDO(projectId: string, skip?: number, take?: number) {
     const startDate = dayjs().subtract(3, 'day').startOf('day').toDate(); // 3 วันก่อน
     const endDate = dayjs().endOf('day').toDate();
-    const data = await this.galleryRepo.findMany({
+
+    // 1. Fetch paginated Distinct TaskIds
+    const taskIds = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
@@ -57,8 +80,26 @@ export class LogsService {
           lte: endDate,
         },
       },
+      select: { taskId: true },
+      distinct: ['taskId'],
+      orderBy: { createdAt: 'desc' }, // Order by latest first
+      ...(skip !== undefined && take !== undefined && { skip, take }),
+    });
+
+    const targetTaskIds = taskIds.map((t) => t.taskId);
+
+    if (targetTaskIds.length === 0) {
+      return [];
+    }
+
+    // 2. Fetch full data for these TaskIds
+    const data = await this.galleryRepo.findMany({
+      where: {
+        taskId: { in: targetTaskIds },
+        typeGenerate: 'vdo',
+      },
       include: { users: true },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' }, // Consistent ordering
     });
     const map = new Map();
     for (const item of data) {

@@ -15,6 +15,9 @@ import * as https from 'https';
 import configs from 'src/configs';
 import { v4 as uuidv4 } from 'uuid';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
+import { exec } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 const baseUrl = configs().pathDomain;
 const { minioBucket, minioBucketVdo } = configs();
 @Injectable()
@@ -276,23 +279,46 @@ export class GenerateImageService {
         ext = 'mp4';
       }
       const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
-      console.log('objectName', objectName);
-      await this.minioclientSerives.uploadFile(
+      // await this.minioclientSerives.uploadFile(
+      //   buffer,
+      //   buffer.length,
+      //   minioBucketVdo,
+      //   objectName,
+      // );
+      // await this.galleryRepo.create({
+      //   data: {
+      //     taskId: logByTaskId.taskId,
+      //     projectId: logByTaskId.projectId,
+      //     userId: logByTaskId.userId,
+      //     imageUrl: objectName,
+      //     prompt: logByTaskId.prompt,
+      //     typeGenerate: 'vdo',
+      //   },
+      // });
+
+      const thumbBuffer = await this.generateThumbnailFromBuffer(
         buffer,
-        buffer.length,
-        minioBucketVdo,
-        objectName,
+        uuidName,
       );
+
+      const thumbObjectName = `${responseImage.data.id}/${uuidName}.webp`;
       await this.galleryRepo.create({
         data: {
           taskId: logByTaskId.taskId,
           projectId: logByTaskId.projectId,
           userId: logByTaskId.userId,
           imageUrl: objectName,
+          thumbnailUrl: thumbObjectName,
           prompt: logByTaskId.prompt,
           typeGenerate: 'vdo',
         },
       });
+      await this.minioclientSerives.uploadFile(
+        thumbBuffer,
+        thumbBuffer.length,
+        minioBucketVdo,
+        thumbObjectName,
+      );
       console.log('final');
     }
 
@@ -328,4 +354,29 @@ export class GenerateImageService {
       },
     });
   }
+
+  async generateThumbnailFromBuffer(
+    videoBuffer: Buffer,
+    outputName: string,
+  ): Promise<Buffer> {
+    const tmpVideo = `/tmp/${outputName}.mp4`;
+    const tmpThumb = `/tmp/${outputName}.webp`;
+
+    fs.writeFileSync(tmpVideo, videoBuffer);
+
+    await new Promise((resolve, reject) => {
+      exec(
+        `ffmpeg -i ${tmpVideo} -ss 00:00:01 -frames:v 1 -vf scale=640:-1 ${tmpThumb}`,
+        (err) => (err ? reject(err) : resolve(true)),
+      );
+    });
+
+    const thumbBuffer = fs.readFileSync(tmpThumb);
+
+    fs.unlinkSync(tmpVideo);
+    fs.unlinkSync(tmpThumb);
+
+    return thumbBuffer;
+  }
+
 }
