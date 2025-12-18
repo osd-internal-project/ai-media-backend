@@ -46,8 +46,9 @@ export class MinioClientService {
     return await this.minioClient.presignedGetObject(bucket, filename, 15 * 60);
   }
 
-  async uploadVideoWithThumbnail(bucket: string, file: Express.Multer.File, id: string, thumbnailFileName: string) {
+  async uploadVideoWithThumbnail(bucket: string, file: Express.Multer.File, id: string) {
     const videoFileName = `${Date.now()}-${file.originalname}`;
+    const thumbnailFileName = `thumb-${Date.now()}.png`;
     const objectName = `${id}/${videoFileName}`;
     const thumbnailObjectName = `${id}/${thumbnailFileName}`;
 
@@ -88,14 +89,12 @@ export class MinioClientService {
       });
 
       // 6. (Optional) สร้าง Presigned URL แบบ Public (ถ้า bucket เป็น public ไม่ต้องใช้ presigned ก็ได้ แต่ code เดิมใช้)
-      const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
-      const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
+      // const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
+      // const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
 
       return {
-        videoUrl,
-        thumbnailUrl: thumbUrl,
-        file: videoFileName,
-        thumbnail: thumbnailFileName
+        file: objectName,
+        thumbnail: thumbnailObjectName
       };
 
     } catch (error) {
