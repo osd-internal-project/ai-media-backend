@@ -81,9 +81,7 @@ export class GenerateImageService {
       const imageCount =
         imageArray && Array.isArray(imageArray) ? imageArray.length : 0;
       let imageContents: any[] = [];
-      Logger.debug(imageArray);
       if (imageCount === 1) {
-        Logger.debug(`${baseUrl}/${imageArray[0]}`);
         imageContents.push({
           type: 'image_url',
           image_url: {
@@ -134,7 +132,6 @@ export class GenerateImageService {
       });
       return { status: 200, data: generateImage.data };
     } else {
-      Logger.debug(user);
       const totalImageGenerate = await this.logrepo.findMany({
         where: {
           userId: user.userId,
