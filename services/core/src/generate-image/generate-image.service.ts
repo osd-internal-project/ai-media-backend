@@ -405,11 +405,8 @@ export class GenerateImageService {
             typeGenerate: 'vdo',
           },
         });
-        return {
-          message: 'Download and process complete',
-          data: result,
-        };
       }
+      return responseImage.data;
     } catch (error) {
       console.error(error);
       throw new Error('Failed to process remote video');
