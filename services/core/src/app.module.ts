@@ -19,12 +19,12 @@ import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
 import { PromptGuideTypeModule } from './prompt-guide-type/prompt-guide-type.module';
 import { OmnihumenModule } from './omnihumen/omnihumen.module';
 import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
-// import { ScheduleModule } from '@nestjs/schedule';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configs] }),
-    // ScheduleModule.forRoot(),
+    ScheduleModule.forRoot(),
     PrismaModule,
     GenerateImageModule,
     HttpModule,

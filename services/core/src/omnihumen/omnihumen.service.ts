@@ -89,7 +89,7 @@ export class OmnihumenService {
         image_url:
           'https://sf16-resources.bytepluscdn.com/obj/byteplus-public-aiso/cloud-universal-doc/upload_acb84d04326453695183a54a07af5e05.png',
         audio_url:
-          'https://econnect2025-dcall.osd.co.th/voicefile/voicefile/2025/09/29/out-9020801111-4006-20250929-095752-1759114672.1.mp3',
+          'https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3',
         prompt: createOmnihumanDto.prompt || '',
       });
       if (generateTask?.data?.task_id) {

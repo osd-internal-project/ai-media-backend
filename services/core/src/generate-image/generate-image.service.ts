@@ -77,6 +77,7 @@ export class GenerateImageService {
         imageArray && Array.isArray(imageArray) ? imageArray.length : 0;
       let imageContents: any[] = [];
       if (imageCount === 1) {
+        Logger.debug(`${baseUrl}/${imageArray[0]}`);
         imageContents.push({
           type: 'image_url',
           image_url: {
