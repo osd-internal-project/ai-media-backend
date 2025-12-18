@@ -20,7 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 const baseUrl = configs().pathDomain;
-const { minioBucket, minioBucketVdo } = configs();
+const { minioBucket, minioBucketVdo, minioBucketUpload } = configs();
 @Injectable()
 export class GenerateImageService {
   constructor(
@@ -31,7 +31,7 @@ export class GenerateImageService {
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioclientSerives: MinioClientService,
-  ) { }
+  ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -82,22 +82,34 @@ export class GenerateImageService {
         imageArray && Array.isArray(imageArray) ? imageArray.length : 0;
       let imageContents: any[] = [];
       if (imageCount === 1) {
+        const imageUrl = await this.createMinioFileUrl(
+          minioBucketUpload,
+          imageArray[0],
+        );
         imageContents.push({
           type: 'image_url',
           image_url: {
-            url: `${baseUrl}/${imageArray[0]}`,
+            url: imageUrl,
           },
         });
       } else if (imageCount >= 2) {
+        const imageUrl1 = await this.createMinioFileUrl(
+          minioBucketUpload,
+          imageArray[0],
+        );
+        const imageUrl2 = await this.createMinioFileUrl(
+          minioBucketUpload,
+          imageArray[1],
+        );
         imageContents.push(
           {
             type: 'image_url',
-            image_url: { url: `${baseUrl}/${imageArray[0]}` },
+            image_url: { url: imageUrl1 },
             role: 'first_frame',
           },
           {
             type: 'image_url',
-            image_url: { url: `${baseUrl}/${imageArray[1]}` },
+            image_url: { url: imageUrl2 },
             role: 'last_frame',
           },
         );
@@ -165,23 +177,29 @@ export class GenerateImageService {
         },
       });
       Logger.debug(createGenerateImageDto);
+      let imageUrl = [];
+      if (
+        createGenerateImageDto.image &&
+        createGenerateImageDto.image.length > 0
+      ) {
+        imageUrl = await Promise.all(
+          createGenerateImageDto.image.map((img) =>
+            this.createMinioFileUrl(minioBucketUpload, img),
+          ),
+        );
+      }
+
       const base = {
         model: getModelType.modelType,
         prompt: `create ${createGenerateImageDto.images} images ${createGenerateImageDto.text} `,
-        ...(createGenerateImageDto.image &&
-          createGenerateImageDto.image.length > 0 && {
-          image:
-            createGenerateImageDto.image.length === 1
-              ? `${baseUrl}/${createGenerateImageDto.image[0]}`
-              : createGenerateImageDto.image.map(
-                (img) => `${baseUrl}/${img}`,
-              ),
+        ...(imageUrl.length > 0 && {
+          image: imageUrl.length === 1 ? imageUrl[0] : imageUrl,
         }),
         response_format: 'url',
         ...(createGenerateImageDto.width &&
           createGenerateImageDto.height && {
-          size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
-        }),
+            size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
+          }),
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
@@ -386,10 +404,13 @@ export class GenerateImageService {
 
         // 4. ส่งเข้า Service ตัวเดิมเพื่อทำ Thumbnail + Upload MinIO
 
-
         // const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
         // const thumbnailFileName = `thumb-${Date.now()}.png`;
-        const result = await this.minioclientSerives.uploadVideoWithThumbnail(minioBucketVdo, mockFile, id);
+        const result = await this.minioclientSerives.uploadVideoWithThumbnail(
+          minioBucketVdo,
+          mockFile,
+          id,
+        );
 
         await this.galleryRepo.create({
           data: {
@@ -408,5 +429,12 @@ export class GenerateImageService {
       console.error(error);
       throw new Error('Failed to process remote video');
     }
+  }
+  async createMinioFileUrl(bucketName: string, path: string) {
+    const url = await this.minioclientSerives.getPresignedUrl(bucketName, path);
+    const domain = configs().pathPublicDomain;
+    const ip = configs().pathPublicIp;
+    console.log(url.replace(ip, domain));
+    return url.replace(ip, domain);
   }
 }

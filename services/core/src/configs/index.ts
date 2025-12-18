@@ -5,6 +5,7 @@ export default () => ({
   pathDomain: process.env.PATH_DOMAIN,
   pathDomainVDO: process.env.PATH_DOMAIN_VDO,
   pathPublicDomain: process.env.PATH_PUBLIC_DOMAIN,
+  pathPublicIp: process.env.PATH_PUBLIC_IP,
   minioEndpoint: (process.env.MINIO_ENDPOINT || '192.168.31.91').trim(),
   minioPort: parseInt(process.env.MINIO_PORT || '9000', 10),
   minioAccesskey: process.env.MINIO_ACCESSKEY,
@@ -13,7 +14,6 @@ export default () => ({
   minioBucketUpload: process.env.MINIO_BUCKET_UPLOAD,
   minioBucketFile: process.env.MINIO_BUCKET_FILE || 'ai-media-file',
   minioUseSsl: process.env.MINIO_USE_SSL === 'true',
-
 
   minioBucketVdo: process.env.MINIO_BUCKET_VDO,
   byteplusAccessKeyId:
