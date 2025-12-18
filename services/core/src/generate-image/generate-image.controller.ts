@@ -28,7 +28,7 @@ export class GenerateImageController {
   constructor(
     private readonly GenerateImageService: GenerateImageService,
     private readonly minioclientSerives: MinioClientService,
-  ) {}
+  ) { }
 
   @Post()
   create(@Body('body') createGenerateImageDto: CreateGenerateImageDto) {
@@ -47,6 +47,11 @@ export class GenerateImageController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.GenerateImageService.findOne(id);
+  }
+
+  @Get('new/:id')
+  findOneNew(@Param('id') id: string) {
+    return this.GenerateImageService.findOneNew(id);
   }
 
   @Get('download/:imageName')

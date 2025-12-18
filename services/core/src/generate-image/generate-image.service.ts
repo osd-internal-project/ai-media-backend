@@ -18,6 +18,7 @@ import { MinioClientService } from 'src/minio-client/minio-client.service';
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 const baseUrl = configs().pathDomain;
 const { minioBucket, minioBucketVdo } = configs();
 @Injectable()
@@ -279,27 +280,23 @@ export class GenerateImageService {
         ext = 'mp4';
       }
       const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
-      // await this.minioclientSerives.uploadFile(
-      //   buffer,
-      //   buffer.length,
-      //   minioBucketVdo,
-      //   objectName,
-      // );
-      // await this.galleryRepo.create({
-      //   data: {
-      //     taskId: logByTaskId.taskId,
-      //     projectId: logByTaskId.projectId,
-      //     userId: logByTaskId.userId,
-      //     imageUrl: objectName,
-      //     prompt: logByTaskId.prompt,
-      //     typeGenerate: 'vdo',
-      //   },
-      // });
-
-      const thumbBuffer = await this.generateThumbnailFromBuffer(
+      await this.minioclientSerives.uploadFile(
         buffer,
-        uuidName,
+        buffer.length,
+        minioBucketVdo,
+        objectName,
       );
+      await this.galleryRepo.create({
+        data: {
+          taskId: logByTaskId.taskId,
+          projectId: logByTaskId.projectId,
+          userId: logByTaskId.userId,
+          imageUrl: objectName,
+          prompt: logByTaskId.prompt,
+          typeGenerate: 'vdo',
+        },
+      });
+
 
       const thumbObjectName = `${responseImage.data.id}/${uuidName}.webp`;
       await this.galleryRepo.create({
@@ -313,13 +310,6 @@ export class GenerateImageService {
           typeGenerate: 'vdo',
         },
       });
-      await this.minioclientSerives.uploadFile(
-        thumbBuffer,
-        thumbBuffer.length,
-        minioBucketVdo,
-        thumbObjectName,
-      );
-      console.log('final');
     }
 
     return responseImage.data;
@@ -355,28 +345,83 @@ export class GenerateImageService {
     });
   }
 
-  async generateThumbnailFromBuffer(
-    videoBuffer: Buffer,
-    outputName: string,
-  ): Promise<Buffer> {
-    const tmpVideo = `/tmp/${outputName}.mp4`;
-    const tmpThumb = `/tmp/${outputName}.webp`;
-
-    fs.writeFileSync(tmpVideo, videoBuffer);
-
-    await new Promise((resolve, reject) => {
-      exec(
-        `ffmpeg -i ${tmpVideo} -ss 00:00:01 -frames:v 1 -vf scale=640:-1 ${tmpThumb}`,
-        (err) => (err ? reject(err) : resolve(true)),
-      );
+  async findOneNew(id: string) {
+    const logByTaskId = await this.logrepo.findOne({ where: { taskId: id } });
+    // 1. ตั้งค่า Agent (ถ้าจำเป็นต้อง bypass SSL หรือ config พิเศษ)
+    const agent = new https.Agent({
+      rejectUnauthorized: false
     });
 
-    const thumbBuffer = fs.readFileSync(tmpThumb);
 
-    fs.unlinkSync(tmpVideo);
-    fs.unlinkSync(tmpThumb);
+    try {
+      // --- CODE ของคุณ ---
+      const responseImage = await axios.get(
+        `https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks/${id}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer e7bcde05-22d1-479d-9afb-2870ba7d97ec',
+          },
+          httpsAgent: agent,
+        },
+      );
+      if (responseImage.data.status === 'succeeded') {
+        const res = await axios.get(responseImage.data.content.video_url, {
+          responseType: 'arraybuffer',
+          httpsAgent: agent,
+        });
+        // ------------------
 
-    return thumbBuffer;
+        // 2. แปลง ArrayBuffer เป็น Node.js Buffer
+        const videoBuffer = Buffer.from(res.data);
+        const uuidName = uuidv4();
+        const pathname = responseImage.data.content.video_url;
+        const fileNameFromPath = pathname.split('/').pop();
+        let ext = fileNameFromPath.split('.').pop();
+        if (!ext || ext.length > 5) {
+          ext = 'mp4';
+        }
+        // 3. สร้าง Mock File Object (จำลอง Multer File)
+        // เพื่อให้ format ตรงกับที่ VideoService ต้องการ
+        const mockFile: Express.Multer.File = {
+          fieldname: 'file',
+          originalname: `${uuidName}.${ext}`, // ตั้งชื่อไฟล์
+          encoding: '7bit',
+          mimetype: res.headers['content-type'] || 'video/mp4', // ดึง Type จาก Header
+          buffer: videoBuffer, // ใส่ Buffer ที่ได้จาก Axios
+          size: videoBuffer.length,
+          stream: null,
+          destination: '',
+          filename: '',
+          path: ''
+        };
+
+        // 4. ส่งเข้า Service ตัวเดิมเพื่อทำ Thumbnail + Upload MinIO
+        const result = await this.minioclientSerives.uploadVideoWithThumbnail(minioBucketVdo, mockFile, responseImage.data.id);
+
+        const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
+        const thumbObjectName = `${responseImage.data.id}/${uuidName}.webp`;
+        await this.galleryRepo.create({
+          data: {
+            taskId: logByTaskId.taskId,
+            projectId: logByTaskId.projectId,
+            userId: logByTaskId.userId,
+            imageUrl: objectName,
+            thumbnailUrl: thumbObjectName,
+            prompt: logByTaskId.prompt,
+            typeGenerate: 'vdo',
+          },
+        });
+        return {
+          message: 'Download and process complete',
+          data: result
+        };
+      }
+
+
+    } catch (error) {
+      console.error(error);
+      throw new Error('Failed to process remote video');
+    }
   }
-
 }

@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { MinioService } from 'nestjs-minio-client';
 import configs from 'src/configs';
+import * as ffmpeg from 'fluent-ffmpeg';
+import * as fs from 'fs';
+import * as path from 'path';
 @Injectable()
 export class MinioClientService {
   constructor(private readonly minio: MinioService) { }
@@ -41,5 +44,70 @@ export class MinioClientService {
   async getPresignedUrl(bucket: string, filename: string): Promise<string> {
     // สร้าง URL ชั่วคราว (เช่น อยู่ได้ 15 นาที) ให้ Frontend ไปโหลดเอง
     return await this.minioClient.presignedGetObject(bucket, filename, 15 * 60);
+  }
+
+  async uploadVideoWithThumbnail(bucket: string, file: Express.Multer.File, id: string) {
+    const videoFileName = `${Date.now()}-${file.originalname}`;
+    const thumbnailFileName = `thumb-${Date.now()}.png`;
+    const objectName = `${id}/${videoFileName}`;
+    const thumbnailObjectName = `${id}/${thumbnailFileName}`;
+
+    // Path สำหรับไฟล์ชั่วคราว (จำเป็นสำหรับ ffmpeg ในบางกรณี)
+    const tempVideoPath = path.join(__dirname, '../../temp', videoFileName);
+    const tempThumbPath = path.join(__dirname, '../../temp', thumbnailFileName);
+
+    // ตรวจสอบว่ามีโฟลเดอร์ temp หรือไม่
+    if (!fs.existsSync(path.join(__dirname, '../../temp'))) {
+      fs.mkdirSync(path.join(__dirname, '../../temp'), { recursive: true });
+    }
+
+    // 2. เขียนไฟล์วิดีโอลง Disk ชั่วคราวเพื่อให้ FFmpeg อ่าน
+    fs.writeFileSync(tempVideoPath, file.buffer);
+
+    try {
+      // 3. สร้าง Thumbnail ด้วย FFmpeg
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempVideoPath)
+          .screenshots({
+            count: 1,
+            folder: path.dirname(tempThumbPath),
+            filename: path.basename(tempThumbPath),
+            timemarks: ['20%'], // จับภาพที่ตำแหน่ง 20% ของวิดีโอ
+            size: '320x?' // ปรับขนาด (กว้าง 320, สูง auto)
+          })
+          .on('end', resolve)
+          .on('error', reject);
+      });
+
+      // 4. Upload Video ขึ้น MinIO
+      await this.minioClient.fPutObject(bucket, videoFileName, tempVideoPath, {
+        'Content-Type': file.mimetype
+      });
+
+      // 5. Upload Thumbnail ขึ้น MinIO
+      await this.minioClient.fPutObject(bucket, thumbnailFileName, tempThumbPath, {
+        'Content-Type': 'image/png'
+      });
+
+      // 6. (Optional) สร้าง Presigned URL หรือ Public URL
+      // สมมติว่าเป็น Public Bucket หรือใช้ Presigned
+      const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
+      const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
+
+      return {
+        videoUrl,
+        thumbnailUrl: thumbUrl,
+        file: videoFileName,
+        thumbnail: thumbnailFileName
+      };
+
+    } catch (error) {
+      console.error(error);
+      throw new BadRequestException('Error processing video');
+    } finally {
+      // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
+      if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
+      if (fs.existsSync(tempThumbPath)) fs.unlinkSync(tempThumbPath);
+    }
   }
 }
