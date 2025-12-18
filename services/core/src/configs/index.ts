@@ -4,6 +4,7 @@ export default () => ({
   pathMountDirUpload: process.env.PATH_MOUNTDIR_UPLOAD,
   pathDomain: process.env.PATH_DOMAIN,
   pathDomainVDO: process.env.PATH_DOMAIN_VDO,
+  pathPublicDomain: process.env.PATH_PUBLIC_DOMAIN,
   minioEndpoint: (process.env.MINIO_ENDPOINT || '192.168.31.91').trim(),
   minioPort: parseInt(process.env.MINIO_PORT || '9000', 10),
   minioAccesskey: process.env.MINIO_ACCESSKEY,
