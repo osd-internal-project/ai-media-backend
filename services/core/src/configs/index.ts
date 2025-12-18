@@ -12,6 +12,8 @@ export default () => ({
   minioBucket: process.env.MINIO_BUCKET,
   minioBucketUpload: process.env.MINIO_BUCKET_UPLOAD,
   minioBucketFile: process.env.MINIO_BUCKET_FILE || 'ai-media-file',
+  minioUseSsl: process.env.MINIO_USE_SSL === 'true',
+
 
   minioBucketVdo: process.env.MINIO_BUCKET_VDO,
   byteplusAccessKeyId:

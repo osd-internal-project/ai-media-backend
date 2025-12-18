@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import { Controller, Get, Param, Query, Res } from '@nestjs/common';
 import { join } from 'path';
 import { createReadStream } from 'fs';
 import { Response } from 'express';
@@ -46,8 +46,8 @@ export class PublicController {
     }
   }
 
-  @Get('minio-url/:bucket/:filename')
-  async getPresignedUrl(@Param('bucket') bucket: string, @Param('filename') filename: string): Promise<string> {
+  @Get('minio-url')
+  async getPresignedUrl(@Query('bucket') bucket: string, @Query('filename') filename: string): Promise<string> {
     return await this.minioService.getPresignedUrl(bucket, filename);
   }
 

@@ -29,7 +29,19 @@ export class GalleryService {
     const total = await this.galleryRepo.count({
       where: { projectId: projectId },
     });
-    return { data, total };
+
+    const newData = new Map();
+    for (const item of data) {
+
+      const url = item.imageUrl ? await this.minioService.getPresignedUrl(item.typeGenerate === "vdo" ? minioBucketVdo : minioBucket, item.imageUrl) : "";
+      const thumbnailUrl = item.thumbnailUrl ? await this.minioService.getPresignedUrl(item.typeGenerate === "vdo" ? minioBucketVdo : minioBucket, item.thumbnailUrl) : "";
+      newData.set(item.id, {
+        ...item,
+        imageUrl: url,
+        thumbnailUrl: thumbnailUrl,
+      });
+    }
+    return { data: Array.from(newData.values()), total };
   }
   async findByActivity(projectId: string, query: any) {
     const page = +query.page || 1;

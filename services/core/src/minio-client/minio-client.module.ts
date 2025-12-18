@@ -18,4 +18,4 @@ const { minioEndpoint, minioPort, minioAccesskey, minioSecretKey } = configs();
   providers: [MinioClientService],
   exports: [MinioClientService],
 })
-export class MinioClientModule {}
+export class MinioClientModule { }

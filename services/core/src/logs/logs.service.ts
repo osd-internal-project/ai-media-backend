@@ -56,14 +56,23 @@ export class LogsService {
 
     const map = new Map();
     for (const item of data) {
+      const url = item.imageUrl ? await this.minioService.getPresignedUrl(item.typeGenerate === "vdo" ? minioBucketVdo : minioBucket, item.imageUrl) : "";
+      const thumbnailUrl = item.thumbnailUrl ? await this.minioService.getPresignedUrl(item.typeGenerate === "vdo" ? minioBucketVdo : minioBucket, item.thumbnailUrl) : "";
       if (!map.has(item.taskId)) {
         map.set(item.taskId, {
           ...item,
-          imageUrls: [item.imageUrl],
+          imageUrls: [{
+            imageUrl: url,
+            thumbnailUrl: thumbnailUrl
+          }],
         });
         delete map.get(item.taskId).imageUrl;
+        delete map.get(item.taskId).thumbnailUrl;
       } else {
-        map.get(item.taskId).imageUrls.push(item.imageUrl);
+        map.get(item.taskId).imageUrls.push({
+          imageUrl: url,
+          thumbnailUrl: thumbnailUrl
+        });
       }
     }
     const result = Array.from(map.values());
