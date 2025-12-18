@@ -114,11 +114,8 @@ export class PublicController {
       // });
 
       // return stream.pipe(res);
-      const url = await this.minioService.getPresignedUrl(
-        bucket,
-        decodedName,
-      );
-      console.log(url)
+      const url = await this.minioService.getPresignedUrl(bucket, decodedName);
+      console.log(url);
       return { url };
     } catch (err) {
       console.error('Public Controller Error:', err);

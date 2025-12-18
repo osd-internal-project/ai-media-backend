@@ -10,6 +10,7 @@ import * as path from 'path';
 import { HttpService } from '@nestjs/axios';
 import { AxiosRequestHeaders } from 'axios';
 import * as crypto from 'crypto';
+import * as https from 'https';
 import { firstValueFrom } from 'rxjs';
 import {
   LogRepository,
@@ -82,37 +83,41 @@ export class OmnihumenService {
           };
           return this.generateImageService.createFileLogs(data);
         });
-      Logger.debug(`audio, image`);
+      Logger.debug(`audio, image`, `${baseUrl}/${audioFileName}`);
       Logger.debug(audio, image);
       const generateTask = await this.submitTask({
         req_key: 'realman_avatar_picture_omni15_cv',
-        image_url:
-          'https://sf16-resources.bytepluscdn.com/obj/byteplus-public-aiso/cloud-universal-doc/upload_acb84d04326453695183a54a07af5e05.png',
-        audio_url:
-          'https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3',
+        image_url: `${baseUrl}/${imageFileName}`,
+        audio_url: `${baseUrl}/${audioFileName}`,
         prompt: createOmnihumanDto.prompt || '',
       });
       if (generateTask?.data?.task_id) {
         // Logger.debug(createOmnihumanDto);
-        // await this.logrepo.create({
-        //   data: {
-        //     taskId: generateTask.data.task_id,
-        //     projectId: createOmnihumanDto.projectId,
-        //     userId: createOmnihumanDto.userId,
-        //     prompt: `${createOmnihumanDto.prompt} `,
-        //     typeGenerate: 'omnihumen',
-        //     status: 'pending',
-        //     tokenUsed: 0,
-        //     ImageUsed: 0,
-        //   },
-        // });
+        const user = await this.usersRepository.findOne({
+          where: {
+            token: createOmnihumanDto.token,
+          },
+        });
+        if (user.userId)
+          await this.logrepo.create({
+            data: {
+              taskId: generateTask.data.task_id,
+              projectId: createOmnihumanDto.projectId,
+              userId: user.userId,
+              prompt: `${createOmnihumanDto.prompt} `,
+              typeGenerate: 'omnihumen',
+              status: 'pending',
+              tokenUsed: 0,
+              ImageUsed: 0,
+            },
+          });
         Logger.debug('generateTask');
         Logger.debug(generateTask);
         const task = await this.omnihumenTaskRepository.create({
           data: {
             taskId: generateTask.data.task_id,
             projectId: createOmnihumanDto.projectId,
-            userId: createOmnihumanDto.userId,
+            userId: user?.userId,
             prompt: `${createOmnihumanDto.prompt} `,
             status: false,
             avatarName: createOmnihumanDto.avatarName,
@@ -227,8 +232,9 @@ export class OmnihumenService {
     /** ---------- Call API ---------- */
     const url = `https://${this.host}/?${query}`;
 
+    const agent = new https.Agent({ rejectUnauthorized: false });
     const res = await firstValueFrom(
-      this.httpService.post(url, body, { headers }),
+      this.httpService.post(url, body, { headers, httpsAgent: agent }),
     );
 
     return res.data;
