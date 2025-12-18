@@ -47,6 +47,7 @@ export class OmnihumenService {
     files: { image?: Express.Multer.File[]; audio?: Express.Multer.File[] },
   ) {
     const baseUrl = configs().pathDomain;
+    // const publicDomain = configs().pathPublicDomain;
     if (files?.audio && files?.image) {
       const bucketname = config.minioBucketUpload;
       const audioExt = path.extname(files.audio[0].originalname); // นามสกุลไฟล์
@@ -83,10 +84,11 @@ export class OmnihumenService {
           };
           return this.generateImageService.createFileLogs(data);
         });
-      Logger.debug(`audio, image`, `${baseUrl}/${audioFileName}`);
       Logger.debug(audio, image);
       const generateTask = await this.submitTask({
         req_key: 'realman_avatar_picture_omni15_cv',
+        // image_url: `${baseUrl}/stream-image/${imageFileName}`,
+        // audio_url: `${baseUrl}/stream-image/${audioFileName}`,
         image_url: `${baseUrl}/${imageFileName}`,
         audio_url: `${baseUrl}/${audioFileName}`,
         prompt: createOmnihumanDto.prompt || '',

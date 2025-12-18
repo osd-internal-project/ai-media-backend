@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   Query,
   Res,
+  Logger,
 } from '@nestjs/common';
 import { GenerateImageService } from './generate-image.service';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -28,7 +29,7 @@ export class GenerateImageController {
   constructor(
     private readonly GenerateImageService: GenerateImageService,
     private readonly minioclientSerives: MinioClientService,
-  ) { }
+  ) {}
 
   @Post()
   create(@Body('body') createGenerateImageDto: CreateGenerateImageDto) {
@@ -166,30 +167,39 @@ export class GenerateImageController {
   ) {
     if (type && files.length > 0) {
       const bucketname = config.minioBucketUpload;
-      await Promise.all(
+      const savedFiles = await Promise.all(
         files.map((file) => {
           const ext = path.extname(file.originalname); // นามสกุลไฟล์
           const fileName = `${uuidv4()}${ext}`;
-          return this.minioclientSerives.uploadFile(
+          this.minioclientSerives.uploadFile(
             file.buffer,
             file.buffer.length,
             bucketname,
             fileName,
           );
+          return {
+            filePath: `${bucketname}/${fileName}`,
+            fileType: file.mimetype,
+            fileName: fileName,
+          };
         }),
       );
 
       console.log('All files uploaded!');
-      const data = files.map((file) => {
-        const ext = path.extname(file.originalname); // นามสกุลไฟล์
-        const fileName = `${uuidv4()}${ext}`;
-        return {
-          filePath: `${bucketname}/${fileName}`,
-          fileType: file.mimetype,
-          fileName: fileName,
-        };
-      });
-      return await this.GenerateImageService.upload(data);
+      // const data = files.map((file) => {
+      //   const ext = path.extname(file.originalname); // นามสกุลไฟล์
+      //   const fileName = `${uuidv4()}${ext}`;
+      //   Logger.debug(fileName);
+      //   return {
+      //     filePath: `${bucketname}/${fileName}`,
+      //     fileType: file.mimetype,
+      //     fileName: fileName,
+      //   };
+      // });
+
+      const fileList = await this.GenerateImageService.upload(savedFiles);
+      console.log(fileList);
+      return fileList;
     }
   }
 }

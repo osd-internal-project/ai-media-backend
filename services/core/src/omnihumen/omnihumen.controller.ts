@@ -31,7 +31,9 @@ export class OmnihumenController {
     files: { image?: Express.Multer.File[]; audio?: Express.Multer.File[] },
     @Body() createOmnihumanDto: CreateOmnihumanDto,
   ) {
-    return this.omnihumenService.create(createOmnihumanDto, files);
+    const data = this.omnihumenService.create(createOmnihumanDto, files);
+    Logger.debug(data);
+    return data;
   }
 
   @Get()
