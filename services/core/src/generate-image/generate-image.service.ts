@@ -383,17 +383,19 @@ export class GenerateImageService {
         };
 
         // 4. ส่งเข้า Service ตัวเดิมเพื่อทำ Thumbnail + Upload MinIO
+
+
         const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
-        const thumbObjectName = `${responseImage.data.id}/${uuidName}.webp`;
-        const result = await this.minioclientSerives.uploadVideoWithThumbnail(minioBucketVdo, mockFile, responseImage.data.id);
+        const thumbnailFileName = `thumb-${Date.now()}.png`;
+        const result = await this.minioclientSerives.uploadVideoWithThumbnail(minioBucketVdo, mockFile, responseImage.data.id, thumbnailFileName);
 
         await this.galleryRepo.create({
           data: {
             taskId: logByTaskId.taskId,
             projectId: logByTaskId.projectId,
             userId: logByTaskId.userId,
-            imageUrl: result.videoUrl,
-            thumbnailUrl: result.thumbnailUrl,
+            imageUrl: objectName,
+            thumbnailUrl: thumbnailFileName,
             prompt: logByTaskId.prompt,
             typeGenerate: 'vdo',
           },

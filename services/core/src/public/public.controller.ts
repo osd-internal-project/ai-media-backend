@@ -45,6 +45,12 @@ export class PublicController {
       if (!res.headersSent) res.status(500).send('Internal Server Error');
     }
   }
+
+  @Get('minio-url/:bucket/:filename')
+  async getPresignedUrl(@Param('bucket') bucket: string, @Param('filename') filename: string): Promise<string> {
+    return await this.minioService.getPresignedUrl(bucket, filename);
+  }
+
   @Get('stream-image/:id')
   async streamNewsImageFile(@Param('id') id: string, @Res() res: Response) {
     try {
@@ -92,6 +98,7 @@ export class PublicController {
       if (!res.headersSent) res.status(500).send('Internal Server Error');
     }
   }
+
   @Get('image-minio/:imageName')
   async getPublicImage(
     @Param('imageName') imageName: string,

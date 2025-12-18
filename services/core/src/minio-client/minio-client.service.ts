@@ -46,9 +46,8 @@ export class MinioClientService {
     return await this.minioClient.presignedGetObject(bucket, filename, 15 * 60);
   }
 
-  async uploadVideoWithThumbnail(bucket: string, file: Express.Multer.File, id: string) {
+  async uploadVideoWithThumbnail(bucket: string, file: Express.Multer.File, id: string, thumbnailFileName: string) {
     const videoFileName = `${Date.now()}-${file.originalname}`;
-    const thumbnailFileName = `thumb-${Date.now()}.png`;
     const objectName = `${id}/${videoFileName}`;
     const thumbnailObjectName = `${id}/${thumbnailFileName}`;
 
