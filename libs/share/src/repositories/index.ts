@@ -11,3 +11,4 @@ export * from './gallery.repository';
 export * from './masterdataConfigApi.repository';
 export * from './promptGuide.repository';
 export * from './promptGuideType.repository';
+export * from './omnihumenTask.repository';

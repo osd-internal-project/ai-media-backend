@@ -18,9 +18,13 @@ import { MinioClientModule } from './minio-client/minio-client.module';
 import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
 import { PromptGuideTypeModule } from './prompt-guide-type/prompt-guide-type.module';
 import { OmnihumenModule } from './omnihumen/omnihumen.module';
+import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
+import { ScheduleModule } from '@nestjs/schedule';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configs] }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     GenerateImageModule,
     HttpModule,
@@ -34,6 +38,7 @@ import { OmnihumenModule } from './omnihumen/omnihumen.module';
     PromptGuideModule,
     PromptGuideTypeModule,
     OmnihumenModule,
+    OmnihumenTaskModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

@@ -176,13 +176,12 @@ export class GenerateImageController {
 
       console.log('All files uploaded!');
       const data = files.map((file) => {
-        const decoded = Buffer.from(file.originalname, 'latin1').toString(
-          'utf8',
-        );
+        const ext = path.extname(file.originalname); // นามสกุลไฟล์
+        const fileName = `${uuidv4()}${ext}`;
         return {
-          filePath: `${bucketname}/${decoded}`,
+          filePath: `${bucketname}/${fileName}`,
           fileType: file.mimetype,
-          fileName: decoded,
+          fileName: fileName,
         };
       });
       return await this.GenerateImageService.upload(data);
