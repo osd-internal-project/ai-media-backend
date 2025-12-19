@@ -43,7 +43,12 @@ export class MinioClientService {
 
   async getPresignedUrl(bucket: string, filename: string): Promise<string> {
     // สร้าง URL ชั่วคราว (เช่น อยู่ได้ 15 นาที) ให้ Frontend ไปโหลดเอง
-    return await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60);
+    // return await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60);
+    const originalUrl = await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60);
+
+    return originalUrl.replace('http://192.168.31.181:9100', `https://www.aicave.ai`);
+
+    // return originalUrl;
   }
 
   async uploadVideoWithThumbnail(bucket: string, file: Express.Multer.File, id: string) {
