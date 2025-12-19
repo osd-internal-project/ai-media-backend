@@ -23,7 +23,10 @@ export class GalleryService {
     const page = +query.page || 1;
     const pageSize = +query.pageSize || 10;
     const data = await this.galleryRepo.findMany({
-      where: { projectId: projectId },
+      where: {
+        projectId: projectId,
+        ...(query?.status && { status: true }),
+      },
       include: { users: true },
       skip: (page - 1) * pageSize,
       take: pageSize,
