@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { GalleryRepository } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
@@ -7,7 +7,10 @@ const { minioBucket, minioBucketVdo } = configs();
 
 @Injectable()
 export class GalleryService {
-  constructor(private readonly galleryRepo: GalleryRepository, private readonly minioService: MinioClientService) { }
+  constructor(
+    private readonly galleryRepo: GalleryRepository,
+    private readonly minioService: MinioClientService,
+  ) {}
   create(createGalleryDto: Prisma.GalleryCreateInput) {
     return this.galleryRepo.create({ data: createGalleryDto });
   }
@@ -32,9 +35,18 @@ export class GalleryService {
 
     const newData = new Map();
     for (const item of data) {
-
-      const url = item.imageUrl ? await this.minioService.getPresignedUrl(item.typeGenerate === "vdo" ? minioBucketVdo : minioBucket, item.imageUrl) : "";
-      const thumbnailUrl = item.thumbnailUrl ? await this.minioService.getPresignedUrl(item.typeGenerate === "vdo" ? minioBucketVdo : minioBucket, item.thumbnailUrl) : "";
+      const url = item.imageUrl
+        ? await this.minioService.getPresignedUrl(
+            item.typeGenerate === 'vdo' ? minioBucketVdo : minioBucket,
+            item.imageUrl,
+          )
+        : '';
+      const thumbnailUrl = item.thumbnailUrl
+        ? await this.minioService.getPresignedUrl(
+            item.typeGenerate === 'vdo' ? minioBucketVdo : minioBucket,
+            item.thumbnailUrl,
+          )
+        : '';
       newData.set(item.id, {
         ...item,
         imageUrl: url,
@@ -63,9 +75,10 @@ export class GalleryService {
     const found = await this.galleryRepo.findOne({
       where: {
         taskId,
-        imageUrl: updateGalleryDto.imageUrl as string,
+        // imageUrl: updateGalleryDto.imageUrl as string,
       },
     });
+    Logger.debug(!updateGalleryDto.status);
     const data = await this.galleryRepo.update({
       where: {
         id: found.id,
