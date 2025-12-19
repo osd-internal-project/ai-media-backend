@@ -282,7 +282,7 @@ export class GenerateImageService {
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Bearer fc15edf6-2ecd-4a8c-afbd-5233a8b4186a',
+          Authorization: 'Bearer e7bcde05-22d1-479d-9afb-2870ba7d97ec',
         },
         httpsAgent: agent,
       },
@@ -366,7 +366,7 @@ export class GenerateImageService {
         {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: 'Bearer fc15edf6-2ecd-4a8c-afbd-5233a8b4186a',
+            Authorization: 'Bearer e7bcde05-22d1-479d-9afb-2870ba7d97ec',
           },
           httpsAgent: agent,
         },
