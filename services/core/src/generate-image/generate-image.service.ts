@@ -31,7 +31,7 @@ export class GenerateImageService {
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioclientSerives: MinioClientService,
-  ) {}
+  ) { }
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -198,8 +198,8 @@ export class GenerateImageService {
         response_format: 'url',
         ...(createGenerateImageDto.width &&
           createGenerateImageDto.height && {
-            size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
-          }),
+          size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
+        }),
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
@@ -282,7 +282,7 @@ export class GenerateImageService {
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Bearer e7bcde05-22d1-479d-9afb-2870ba7d97ec',
+          Authorization: 'Bearer fc15edf6-2ecd-4a8c-afbd-5233a8b4186a',
         },
         httpsAgent: agent,
       },
@@ -366,7 +366,7 @@ export class GenerateImageService {
         {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: 'Bearer e7bcde05-22d1-479d-9afb-2870ba7d97ec',
+            Authorization: 'Bearer fc15edf6-2ecd-4a8c-afbd-5233a8b4186a',
           },
           httpsAgent: agent,
         },

@@ -43,7 +43,19 @@ export class MinioClientService {
 
   async getPresignedUrl(bucket: string, filename: string): Promise<string> {
     // สร้าง URL ชั่วคราว (เช่น อยู่ได้ 15 นาที) ให้ Frontend ไปโหลดเอง
-    return await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60);
+    // return await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60);
+    const originalUrl = await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60);
+    const publicDomain = 'https://www.aicave.ai'; // หรือโหลดจาก Env
+
+    // 3. แทนที่ส่วนที่เป็น IP ด้วย Domain
+    // ระวัง: ต้องดูว่า MinIO Client สร้างมาเป็น http หรือ https เพื่อ replace ให้ถูก
+    if (process.env.NODE_ENV === 'production') {
+      // กรณีง่ายสุด: แทนที่ Base URL เดิม
+      // เช่นเปลี่ยนจาก http://192.168.31.181:9100 เป็น https://storage.yourdomain.com
+      return originalUrl.replace('http://192.168.31.181:9100', publicDomain);
+    }
+
+    return originalUrl;
   }
 
   async uploadVideoWithThumbnail(bucket: string, file: Express.Multer.File, id: string) {
