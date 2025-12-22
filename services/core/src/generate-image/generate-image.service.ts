@@ -31,7 +31,7 @@ export class GenerateImageService {
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioclientSerives: MinioClientService,
-  ) { }
+  ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -101,6 +101,8 @@ export class GenerateImageService {
           minioBucketUpload,
           imageArray[1],
         );
+        Logger.debug(`Image URL 1: ${imageUrl1}`);
+        Logger.debug(`Image URL 2: ${imageUrl2}`);
         imageContents.push(
           {
             type: 'image_url',
@@ -125,14 +127,21 @@ export class GenerateImageService {
         ],
       };
 
-      const generateImage = await axios.post(
+      const generateVideo = await axios.post(
         `${getConfigApi.apiCreateTaskVdo}`,
         base,
         axiosConfig,
       );
+      if (!generateVideo.data.id) {
+        Logger.error(`Error create task: ${generateVideo}`);
+        return {
+          status: 400,
+          data: 'Error create task',
+        };
+      }
       await this.logrepo.create({
         data: {
-          taskId: generateImage.data.id,
+          taskId: generateVideo.data.id,
           projectId: createGenerateImageDto.projectId,
           userId: user.userId,
           prompt: `${createGenerateImageDto.text} `,
@@ -142,7 +151,7 @@ export class GenerateImageService {
           ImageUsed: 0,
         },
       });
-      return { status: 200, data: generateImage.data };
+      return { status: 200, data: generateVideo.data };
     } else {
       const totalImageGenerate = await this.logrepo.findMany({
         where: {
@@ -176,7 +185,7 @@ export class GenerateImageService {
           ImageUsed: 0,
         },
       });
-      Logger.debug(createGenerateImageDto);
+      // Logger.debug(createGenerateImageDto);
       let imageUrl = [];
       if (
         createGenerateImageDto.image &&
@@ -198,8 +207,8 @@ export class GenerateImageService {
         response_format: 'url',
         ...(createGenerateImageDto.width &&
           createGenerateImageDto.height && {
-          size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
-        }),
+            size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
+          }),
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
@@ -215,6 +224,13 @@ export class GenerateImageService {
         base,
         axiosConfig,
       );
+      if (!generateImage.data) {
+        Logger.error(`Error create task: ${generateImage}`);
+        return {
+          status: 400,
+          data: 'Error create task',
+        };
+      }
       if (generateImage.data) {
         await this.logrepo.update({
           where: { id: dataLogs.id },
@@ -264,7 +280,7 @@ export class GenerateImageService {
           }),
         );
       }
-      return { status: 200, data: generateImage.data };
+      return { status: 400, data: generateImage.data };
     }
   }
 
@@ -273,16 +289,19 @@ export class GenerateImageService {
   }
 
   async findOne(id: string) {
+    const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+      where: { id: 1 },
+    });
     const logByTaskId = await this.logrepo.findOne({ where: { taskId: id } });
     const agent = new https.Agent({
       rejectUnauthorized: false,
     });
     const responseImage = await axios.get(
-      `https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks/${id}`,
+      `${getConfigApi}/${getConfigApi.apiCreateTaskVdo}`,
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Bearer fc15edf6-2ecd-4a8c-afbd-5233a8b4186a',
+          Authorization: getConfigApi.authorization,
         },
         httpsAgent: agent,
       },
@@ -358,30 +377,48 @@ export class GenerateImageService {
     const agent = new https.Agent({
       rejectUnauthorized: false,
     });
-
+    const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+      where: { id: 1 },
+    });
     try {
       // --- CODE ของคุณ ---
-      const responseImage = await axios.get(
-        `https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks/${id}`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer fc15edf6-2ecd-4a8c-afbd-5233a8b4186a',
-          },
-          httpsAgent: agent,
+      const url = `${getConfigApi.apiCreateTaskVdo}/${id}`;
+      const token = getConfigApi.authorization;
+      const authHeader = token.startsWith('Bearer ')
+        ? token
+        : `Bearer ${token}`;
+
+      // Logger.debug(`Request URL: ${url}`);
+      // Logger.debug(`Authorization: ${authHeader}`);
+
+      const videoRes = await axios.get(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
         },
-      );
-      if (responseImage.data.status === 'succeeded') {
-        const res = await axios.get(responseImage.data.content.video_url, {
+        httpsAgent: agent,
+      });
+      // Logger.debug(`Response status: ${result.status}`);
+      // Logger.debug(`Response data: ${JSON.stringify(result.data)}`);
+      // if (!videoRes.data) {
+      //   throw new Error('Video not found');
+      // }
+      if (
+        videoRes.data.status === 'succeeded' &&
+        videoRes.data.content.video_url
+      ) {
+        const videoUrl = videoRes.data.content.video_url;
+        const res = await axios.get(videoUrl, {
           responseType: 'arraybuffer',
           httpsAgent: agent,
         });
         // ------------------
-
+        Logger.debug(`Video URL: ${videoUrl}`);
+        // Logger.debug(`Response data: ${JSON.stringify(res.data)}`);
         // 2. แปลง ArrayBuffer เป็น Node.js Buffer
         const videoBuffer = Buffer.from(res.data);
         const uuidName = uuidv4();
-        const pathname = responseImage.data.content.video_url;
+        const pathname = videoUrl;
         const fileNameFromPath = pathname.split('/').pop();
         let ext = fileNameFromPath.split('.').pop();
         if (!ext || ext.length > 5) {
@@ -411,23 +448,34 @@ export class GenerateImageService {
           mockFile,
           id,
         );
-
-        await this.galleryRepo.create({
+        // Logger.debug(`Response Minio: ${JSON.stringify(result)}`);
+        const resultGallery = await this.galleryRepo.create({
           data: {
             taskId: logByTaskId.taskId,
             projectId: logByTaskId.projectId,
             userId: logByTaskId.userId,
             imageUrl: result.file,
-            thumbnailUrl: result.thumbnail,
+            thumbnailUrl: result.thumbnail || '',
             prompt: logByTaskId.prompt,
             typeGenerate: 'vdo',
           },
         });
+        Logger.debug(`Response Gallery: ${JSON.stringify(resultGallery)}`);
+        return videoRes.data;
       }
-      return responseImage.data;
+
+      return videoRes.data;
     } catch (error) {
-      console.error(error);
-      throw new Error('Failed to process remote video');
+      if (axios.isAxiosError(error)) {
+        Logger.error(`Axios error: ${error.message}`);
+        if (error.response) {
+          Logger.error(`Response status: ${error.response.status}`);
+          Logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
+        }
+      } else {
+        Logger.error(`Error: ${error}`);
+      }
+      throw error; // Re-throw the original error or a meaningful one
     }
   }
   async createMinioFileUrl(bucketName: string, path: string) {

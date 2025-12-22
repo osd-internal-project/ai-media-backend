@@ -4,9 +4,17 @@ import configs from 'src/configs';
 import * as ffmpeg from 'fluent-ffmpeg';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ffmpegPath = require('ffmpeg-static');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ffprobePath = require('ffprobe-static');
+
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath.path);
 @Injectable()
 export class MinioClientService {
-  constructor(private readonly minio: MinioService) { }
+  constructor(private readonly minio: MinioService) {}
   private get minioClient() {
     return this.minio.client;
   }
@@ -44,14 +52,25 @@ export class MinioClientService {
   async getPresignedUrl(bucket: string, filename: string): Promise<string> {
     // สร้าง URL ชั่วคราว (เช่น อยู่ได้ 15 นาที) ให้ Frontend ไปโหลดเอง
     // return await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60);
-    const originalUrl = await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60);
+    const originalUrl = await this.minioClient.presignedGetObject(
+      bucket,
+      filename,
+      24 * 60 * 60,
+    );
 
-    return originalUrl.replace('http://192.168.31.181:9100', `https://www.aicave.ai`);
+    return originalUrl.replace(
+      'http://192.168.31.181:9100',
+      `https://www.aicave.ai`,
+    );
 
     // return originalUrl;
   }
 
-  async uploadVideoWithThumbnail(bucket: string, file: Express.Multer.File, id: string) {
+  async uploadVideoWithThumbnail(
+    bucket: string,
+    file: Express.Multer.File,
+    id: string,
+  ) {
     const videoFileName = `${Date.now()}-${file.originalname}`;
     const thumbnailFileName = `thumb-${Date.now()}.png`;
     const objectName = `${id}/${videoFileName}`;
@@ -75,23 +94,35 @@ export class MinioClientService {
             folder: path.dirname(tempThumbPath),
             filename: path.basename(tempThumbPath),
             timemarks: ['20%'], // จับภาพที่ตำแหน่ง 20% ของวิดีโอ
-            size: '320x?' // ปรับขนาด (กว้าง 320, สูง auto)
+            size: '320x?', // ปรับขนาด (กว้าง 320, สูง auto)
           })
           .on('end', resolve)
           .on('error', reject);
       });
 
       // 4. Upload Video ขึ้น MinIO (ใช้ putObject แทน fPutObject)
-      await this.minioClient.putObject(bucket, objectName, file.buffer, file.size, {
-        'Content-Type': file.mimetype
-      });
+      await this.minioClient.putObject(
+        bucket,
+        objectName,
+        file.buffer,
+        file.size,
+        {
+          'Content-Type': file.mimetype,
+        },
+      );
 
       // 5. Upload Thumbnail ขึ้น MinIO
       // อ่านไฟล์ thumbnail ขึ้นมาเป็น buffer ก่อน
       const thumbBuffer = fs.readFileSync(tempThumbPath);
-      await this.minioClient.putObject(bucket, thumbnailObjectName, thumbBuffer, thumbBuffer.length, {
-        'Content-Type': 'image/png'
-      });
+      await this.minioClient.putObject(
+        bucket,
+        thumbnailObjectName,
+        thumbBuffer,
+        thumbBuffer.length,
+        {
+          'Content-Type': 'image/png',
+        },
+      );
 
       // 6. (Optional) สร้าง Presigned URL แบบ Public (ถ้า bucket เป็น public ไม่ต้องใช้ presigned ก็ได้ แต่ code เดิมใช้)
       // const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
@@ -99,9 +130,8 @@ export class MinioClientService {
 
       return {
         file: objectName,
-        thumbnail: thumbnailObjectName
+        thumbnail: thumbnailObjectName,
       };
-
     } catch (error) {
       console.error('Error in uploadVideoWithThumbnail:', error);
       throw new BadRequestException('Error processing video: ' + error.message);

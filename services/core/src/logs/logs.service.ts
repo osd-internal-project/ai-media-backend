@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   LogRepository,
   GalleryRepository,
@@ -16,7 +16,7 @@ export class LogsService {
     private readonly galleryRepo: GalleryRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioService: MinioClientService,
-  ) { }
+  ) {}
   async findOne(projectId: string, skip?: number, take?: number) {
     const startDate = dayjs().subtract(3, 'day').startOf('day').toDate(); // 3 วันก่อน
     const endDate = dayjs().endOf('day').toDate();
@@ -56,22 +56,34 @@ export class LogsService {
 
     const map = new Map();
     for (const item of data) {
-      const url = item.imageUrl ? await this.minioService.getPresignedUrl(item.typeGenerate === "vdo" ? minioBucketVdo : minioBucket, item.imageUrl) : "";
-      const thumbnailUrl = item.thumbnailUrl ? await this.minioService.getPresignedUrl(item.typeGenerate === "vdo" ? minioBucketVdo : minioBucket, item.thumbnailUrl) : "";
+      const url = item.imageUrl
+        ? await this.minioService.getPresignedUrl(
+            item.typeGenerate === 'vdo' ? minioBucketVdo : minioBucket,
+            item.imageUrl,
+          )
+        : '';
+      const thumbnailUrl = item.thumbnailUrl
+        ? await this.minioService.getPresignedUrl(
+            item.typeGenerate === 'vdo' ? minioBucketVdo : minioBucket,
+            item.thumbnailUrl,
+          )
+        : '';
       if (!map.has(item.taskId)) {
         map.set(item.taskId, {
           ...item,
-          imageUrls: [{
-            imageUrl: url,
-            thumbnailUrl: thumbnailUrl
-          }],
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl: thumbnailUrl,
+            },
+          ],
         });
         delete map.get(item.taskId).imageUrl;
         delete map.get(item.taskId).thumbnailUrl;
       } else {
         map.get(item.taskId).imageUrls.push({
           imageUrl: url,
-          thumbnailUrl: thumbnailUrl
+          thumbnailUrl: thumbnailUrl,
         });
       }
     }
@@ -81,7 +93,7 @@ export class LogsService {
   async findOneVDO(projectId: string, skip?: number, take?: number) {
     const startDate = dayjs().subtract(3, 'day').startOf('day').toDate();
     const endDate = dayjs().endOf('day').toDate();
-    const taskIds = await this.galleryRepo.findMany({
+    const data = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
@@ -91,48 +103,60 @@ export class LogsService {
           lte: endDate,
         },
       },
-      select: { taskId: true },
-      distinct: ['taskId'],
+      include: { users: true },
       orderBy: { createdAt: 'desc' },
+      // select: { taskId: true },
+      distinct: ['taskId'],
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
 
-    const targetTaskIds = taskIds.map((t) => t.taskId);
+    // const targetTaskIds = taskIds.map((t) => t.taskId);
 
-    if (targetTaskIds.length === 0) {
-      return [];
-    }
+    // if (targetTaskIds.length === 0) {
+    //   return [];
+    // }
 
-    const data = await this.galleryRepo.findMany({
-      where: {
-        taskId: { in: targetTaskIds },
-        typeGenerate: 'vdo',
-      },
-      include: { users: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    // const data = await this.galleryRepo.findMany({
+    //   where: {
+    //     taskId: { in: targetTaskIds },
+    //     typeGenerate: 'vdo',
+    //   },
+    //   include: { users: true },
+    //   orderBy: { createdAt: 'desc' },
+    // });
+    Logger.debug(data);
     const newData = new Map();
     for (const item of data) {
-      const url = item.imageUrl ? await this.minioService.getPresignedUrl(minioBucketVdo, item.imageUrl) : "";
-      const thumbnailUrl = item.thumbnailUrl ? await this.minioService.getPresignedUrl(minioBucketVdo, item.thumbnailUrl) : "";
+      const url = item.imageUrl
+        ? await this.minioService.getPresignedUrl(minioBucketVdo, item.imageUrl)
+        : '';
+      const thumbnailUrl = item.thumbnailUrl
+        ? await this.minioService.getPresignedUrl(
+            minioBucketVdo,
+            item.thumbnailUrl,
+          )
+        : '';
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
-          imageUrls: [{
-            imageUrl: url,
-            thumbnailUrl: thumbnailUrl
-          }],
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl: thumbnailUrl,
+            },
+          ],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
           imageUrl: url,
-          thumbnailUrl: thumbnailUrl
+          thumbnailUrl: thumbnailUrl,
         });
       }
     }
     const result = Array.from(newData.values());
+
     return result;
   }
   async findByTaskId(taskId: string, query: any) {
