@@ -80,6 +80,7 @@ export class GenerateImageService {
       const imageArray = createGenerateImageDto.image;
       const imageCount =
         imageArray && Array.isArray(imageArray) ? imageArray.length : 0;
+      console.log(`imageCount: ${imageCount}`);
       let imageContents: any[] = [];
       if (imageCount === 1) {
         const imageUrl = await this.createMinioFileUrl(
@@ -101,8 +102,8 @@ export class GenerateImageService {
           minioBucketUpload,
           imageArray[1],
         );
-        Logger.debug(`Image URL 1: ${imageUrl1}`);
-        Logger.debug(`Image URL 2: ${imageUrl2}`);
+        console.log(`Image URL 1: ${imageUrl1}`);
+        console.log(`Image URL 2: ${imageUrl2}`);
         imageContents.push(
           {
             type: 'image_url',
