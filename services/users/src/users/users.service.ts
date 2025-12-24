@@ -170,7 +170,17 @@ export class UsersService {
       );
     }
 
-    // 2. Delete in Database
+    // 2. Remove UserGroup associations to avoid FK constraint error
+    await this.userRepo.update({
+      where: { userId },
+      data: {
+        groups: {
+          deleteMany: {},
+        },
+      },
+    });
+
+    // 3. Delete in Database
     return this.userRepo.delete({
       where: {
         userId,
