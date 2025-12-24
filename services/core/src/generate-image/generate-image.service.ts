@@ -48,7 +48,6 @@ export class GenerateImageService {
       },
       httpsAgent: agent,
     };
-    console.log(createGenerateImageDto);
     
     const description = createGenerateImageDto.image
       ? 'image-to-image'
@@ -238,8 +237,6 @@ export class GenerateImageService {
         stream: getConfigApi.stream,
         watermark: getConfigApi.watermark,
       };
-
-      console.log(getModelType);
       
 
       // const generateImage = await axios.post(
