@@ -11,4 +11,5 @@ export class CreateGenerateImageDto {
   height: number;
   projectId: string;
   userId: string;
+  modelName?: string;  // Add optional model name
 }

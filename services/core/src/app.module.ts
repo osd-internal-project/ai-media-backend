@@ -20,6 +20,7 @@ import { PromptGuideTypeModule } from './prompt-guide-type/prompt-guide-type.mod
 import { OmnihumenModule } from './omnihumen/omnihumen.module';
 import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AiModelModule } from './ai-model/ai-model.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     PromptGuideTypeModule,
     OmnihumenModule,
     OmnihumenTaskModule,
+    AiModelModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

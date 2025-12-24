@@ -51,12 +51,21 @@ export class GenerateImageService {
     const description = createGenerateImageDto.image
       ? 'image-to-image'
       : 'text-to-image';
-    const getModelType = await this.modeltypeRepo.findOne({
-      where: {
-        type: createGenerateImageDto.type,
-        description: description,
-      },
-    } as Prisma.MasterModelTypeFindFirstArgs);
+    // Use selected model if provided, otherwise fall back to automatic detection
+    const getModelType = createGenerateImageDto.modelName
+      ? await this.modeltypeRepo.findOne({
+          where: {
+            modelType: createGenerateImageDto.modelName,
+            type: createGenerateImageDto.type,
+            description: description,
+          },
+        } as Prisma.MasterModelTypeFindFirstArgs)
+      : await this.modeltypeRepo.findOne({
+          where: {
+            type: createGenerateImageDto.type,
+            description: description,
+          },
+        } as Prisma.MasterModelTypeFindFirstArgs);
 
     if (createGenerateImageDto.type === 'vdo') {
       const totalVDOGenerate = await this.logrepo.findMany({
@@ -128,31 +137,31 @@ export class GenerateImageService {
         ],
       };
 
-      const generateVideo = await axios.post(
-        `${getConfigApi.apiCreateTaskVdo}`,
-        base,
-        axiosConfig,
-      );
-      if (!generateVideo.data.id) {
-        Logger.error(`Error create task: ${generateVideo}`);
-        return {
-          status: 400,
-          data: 'Error create task',
-        };
-      }
-      await this.logrepo.create({
-        data: {
-          taskId: generateVideo.data.id,
-          projectId: createGenerateImageDto.projectId,
-          userId: user.userId,
-          prompt: `${createGenerateImageDto.text} `,
-          typeGenerate: createGenerateImageDto.type,
-          status: 'pending',
-          tokenUsed: 0,
-          ImageUsed: 0,
-        },
-      });
-      return { status: 200, data: generateVideo.data };
+      // const generateVideo = await axios.post(
+      //   `${getConfigApi.apiCreateTaskVdo}`,
+      //   base,
+      //   axiosConfig,
+      // );
+      // if (!generateVideo.data.id) {
+      //   Logger.error(`Error create task: ${generateVideo}`);
+      //   return {
+      //     status: 400,
+      //     data: 'Error create task',
+      //   };
+      // }
+      // await this.logrepo.create({
+      //   data: {
+      //     taskId: generateVideo.data.id,
+      //     projectId: createGenerateImageDto.projectId,
+      //     userId: user.userId,
+      //     prompt: `${createGenerateImageDto.text} `,
+      //     typeGenerate: createGenerateImageDto.type,
+      //     status: 'pending',
+      //     tokenUsed: 0,
+      //     ImageUsed: 0,
+      //   },
+      // });
+      // return { status: 200, data: generateVideo.data };
     } else {
       const totalImageGenerate = await this.logrepo.findMany({
         where: {
@@ -220,68 +229,68 @@ export class GenerateImageService {
         watermark: getConfigApi.watermark,
       };
 
-      const generateImage = await axios.post(
-        `${getConfigApi.apiCreateImage}`,
-        base,
-        axiosConfig,
-      );
-      if (!generateImage.data) {
-        Logger.error(`Error create task: ${generateImage}`);
-        return {
-          status: 400,
-          data: 'Error create task',
-        };
-      }
-      if (generateImage.data) {
-        await this.logrepo.update({
-          where: { id: dataLogs.id },
-          data: {
-            taskId: uuid,
-            projectId: createGenerateImageDto.projectId,
-            userId: user.userId,
-            prompt: `${createGenerateImageDto.text}`,
-            status: 'success',
-            typeGenerate: createGenerateImageDto.type,
-            tokenUsed: generateImage.data.usage.total_tokens,
-            ImageUsed: generateImage.data.usage.generated_images,
-          },
-        });
-        await Promise.all(
-          generateImage.data.data.map(async (e) => {
-            const res = await axios.get(e.url, {
-              responseType: 'arraybuffer',
-              httpsAgent: agent,
-            });
-            const buffer = Buffer.from(res.data);
-            const uuidName = uuidv4();
-            const pathname = e.url;
-            const fileNameFromPath = pathname.split('/').pop(); // '021763417932265c5f50319cb4d4388d7836967b82aebe55a0b1e_0.jpeg'
-            let ext = fileNameFromPath.split('.').pop(); // 'jpeg'
-            if (!ext || ext.length > 5) {
-              ext = 'jpg';
-            }
-            const objectName = `${uuid}/${uuidName}.${ext}`;
-            await this.minioclientSerives.uploadFile(
-              buffer,
-              buffer.length,
-              minioBucket,
-              objectName,
-            );
-            return await this.galleryRepo.create({
-              data: {
-                taskId: uuid,
-                projectId: createGenerateImageDto.projectId,
-                userId: user.userId,
-                prompt: `${createGenerateImageDto.text}`,
-                // imageUrl: e.url,
-                imageUrl: objectName,
-                typeGenerate: 'image',
-              },
-            });
-          }),
-        );
-      }
-      return { status: 400, data: generateImage.data };
+      // const generateImage = await axios.post(
+      //   `${getConfigApi.apiCreateImage}`,
+      //   base,
+      //   axiosConfig,
+      // );
+      // if (!generateImage.data) {
+      //   Logger.error(`Error create task: ${generateImage}`);
+      //   return {
+      //     status: 400,
+      //     data: 'Error create task',
+      //   };
+      // }
+      // if (generateImage.data) {
+      //   await this.logrepo.update({
+      //     where: { id: dataLogs.id },
+      //     data: {
+      //       taskId: uuid,
+      //       projectId: createGenerateImageDto.projectId,
+      //       userId: user.userId,
+      //       prompt: `${createGenerateImageDto.text}`,
+      //       status: 'success',
+      //       typeGenerate: createGenerateImageDto.type,
+      //       tokenUsed: generateImage.data.usage.total_tokens,
+      //       ImageUsed: generateImage.data.usage.generated_images,
+      //     },
+      //   });
+      //   await Promise.all(
+      //     generateImage.data.data.map(async (e) => {
+      //       const res = await axios.get(e.url, {
+      //         responseType: 'arraybuffer',
+      //         httpsAgent: agent,
+      //       });
+      //       const buffer = Buffer.from(res.data);
+      //       const uuidName = uuidv4();
+      //       const pathname = e.url;
+      //       const fileNameFromPath = pathname.split('/').pop(); // '021763417932265c5f50319cb4d4388d7836967b82aebe55a0b1e_0.jpeg'
+      //       let ext = fileNameFromPath.split('.').pop(); // 'jpeg'
+      //       if (!ext || ext.length > 5) {
+      //         ext = 'jpg';
+      //       }
+      //       const objectName = `${uuid}/${uuidName}.${ext}`;
+      //       await this.minioclientSerives.uploadFile(
+      //         buffer,
+      //         buffer.length,
+      //         minioBucket,
+      //         objectName,
+      //       );
+      //       return await this.galleryRepo.create({
+      //         data: {
+      //           taskId: uuid,
+      //           projectId: createGenerateImageDto.projectId,
+      //           userId: user.userId,
+      //           prompt: `${createGenerateImageDto.text}`,
+      //           // imageUrl: e.url,
+      //           imageUrl: objectName,
+      //           typeGenerate: 'image',
+      //         },
+      //       });
+      //     }),
+      //   );
+      // }
+      // return { status: 400, data: generateImage.data };
     }
   }
 
