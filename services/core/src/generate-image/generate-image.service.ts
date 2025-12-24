@@ -48,6 +48,8 @@ export class GenerateImageService {
       },
       httpsAgent: agent,
     };
+    console.log(createGenerateImageDto);
+    
     const description = createGenerateImageDto.image
       ? 'image-to-image'
       : 'text-to-image';
@@ -57,7 +59,6 @@ export class GenerateImageService {
           where: {
             modelType: createGenerateImageDto.modelName,
             type: createGenerateImageDto.type,
-            description: description,
           },
         } as Prisma.MasterModelTypeFindFirstArgs)
       : await this.modeltypeRepo.findOne({
@@ -136,7 +137,7 @@ export class GenerateImageService {
           ...imageContents,
         ],
       };
-
+      
       // const generateVideo = await axios.post(
       //   `${getConfigApi.apiCreateTaskVdo}`,
       //   base,
@@ -208,6 +209,15 @@ export class GenerateImageService {
         );
       }
 
+      if (!getModelType) {
+        Logger.error(`Model not found: ${createGenerateImageDto.modelName}`);
+        return {
+          success: false,
+          message: `Model not found: ${createGenerateImageDto.modelName}`,
+          data: null,
+        };
+      }
+
       const base = {
         model: getModelType.modelType,
         prompt: `create ${createGenerateImageDto.images} images ${createGenerateImageDto.text} `,
@@ -228,6 +238,9 @@ export class GenerateImageService {
         stream: getConfigApi.stream,
         watermark: getConfigApi.watermark,
       };
+
+      console.log(getModelType);
+      
 
       // const generateImage = await axios.post(
       //   `${getConfigApi.apiCreateImage}`,
