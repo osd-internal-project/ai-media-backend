@@ -19,7 +19,7 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: any) {
-    const { password, ...userData } = createUserDto;
+    const { password, groups, ...userData } = createUserDto;
     const duplicateUser = await this.userRepo.findOne({
       where: {
         OR: [
@@ -39,18 +39,153 @@ export class UsersService {
         'Failed to create user in Keycloak',
       );
     }
-    return this.userRepo.create({ data: userData });
+    return this.userRepo.create({
+      data: {
+        ...userData,
+        token,
+        groups: {
+          create: groups?.map((gid: string) => ({
+            group: { connect: { groupId: gid } },
+          })),
+        },
+      },
+    });
+  }
+
+  findAll() {
+    return this.userRepo.findMany({
+      include: { groups: { include: { group: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+  async summaryData() {
+    const [totalUsers, activeUsers, unabledUsers, totalGroups] =
+      await Promise.all([
+        this.userRepo.count({}),
+        this.userRepo.count({ where: { status: 'active' } }),
+        this.userRepo.count({ where: { status: 'unabled' } }),
+        this.groupRepo.count({}),
+      ]);
+    return {
+      total: totalUsers,
+      active: activeUsers,
+      unabled: unabledUsers,
+      userGroup: totalGroups,
+    };
+  }
+
+  findBySearch(search?: string) {
+    return this.userRepo.findMany({
+      ...(search && {
+        where: {
+          OR: [
+            { username: { contains: search, mode: 'insensitive' } },
+            { fullname: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      }),
+      include: { groups: { include: { group: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+  findOne(userId: string) {
+    const getdataUser = this.groupRepo.findOne({
+      where: {
+        users: {
+          some: {
+            users: {
+              token: userId,
+            },
+          },
+        },
+      },
+      include: {
+        users: {
+          include: {
+            users: true,
+          },
+        },
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+    return getdataUser;
+  }
+
+  async update(userId: string, updateUserDto: any) {
+    // 1. Update in Keycloak
+    // We assume userId is the Keycloak User ID
+    const { username, groups, password, ...userData } = updateUserDto;
+
+    try {
+      const { token } = await this.userRepo.findOne({ where: { userId } });
+
+      //Token of Users is Keycloak User ID
+      await this.updateKeycloakUser(token, updateUserDto);
+    } catch (error) {
+      Logger.error(`Failed to update user in Keycloak: ${error.message}`);
+      // Decide if we should block the database update or just log the error.
+      // Usually, we want to keep them in sync, so throwing is safer.
+      throw new InternalServerErrorException(
+        `Failed to update user in Keycloak`,
+      );
+    }
+
+    // 2. Update in Database
+    return this.userRepo.update({
+      where: { userId },
+      data: {
+        ...userData,
+        groups: {
+          deleteMany: {},
+          create: groups?.map((gid: string) => ({
+            group: { connect: { groupId: gid } },
+          })),
+        },
+      },
+    });
+  }
+
+  async remove(userId: string) {
+    // 1. Delete in Keycloak
+    try {
+      const user = await this.userRepo.findOne({ where: { userId } });
+      if (user && user.token) {
+        await this.deleteKeycloakUser(user.token);
+      } else {
+        Logger.warn(
+          `User ${userId} has no Keycloak token/ID, skipping Keycloak deletion`,
+        );
+      }
+    } catch (error) {
+      Logger.error(`Failed to delete user in Keycloak: ${error.message}`);
+      // Depending on business rule, we might strictly block DB deletion or proceed.
+      // Here we choose to throw to alert the admin.
+      throw new InternalServerErrorException(
+        'Failed to delete user in Keycloak',
+      );
+    }
+
+    // 2. Delete in Database
+    return this.userRepo.delete({
+      where: {
+        userId,
+      },
+    });
   }
 
   private async getAdminToken(): Promise<string> {
-    Logger.debug('getAdminToken');
     const config = configs().keycloak;
     const params = new URLSearchParams();
-    params.append('client_id', config.clientId);
     if (!config.clientSecret) {
       Logger.error('Not found client secret');
       throw new InternalServerErrorException('Failed to get create user');
     } else {
+      params.append('client_id', config.clientId);
       params.append('client_secret', config.clientSecret);
       params.append('grant_type', 'client_credentials');
     }
@@ -92,7 +227,6 @@ export class UsersService {
       };
       Logger.debug(newUser);
       // Create User
-      Logger.debug(`${config.url}/admin/realms/${config.realm}/users`);
       await axios.post(
         `${config.url}/admin/realms/${config.realm}/users`,
         newUser,
@@ -136,69 +270,62 @@ export class UsersService {
     }
   }
 
-  findAll() {
-    return this.userRepo.findMany({
-      include: { groups: { include: { group: true } } },
-      orderBy: { createdAt: 'asc' },
-    });
-  }
-  async summaryData() {
-    const [totalUsers, activeUsers, unabledUsers, totalGroups] =
-      await Promise.all([
-        this.userRepo.count({}),
-        this.userRepo.count({ where: { status: 'active' } }),
-        this.userRepo.count({ where: { status: 'unabled' } }),
-        this.groupRepo.count({}),
-      ]);
-    return {
-      total: totalUsers,
-      active: activeUsers,
-      unabled: unabledUsers,
-      userGroup: totalGroups,
+  private async updateKeycloakUser(userId: string, userDto: any) {
+    const config = configs().keycloak;
+    const token = await this.getAdminToken();
+
+    const updatePayload: any = {
+      email: userDto.email,
+      firstName: userDto.fullname?.split(' ')[0],
+      lastName: userDto.fullname?.split(' ').slice(1).join(' '),
+      enabled: userDto.status === 'active',
     };
-  }
 
-  findOne(userId: string) {
-    const getdataUser = this.groupRepo.findOne({
-      where: {
-        users: {
-          some: {
-            users: {
-              token: userId,
-            },
-          },
+    if (userDto.password) {
+      updatePayload.credentials = [
+        {
+          type: 'password',
+          value: userDto.password,
+          temporary: false,
+        },
+      ];
+    }
+
+    // Only update fields that are present
+    Object.keys(updatePayload).forEach(
+      (key) => updatePayload[key] === undefined && delete updatePayload[key],
+    );
+
+    // If password is provided (needs to be handled if it's in DTO)
+    // Note: Prisma.usersUpdateInput usually doesn't have 'password' unless added to schema,
+    // but the incoming DTO might have it if cast to 'any' or extended.
+    // Given the current signature using Prisma generated type, 'password' might not be there directly
+    // unless 'usersUpdateInput' has it (it doesn't seem to based on schema).
+    // If we need password reset, it's a separate implementation usually, or passed in a custom DTO.
+
+    await axios.put(
+      `${config.url}/admin/realms/${config.realm}/users/${userId}`,
+      updatePayload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       },
-      include: {
-        users: {
-          include: {
-            users: true,
-          },
-        },
-        roles: {
-          include: {
-            role: true,
-          },
-        },
-      },
-    });
-    return getdataUser;
+    );
   }
 
-  update(userId: string, updateUserDto: Prisma.usersUpdateInput) {
-    return this.userRepo.update({
-      where: { userId },
-      data: {
-        ...updateUserDto,
-      },
-    });
-  }
+  private async deleteKeycloakUser(keycloakUserId: string) {
+    const config = configs().keycloak;
+    const token = await this.getAdminToken();
 
-  remove(userId: string) {
-    return this.userRepo.delete({
-      where: {
-        userId,
+    await axios.delete(
+      `${config.url}/admin/realms/${config.realm}/users/${keycloakUserId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       },
-    });
+    );
   }
 }

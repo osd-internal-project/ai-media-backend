@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { Prisma } from '@prisma/client';
@@ -27,7 +28,10 @@ export class UsersController {
   summaryData() {
     return this.usersService.summaryData();
   }
-
+  @Get('search')
+  findBySearch(@Query('search') search?: string) {
+    return this.usersService.findBySearch(search);
+  }
   @Get(':userId')
   findOne(@Param('userId') userId: string) {
     return this.usersService.findOne(userId);
