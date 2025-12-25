@@ -149,7 +149,12 @@ export class UsersService {
       },
     });
   }
-
+  async updateDetail(userId: string, updateUserDto: Prisma.usersUpdateInput) {
+    return this.userRepo.updateMany({
+      where: { userId },
+      data: { updateUserDto },
+    });
+  }
   async remove(userId: string) {
     // 1. Delete in Keycloak
     try {

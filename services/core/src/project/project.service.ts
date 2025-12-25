@@ -67,7 +67,24 @@ export class ProjectService {
   async findById(id: string) {
     return this.projectRepo.findOne({ where: { id } });
   }
-
+  async findByOrganizationId(organizationId: string, userId: string) {
+    return this.projectRepo.findMany({
+      where: {
+        organizationId,
+        members: {
+          some: {
+            users: {
+              userId: userId,
+            },
+          },
+        },
+      },
+      include: { members: true },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
   update(id: string, updateProjectDto: any) {
     return this.projectRepo.update({
       where: { id },

@@ -44,7 +44,14 @@ export class UsersController {
   ) {
     return this.usersService.update(userId, updateUserDto);
   }
-
+  @Patch('detail/:userId')
+  updateDetail(
+    @Param('userId') userId: string,
+    @Body('body') updateUserDto: Prisma.usersUpdateInput,
+  ) {
+    console.log(updateUserDto);
+    return this.usersService.updateDetail(userId, updateUserDto);
+  }
   @Delete(':userId')
   remove(@Param('userId') userId: string) {
     return this.usersService.remove(userId);
