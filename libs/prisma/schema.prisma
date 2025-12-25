@@ -89,8 +89,7 @@ model Log {
   prompt          String
   tokenUsed       Int
   ImageUsed       Int
-  referenceImage  String? // Store reference image filename for persistence (to be migrated)
-  referenceImages String[] @default([]) // Store multiple reference image filenames
+  referenceImages String[] @default([])
   resolution      String?
   ratio           String?
   createdAt       DateTime @default(now())

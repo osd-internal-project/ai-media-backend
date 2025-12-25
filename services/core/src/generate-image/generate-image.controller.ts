@@ -120,7 +120,26 @@ export class GenerateImageController {
   ) {
     try {
       const decoded = decodeURIComponent(imageName);
-      const bucket = config.minioBucket;
+      
+      // Set CORS headers for cross-origin requests
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      
+      let bucket = config.minioBucketUpload;
+      let fileStats = await this.minioclientSerives.statFile(bucket, decoded);
+      
+      if (!fileStats) {
+        bucket = config.minioBucket;
+        fileStats = await this.minioclientSerives.statFile(bucket, decoded);
+      }
+      
+      if (!fileStats) {
+        console.log(`[DEBUG] Image not found in any bucket: ${decoded}`);
+        return res.status(404).send('File not found');
+      }
+      
+      res.setHeader('Content-Type', 'image/jpeg');
       const stream = await this.minioclientSerives.downloadFile(
         bucket,
         decoded,
@@ -132,12 +151,48 @@ export class GenerateImageController {
       stream.on('error', (err) => console.error('Stream error:', err));
       res.on('finish', () => console.log('Response finished sending file'));
       res.on('close', () => console.log('Connection closed by client'));
-      res.setHeader('Content-Type', 'image/jpeg');
       stream.on('error', () => {
         return res.status(404).send('File not found');
       });
       stream.pipe(res);
     } catch (err) {
+      res.status(500).send('Internal Server Error');
+    }
+  }
+
+  @Get('get-reference-image/:imageName')
+  async getReferenceImage(
+    @Param('imageName') imageName: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const decoded = decodeURIComponent(imageName);
+      const bucket = config.minioBucketUpload;
+      
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      
+      const fileStats = await this.minioclientSerives.statFile(bucket, decoded);
+      if (!fileStats) {
+        console.log(`[DEBUG] Reference image not found: ${bucket}/${decoded}`);
+        res.setHeader('Content-Type', 'image/svg+xml');
+        const placeholder = `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#333"/><text x="16" y="16" text-anchor="middle" dominant-baseline="central" font-family="Arial" font-size="8" fill="#666">No Image</text></svg>`;
+        return res.send(placeholder);
+      }
+      
+      res.setHeader('Content-Type', 'image/jpeg');
+      const stream = await this.minioclientSerives.downloadFile(
+        bucket,
+        decoded,
+      );
+      stream.on('error', (err) => {
+        console.error('Reference image stream error:', err);
+        return res.status(404).send('File not found');
+      });
+      stream.pipe(res);
+    } catch (err) {
+      console.error(`[DEBUG] Error serving reference image: ${err}`);
       res.status(500).send('Internal Server Error');
     }
   }

@@ -7,7 +7,7 @@ import {
 import * as dayjs from 'dayjs';
 import { MinioClientService } from '../minio-client/minio-client.service';
 import configs from 'src/configs';
-const { minioBucket, minioBucketVdo } = configs();
+const { minioBucket, minioBucketVdo, minioBucketUpload } = configs();
 
 @Injectable()
 export class LogsService {
@@ -21,7 +21,6 @@ export class LogsService {
     const startDate = dayjs().subtract(3, 'day').startOf('day').toDate(); // 3 วันก่อน
     const endDate = dayjs().endOf('day').toDate();
 
-    // 1. Fetch paginated Distinct TaskIds
     const taskIds = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
@@ -44,7 +43,6 @@ export class LogsService {
       return [];
     }
 
-    // 2. Fetch full data (all images) for these TaskIds
     const data = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
@@ -54,7 +52,32 @@ export class LogsService {
       orderBy: { createdAt: 'desc' },
     });
 
+    const logData = await this.logrepo.findMany({
+      where: {
+        taskId: { in: targetTaskIds },
+        typeGenerate: 'image',
+      },
+      select: { taskId: true, referenceImages: true, resolution: true, ratio: true },
+    });
+
+    const referenceImagesMap = new Map();
+    const resolutionMap = new Map();
+    const ratioMap = new Map();
+    
+    logData.forEach(log => {
+      if (log.referenceImages && log.referenceImages.length > 0) {
+        referenceImagesMap.set(log.taskId, log.referenceImages);
+      }
+      if (log.resolution) {
+        resolutionMap.set(log.taskId, log.resolution);
+      }
+      if (log.ratio) {
+        ratioMap.set(log.taskId, log.ratio);
+      }
+    });
+
     const map = new Map();
+    
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
@@ -68,9 +91,35 @@ export class LogsService {
             item.thumbnailUrl,
           )
         : '';
+      
+      // Generate presigned URLs for multiple reference images
+      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
+      let referenceImageUrls = [];
+      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
+        for (const filename of referenceImageFilenames) {
+          const fileStats = await this.minioService.statFile(minioBucketUpload, filename);
+          if (fileStats) {
+            const url = await this.minioService.getPresignedUrl(minioBucketUpload, filename);
+            referenceImageUrls.push(url);
+          } else {
+            console.log(`Reference image not found: ${filename}`);
+            const placeholder = 'data:image/svg+xml;base64,' + Buffer.from(
+              `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" fill="#333"/>
+                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
+              </svg>`
+            ).toString('base64');
+            referenceImageUrls.push(placeholder);
+          }
+        }
+      }
+      
       if (!map.has(item.taskId)) {
         map.set(item.taskId, {
           ...item,
+          referenceImages: referenceImageUrls, // All reference images
+          resolution: resolutionMap.get(item.taskId) || null,
+          ratio: ratioMap.get(item.taskId) || null,
           imageUrls: [
             {
               imageUrl: url,
@@ -88,6 +137,7 @@ export class LogsService {
       }
     }
     const result = Array.from(map.values());
+
     return result;
   }
   async findOneVDO(projectId: string, skip?: number, take?: number) {
