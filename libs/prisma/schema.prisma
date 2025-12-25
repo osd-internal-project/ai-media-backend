@@ -78,16 +78,20 @@ model Gallery {
 }
 
 model Log {
-  id           String   @id @default(uuid())
-  taskId       String?
-  status       String?
-  typeGenerate String?
-  projectId    String
-  userId       String
-  prompt       String
-  tokenUsed    Int
-  ImageUsed    Int
-  createdAt    DateTime @default(now())
+  id            String   @id @default(uuid())
+  taskId        String?
+  status        String?
+  typeGenerate  String?
+  projectId     String
+  userId        String
+  prompt        String
+  tokenUsed     Int
+  ImageUsed     Int
+  referenceImage String? // Store reference image filename for persistence (to be migrated)
+  referenceImages String[] @default([]) // Store multiple reference image filenames
+  resolution    String?
+  ratio         String?
+  createdAt     DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id])
   users   users   @relation(fields: [userId], references: [userId])
