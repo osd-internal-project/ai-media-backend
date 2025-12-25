@@ -152,7 +152,7 @@ export class UsersService {
   async updateDetail(userId: string, updateUserDto: Prisma.usersUpdateInput) {
     return this.userRepo.updateMany({
       where: { userId },
-      data: { updateUserDto },
+      data: updateUserDto,
     });
   }
   async remove(userId: string) {
