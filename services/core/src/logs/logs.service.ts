@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   LogRepository,
   GalleryRepository,
@@ -6,17 +6,19 @@ import {
 } from '@ai-media/share';
 import * as dayjs from 'dayjs';
 import { MinioClientService } from '../minio-client/minio-client.service';
-import configs from 'src/configs';
-const { minioBucket, minioBucketVdo, minioBucketUpload } = configs();
+import { minioConfigs } from 'src/configs';
+import { ConfigType } from '@nestjs/config';
 
 @Injectable()
 export class LogsService {
   constructor(
+    @Inject(minioConfigs.KEY)
+    private minioconfig: ConfigType<typeof minioConfigs>,
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioService: MinioClientService,
-  ) {}
+  ) { }
   async findOne(projectId: string, skip?: number, take?: number) {
     const startDate = dayjs().subtract(3, 'day').startOf('day').toDate(); // 3 วันก่อน
     const endDate = dayjs().endOf('day').toDate();
@@ -63,7 +65,7 @@ export class LogsService {
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
-    
+
     logData.forEach(log => {
       if (log.referenceImages && log.referenceImages.length > 0) {
         referenceImagesMap.set(log.taskId, log.referenceImages);
@@ -77,29 +79,29 @@ export class LogsService {
     });
 
     const map = new Map();
-    
+
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo' ? minioBucketVdo : minioBucket,
-            item.imageUrl,
-          )
+          item.typeGenerate === 'vdo' ? this.minioconfig.minioBucketVdo : this.minioconfig.minioBucket,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo' ? minioBucketVdo : minioBucket,
-            item.thumbnailUrl,
-          )
+          item.typeGenerate === 'vdo' ? this.minioconfig.minioBucketVdo : this.minioconfig.minioBucket,
+          item.thumbnailUrl,
+        )
         : '';
-      
+
       // Generate presigned URLs for multiple reference images
       const referenceImageFilenames = referenceImagesMap.get(item.taskId);
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
-          const fileStats = await this.minioService.statFile(minioBucketUpload, filename);
+          const fileStats = await this.minioService.statFile(this.minioconfig.minioBucketUpload, filename);
           if (fileStats) {
-            const url = await this.minioService.getPresignedUrl(minioBucketUpload, filename);
+            const url = await this.minioService.getPresignedUrl(this.minioconfig.minioBucketUpload, filename);
             referenceImageUrls.push(url);
           } else {
             console.log(`Reference image not found: ${filename}`);
@@ -113,7 +115,7 @@ export class LogsService {
           }
         }
       }
-      
+
       if (!map.has(item.taskId)) {
         map.set(item.taskId, {
           ...item,
@@ -186,7 +188,7 @@ export class LogsService {
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
-    
+
     logData.forEach(log => {
       if (log.referenceImages && log.referenceImages.length > 0) {
         referenceImagesMap.set(log.taskId, log.referenceImages);
@@ -203,13 +205,13 @@ export class LogsService {
     const newData = new Map();
     for (const item of data) {
       const url = item.imageUrl
-        ? await this.minioService.getPresignedUrl(minioBucketVdo, item.imageUrl)
+        ? await this.minioService.getPresignedUrl(this.minioconfig.minioBucketVdo, item.imageUrl)
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            minioBucketVdo,
-            item.thumbnailUrl,
-          )
+          this.minioconfig.minioBucketVdo,
+          item.thumbnailUrl,
+        )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -217,9 +219,9 @@ export class LogsService {
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
-          const fileStats = await this.minioService.statFile(minioBucketUpload, filename);
+          const fileStats = await this.minioService.statFile(this.minioconfig.minioBucketUpload, filename);
           if (fileStats) {
-            const url = await this.minioService.getPresignedUrl(minioBucketUpload, filename);
+            const url = await this.minioService.getPresignedUrl(this.minioconfig.minioBucketUpload, filename);
             referenceImageUrls.push(url);
           } else {
             console.log(`Reference image not found: ${filename}`);

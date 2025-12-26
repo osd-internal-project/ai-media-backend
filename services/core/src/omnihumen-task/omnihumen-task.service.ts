@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CreateOmnihumenTaskDto } from './dto/create-omnihumen-task.dto';
 import { UpdateOmnihumenTaskDto } from './dto/update-omnihumen-task.dto';
 import { GalleryRepository, OmnihumenTaskRepository } from '@ai-media/share';
@@ -6,23 +6,27 @@ import { HttpService } from '@nestjs/axios';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as crypto from 'crypto';
 import { firstValueFrom } from 'rxjs';
-import configs from 'src/configs';
 import axios from 'axios';
 import * as https from 'https';
 import { v4 as uuidv4 } from 'uuid';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
-const config = configs();
+import { byteplusConfigs, minioConfigs } from 'src/configs';
+import { ConfigType } from '@nestjs/config';
 
 @Injectable()
 export class OmnihumenTaskService {
   private readonly logger = new Logger(OmnihumenTaskService.name);
 
   constructor(
+    @Inject(byteplusConfigs.KEY)
+    private byteplusconfigs: ConfigType<typeof byteplusConfigs>,
+    @Inject(minioConfigs.KEY)
+    private minioconfigs: ConfigType<typeof minioConfigs>,
     private readonly omnihumenTaskRepo: OmnihumenTaskRepository,
     private readonly httpService: HttpService,
     private readonly minioClientService: MinioClientService,
     private readonly galleryRepo: GalleryRepository,
-  ) {}
+  ) { }
 
   create(createOmnihumenTaskDto: CreateOmnihumenTaskDto) {
     return this.omnihumenTaskRepo.create({
@@ -81,8 +85,8 @@ export class OmnihumenTaskService {
       const agent = new https.Agent({
         rejectUnauthorized: false,
       });
-      const accessKeyId = config.byteplusAccessKeyId;
-      const secretAccessKey = config.byteplusSecretKey;
+      const accessKeyId = this.byteplusconfigs.byteplusAccessKeyId;
+      const secretAccessKey = this.byteplusconfigs.byteplusSecretKey;
       const region = 'ap-singapore-1';
       const service = 'cv';
       const host = 'cv.byteplusapi.com';
@@ -187,7 +191,7 @@ export class OmnihumenTaskService {
           await this.minioClientService.uploadFile(
             buffer,
             buffer.length,
-            config.minioBucketVdo,
+            this.minioconfigs.minioBucketVdo,
             newObjectName,
           );
           Logger.debug(newObjectName);

@@ -2,11 +2,10 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { PrismaService } from '@ai-media/share';
 import helmet from 'helmet';
-import config from './configs';
 import { InventoryMainModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cors from 'cors';
-const PORT = config().port;
+import { appConfigs } from './configs';
 
 async function bootstrap() {
   (BigInt.prototype as any).toJSON = function () {
@@ -32,8 +31,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('api', app, document);
 
-  await app.listen(PORT);
-  console.log(`service start on port : ${PORT}`);
-  console.log(`Swagger documentation: http://localhost:${PORT}/api`);
+  await app.listen(appConfigs().port);
+  console.log(`service start on port : ${appConfigs().port}`);
+  console.log(`Swagger documentation: http://localhost:${appConfigs().port}/api`);
 }
 bootstrap();
