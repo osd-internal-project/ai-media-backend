@@ -27,6 +27,12 @@ export const byteplusConfigs = registerAs('byteplus', () => ({
     process.env.BYTEPLUS_SECRET_KEY ||
     'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==',
 }));
+
+export const redisConfigs = registerAs('redis', () => ({
+  redisHost: process.env.REDIS_HOST,
+  redisPort: parseInt(process.env.REDIS_PORT || '6379', 10),
+  redisPassword: process.env.REDIS_PASSWORD,
+}));
 // pathDomain: process.env.PATH_DOMAIN,
 // pathDomainVDO: process.env.PATH_DOMAIN_VDO,
 // pathPublicDomain: process.env.PATH_PUBLIC_DOMAIN,
