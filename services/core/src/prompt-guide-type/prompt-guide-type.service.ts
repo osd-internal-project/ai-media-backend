@@ -12,12 +12,26 @@ export class PromptGuideTypeService {
     return this.promptGuideTypeRepo.create({ data: createPromptGuideTypeDto });
   }
 
-  findAll() {
+  findAll(organizationId?: string) {
+    const whereType: Prisma.PromptGuideTypeWhereInput = organizationId
+      ? {
+          OR: [{ organizationId }, { organizationId: null }],
+        }
+      : {};
+
+    const whereGuide: Prisma.PromptGuideWhereInput = organizationId
+      ? {
+          OR: [{ organizationId }, { organizationId: null }],
+        }
+      : {};
+
     return this.promptGuideTypeRepo.findMany({
+      where: whereType,
       include: {
         promptGuide: {
-          select: { id: true, title: true },
+          select: { id: true, title: true, organizationId: true },
           orderBy: { id: 'asc' },
+          where: whereGuide,
         },
       },
       orderBy: { id: 'asc' },

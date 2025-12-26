@@ -41,4 +41,9 @@ export class PromptGuideController {
   remove(@Param('id') id: string) {
     return this.promptGuideService.remove(+id);
   }
+
+  @Get('organization/:organizationId')
+  findByOrganization(@Param('organizationId') organizationId: string) {
+    return this.promptGuideService.findByOrganization(organizationId);
+  }
 }

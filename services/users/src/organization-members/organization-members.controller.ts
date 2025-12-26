@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { OrganizationMembersService } from './organization-members.service';
 import { CreateOrganizationMemberDto } from './dto/create-organization-members.dto';
@@ -36,7 +37,16 @@ export class OrganizationMembersController {
   findByOrganization(@Param('organizationId') organizationId: string) {
     return this.organizationMembersService.findByOrganization(organizationId);
   }
-
+  @Get('organization/:organizationId/user')
+  findUserMemberByOrganization(
+    @Param('organizationId') organizationId: string,
+    @Query('token') token: string,
+  ) {
+    return this.organizationMembersService.findUserMemberByOrganization(
+      organizationId,
+      token,
+    );
+  }
   @Patch(':id')
   update(
     @Param('id') id: string,
