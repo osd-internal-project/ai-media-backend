@@ -214,6 +214,7 @@ model PromptGuide {
   updatedAt         DateTime         @default(now()) @map("updated_at")
   promptGuideType   PromptGuideType? @relation(fields: [promptGuideTypeId], references: [id])
   promptGuideTypeId Int?             @map("prompt_guide_type_id")
+  organizationId    String?          @map("organization_id") @db.VarChar(50)
 
   @@map("prompt_guide")
 }
