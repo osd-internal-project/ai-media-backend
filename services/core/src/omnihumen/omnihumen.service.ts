@@ -3,8 +3,6 @@ import { CreateOmnihumanDto } from './dto/create-omnihuman.dto';
 import { UpdateOmnihumanDto } from './dto/update-omnihuman.dto';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
 import { GenerateImageService } from 'src/generate-image/generate-image.service';
-import configs from 'src/configs';
-const config = configs();
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { HttpService } from '@nestjs/axios';
@@ -17,39 +15,35 @@ import {
   OmnihumenTaskRepository,
   UsersRepository,
 } from '@ai-media/share';
+import { ConfigType } from '@nestjs/config';
+import { byteplusConfigs, minioConfigs } from 'src/configs';
 
 @Injectable()
 export class OmnihumenService {
-  private readonly accessKeyId =
-    process.env.BYTEPLUS_ACCESS_KEY ||
-    'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';
-
-  private readonly secretAccessKey =
-    process.env.BYTEPLUS_SECRET_KEY ||
-    'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
-
   private readonly region = 'ap-singapore-1';
   private readonly service = 'cv';
   private readonly host = 'cv.byteplusapi.com';
   private readonly contentType = 'application/json';
 
   constructor(
+    private minioconfigs: ConfigType<typeof minioConfigs>,
+    private byteplusconfigs: ConfigType<typeof byteplusConfigs>,
     private readonly generateImageService: GenerateImageService,
     private readonly minioclientSerives: MinioClientService,
     private readonly httpService: HttpService,
     private readonly logrepo: LogRepository,
     private readonly omnihumenTaskRepository: OmnihumenTaskRepository,
     private readonly usersRepository: UsersRepository,
-  ) {}
+  ) { }
 
   async create(
     createOmnihumanDto: CreateOmnihumanDto,
     files: { image?: Express.Multer.File[]; audio?: Express.Multer.File[] },
   ) {
-    const baseUrl = configs().pathDomain;
+    // const baseUrl = configs().pathDomain;
     // const publicDomain = configs().pathPublicDomain;
     if (files?.audio && files?.image) {
-      const bucketname = config.minioBucketUpload;
+      const bucketname = this.minioconfigs.minioBucketUpload;
       const audioExt = path.extname(files.audio[0].originalname); // นามสกุลไฟล์
       const audioFileName = `${uuidv4()}${audioExt}`;
       const audio = await this.minioclientSerives
@@ -98,8 +92,8 @@ export class OmnihumenService {
       // );
       const generateTask = await this.submitTask({
         req_key: 'realman_avatar_picture_omni15_cv',
-        image_url: `${baseUrl}/stream-image/${imageFileName}`,
-        audio_url: `${baseUrl}/stream-image/${audioFileName}`,
+        // image_url: `${baseUrl}/stream-image/${imageFileName}`,
+        // audio_url: `${baseUrl}/stream-image/${audioFileName}`,
         // image_url: `${imageUrl}`,
         // audio_url: `${audioUrl}`,
         prompt: createOmnihumanDto.prompt || '',
@@ -221,7 +215,7 @@ export class OmnihumenService {
     const hmac = (key: Buffer | string, msg: string) =>
       crypto.createHmac('sha256', key).update(msg).digest();
 
-    const kDate = hmac(this.secretAccessKey, shortDate);
+    const kDate = hmac(this.byteplusconfigs.byteplusAccessKeyId, shortDate);
     const kRegion = hmac(kDate, this.region);
     const kService = hmac(kRegion, this.service);
     const kSigning = hmac(kService, 'request');
@@ -231,7 +225,7 @@ export class OmnihumenService {
       .update(stringToSign)
       .digest('hex');
 
-    const authorization = `HMAC-SHA256 Credential=${this.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+    const authorization = `HMAC-SHA256 Credential=${this.byteplusconfigs.byteplusSecretKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
     /** ---------- Headers ---------- */
     const headers = {

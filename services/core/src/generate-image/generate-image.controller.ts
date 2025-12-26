@@ -10,26 +10,27 @@ import {
   UseInterceptors,
   Query,
   Res,
-  Logger,
+  Inject,
 } from '@nestjs/common';
 import { GenerateImageService } from './generate-image.service';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
 import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import configs from 'src/configs';
 import { Response } from 'express';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
-const config = configs();
+import { minioConfigs } from 'src/configs';
+import { ConfigType } from '@nestjs/config';
 
 @Controller('generate-image')
 export class GenerateImageController {
-  constructor(
+  constructor(@Inject(minioConfigs.KEY)
+  private config: ConfigType<typeof minioConfigs>,
     private readonly GenerateImageService: GenerateImageService,
     private readonly minioclientSerives: MinioClientService,
-  ) {}
+  ) { }
 
   @Post()
   create(@Body('body') createGenerateImageDto: CreateGenerateImageDto) {
@@ -59,7 +60,7 @@ export class GenerateImageController {
   async download(@Param('imageName') imageName: string, @Res() res: Response) {
     try {
       const decoded = decodeURIComponent(imageName);
-      const bucket = config.minioBucket;
+      const bucket = this.config.minioBucket;
       const stream = await this.minioclientSerives.downloadFile(
         bucket,
         decoded,
@@ -90,7 +91,7 @@ export class GenerateImageController {
     try {
       const decoded = decodeURIComponent(vdoName);
       console.log(decoded);
-      const bucket = config.minioBucketVdo;
+      const bucket = this.config.minioBucketVdo;
       const stream = await this.minioclientSerives.downloadFile(
         bucket,
         decoded,
@@ -120,25 +121,25 @@ export class GenerateImageController {
   ) {
     try {
       const decoded = decodeURIComponent(imageName);
-      
+
       // Set CORS headers for cross-origin requests
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      
-      let bucket = config.minioBucketUpload;
+
+      let bucket = this.config.minioBucketUpload;
       let fileStats = await this.minioclientSerives.statFile(bucket, decoded);
-      
+
       if (!fileStats) {
-        bucket = config.minioBucket;
+        bucket = this.config.minioBucket;
         fileStats = await this.minioclientSerives.statFile(bucket, decoded);
       }
-      
+
       if (!fileStats) {
         console.log(`[DEBUG] Image not found in any bucket: ${decoded}`);
         return res.status(404).send('File not found');
       }
-      
+
       res.setHeader('Content-Type', 'image/jpeg');
       const stream = await this.minioclientSerives.downloadFile(
         bucket,
@@ -167,12 +168,12 @@ export class GenerateImageController {
   ) {
     try {
       const decoded = decodeURIComponent(imageName);
-      const bucket = config.minioBucketUpload;
-      
+      const bucket = this.config.minioBucketUpload;
+
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      
+
       const fileStats = await this.minioclientSerives.statFile(bucket, decoded);
       if (!fileStats) {
         console.log(`[DEBUG] Reference image not found: ${bucket}/${decoded}`);
@@ -180,7 +181,7 @@ export class GenerateImageController {
         const placeholder = `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#333"/><text x="16" y="16" text-anchor="middle" dominant-baseline="central" font-family="Arial" font-size="8" fill="#666">No Image</text></svg>`;
         return res.send(placeholder);
       }
-      
+
       res.setHeader('Content-Type', 'image/jpeg');
       const stream = await this.minioclientSerives.downloadFile(
         bucket,
@@ -221,7 +222,7 @@ export class GenerateImageController {
     @Body('type') type,
   ) {
     if (type && files.length > 0) {
-      const bucketname = config.minioBucketUpload;
+      const bucketname = this.config.minioBucketUpload;
       const savedFiles = await Promise.all(
         files.map((file) => {
           const ext = path.extname(file.originalname); // นามสกุลไฟล์

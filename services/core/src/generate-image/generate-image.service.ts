@@ -7,31 +7,27 @@ import {
   MasterDataConfigApiRepository,
   UsersRepository,
 } from '@ai-media/share';
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
 import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import axios from 'axios';
 import * as https from 'https';
-import configs from 'src/configs';
 import { v4 as uuidv4 } from 'uuid';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
-import { exec } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-const baseUrl = configs().pathDomain;
-const { minioBucket, minioBucketVdo, minioBucketUpload } = configs();
+import { ConfigType } from '@nestjs/config';
+import { minioConfigs } from 'src/configs';
 @Injectable()
 export class GenerateImageService {
   constructor(
+    private minioconfig: ConfigType<typeof minioConfigs>,
     private readonly generateimagerepo: GenerateImageRepository,
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly userRepo: UsersRepository,
-    private readonly minioclientSerives: MinioClientService,
-  ) {}
+    private readonly minioClientSerives: MinioClientService,
+  ) { }
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -48,24 +44,24 @@ export class GenerateImageService {
       },
       httpsAgent: agent,
     };
-    
+
     const description = createGenerateImageDto.image
       ? 'image-to-image'
       : 'text-to-image';
     // Use selected model if provided, otherwise fall back to automatic detection
     const getModelType = createGenerateImageDto.modelName
       ? await this.modeltypeRepo.findOne({
-          where: {
-            modelType: createGenerateImageDto.modelName,
-            type: createGenerateImageDto.type,
-          },
-        } as Prisma.MasterModelTypeFindFirstArgs)
+        where: {
+          modelType: createGenerateImageDto.modelName,
+          type: createGenerateImageDto.type,
+        },
+      } as Prisma.MasterModelTypeFindFirstArgs)
       : await this.modeltypeRepo.findOne({
-          where: {
-            type: createGenerateImageDto.type,
-            description: description,
-          },
-        } as Prisma.MasterModelTypeFindFirstArgs);
+        where: {
+          type: createGenerateImageDto.type,
+          description: description,
+        },
+      } as Prisma.MasterModelTypeFindFirstArgs);
 
     if (createGenerateImageDto.type === 'vdo') {
       const totalVDOGenerate = await this.logrepo.findMany({
@@ -92,8 +88,8 @@ export class GenerateImageService {
       console.log(`imageCount: ${imageCount}`);
       let imageContents: any[] = [];
       if (imageCount === 1) {
-        const imageUrl = await this.createMinioFileUrl(
-          minioBucketUpload,
+        const imageUrl = await this.minioClientSerives.getPresignedUrl(
+          this.minioconfig.minioBucketUpload,
           imageArray[0],
         );
         imageContents.push({
@@ -103,12 +99,12 @@ export class GenerateImageService {
           },
         });
       } else if (imageCount >= 2) {
-        const imageUrl1 = await this.createMinioFileUrl(
-          minioBucketUpload,
+        const imageUrl1 = await this.minioClientSerives.getPresignedUrl(
+          this.minioconfig.minioBucketUpload,
           imageArray[0],
         );
-        const imageUrl2 = await this.createMinioFileUrl(
-          minioBucketUpload,
+        const imageUrl2 = await this.minioClientSerives.getPresignedUrl(
+          this.minioconfig.minioBucketUpload,
           imageArray[1],
         );
         console.log(`Image URL 1: ${imageUrl1}`);
@@ -136,7 +132,7 @@ export class GenerateImageService {
           ...imageContents,
         ],
       };
-      
+
       const generateVideo = await axios.post(
         `${getConfigApi.apiCreateTaskVdo}`,
         base,
@@ -208,7 +204,7 @@ export class GenerateImageService {
       ) {
         imageUrl = await Promise.all(
           createGenerateImageDto.image.map((img) =>
-            this.createMinioFileUrl(minioBucketUpload, img),
+            this.minioClientSerives.getPresignedUrl(this.minioconfig.minioBucketUpload, img),
           ),
         );
       }
@@ -231,8 +227,8 @@ export class GenerateImageService {
         response_format: 'url',
         ...(createGenerateImageDto.width &&
           createGenerateImageDto.height && {
-            size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
-          }),
+          size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
+        }),
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {
@@ -284,10 +280,10 @@ export class GenerateImageService {
               ext = 'jpg';
             }
             const objectName = `${uuid}/${uuidName}.${ext}`;
-            await this.minioclientSerives.uploadFile(
+            await this.minioClientSerives.uploadFile(
               buffer,
               buffer.length,
-              minioBucket,
+              this.minioconfig.minioBucket,
               objectName,
             );
             return await this.galleryRepo.create({
@@ -343,10 +339,10 @@ export class GenerateImageService {
         ext = 'mp4';
       }
       const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
-      await this.minioclientSerives.uploadFile(
+      await this.minioClientSerives.uploadFile(
         buffer,
         buffer.length,
-        minioBucketVdo,
+        this.minioconfig.minioBucketVdo,
         objectName,
       );
       await this.galleryRepo.create({
@@ -466,8 +462,8 @@ export class GenerateImageService {
 
         // const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
         // const thumbnailFileName = `thumb-${Date.now()}.png`;
-        const result = await this.minioclientSerives.uploadVideoWithThumbnail(
-          minioBucketVdo,
+        const result = await this.minioClientSerives.uploadVideoWithThumbnail(
+          this.minioconfig.minioBucketVdo,
           mockFile,
           id,
         );
@@ -501,11 +497,11 @@ export class GenerateImageService {
       throw error; // Re-throw the original error or a meaningful one
     }
   }
-  async createMinioFileUrl(bucketName: string, path: string) {
-    const url = await this.minioclientSerives.getPresignedUrl(bucketName, path);
-    const domain = configs().pathPublicDomain;
-    const ip = configs().pathPublicIp;
-    console.log(url.replace(ip, domain));
-    return url.replace(ip, domain);
-  }
+  // async createMinioFileUrl(bucketName: string, path: string) {
+  //   const url = await this.minioclientSerives.getPresignedUrl(bucketName, path);
+  //   const domain = this.appconfigs.pathPublicDomain;
+  //   const ip = this.appconfigs.pathPublicIp;
+  //   console.log(url.replace(ip, domain));
+  //   return url.replace(ip, domain);
+  // }
 }

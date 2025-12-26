@@ -1,16 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { GalleryRepository } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
-import configs from 'src/configs';
-const { minioBucket, minioBucketVdo } = configs();
-
+import { ConfigType } from '@nestjs/config';
+import { minioConfigs } from 'src/configs';
 @Injectable()
 export class GalleryService {
-  constructor(
+  constructor(@Inject(minioConfigs.KEY)
+  private minioconfigs: ConfigType<typeof minioConfigs>,
     private readonly galleryRepo: GalleryRepository,
     private readonly minioService: MinioClientService,
-  ) {}
+  ) { }
+
   create(createGalleryDto: Prisma.GalleryCreateInput) {
     return this.galleryRepo.create({ data: createGalleryDto });
   }
@@ -40,15 +41,15 @@ export class GalleryService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo' ? minioBucketVdo : minioBucket,
-            item.imageUrl,
-          )
+          item.typeGenerate === 'vdo' ? this.minioconfigs.minioBucketVdo : this.minioconfigs.minioBucket,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo' ? minioBucketVdo : minioBucket,
-            item.thumbnailUrl,
-          )
+          item.typeGenerate === 'vdo' ? this.minioconfigs.minioBucketVdo : this.minioconfigs.minioBucket,
+          item.thumbnailUrl,
+        )
         : '';
       newData.set(item.id, {
         ...item,

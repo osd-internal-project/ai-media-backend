@@ -1,4 +1,3 @@
-import configs from './configs';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { InventoryController } from './app.controller';
@@ -21,10 +20,11 @@ import { OmnihumenModule } from './omnihumen/omnihumen.module';
 import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AiModelModule } from './ai-model/ai-model.module';
+import { appConfigs } from './configs';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [configs] }),
+    ConfigModule.forRoot({ isGlobal: true, load: [appConfigs] }),
     ScheduleModule.forRoot(),
     PrismaModule,
     GenerateImageModule,

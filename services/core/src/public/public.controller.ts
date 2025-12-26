@@ -1,15 +1,15 @@
-import { Controller, Get, Param, Query, Res } from '@nestjs/common';
+import { Controller, Get, Inject, Param, Query, Res } from '@nestjs/common';
 import { join } from 'path';
 import { createReadStream } from 'fs';
 import { Response } from 'express';
-import configs from 'src/configs';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
-const { minioBucket, minioBucketVdo, minioBucketUpload, minioBucketFile } =
-  configs();
+import { minioConfigs } from 'src/configs';
+import { ConfigType } from '@nestjs/config';
 
 @Controller('public')
 export class PublicController {
-  constructor(private readonly minioService: MinioClientService) { }
+  constructor(@Inject(minioConfigs.KEY)
+  private config: ConfigType<typeof minioConfigs>, private readonly minioService: MinioClientService) { }
 
   @Get('generate-image/:id')
   async getNewsImageFile(@Param('id') id: string, @Res() res: Response) {
@@ -17,7 +17,7 @@ export class PublicController {
       console.log('imageName', id);
       const decoded = decodeURIComponent(id);
       console.log('decoded', decoded);
-      const bucket = minioBucketUpload;
+      const bucket = this.config.minioBucketUpload;
       // ตรวจสอบว่าไฟล์มีอยู่จริง
       const stat = await this.minioService.statFile(bucket, decoded);
       if (!stat) return res.status(404).send('File not found');
@@ -57,7 +57,7 @@ export class PublicController {
       console.log('imageName', id);
       const decoded = decodeURIComponent(id);
       console.log('decoded', decoded);
-      const bucket = minioBucketUpload;
+      const bucket = this.config.minioBucketUpload;
       // ตรวจสอบว่าไฟล์มีอยู่จริง
       const stat = await this.minioService.statFile(bucket, decoded);
       if (!stat) return res.status(404).send('File not found');
@@ -106,7 +106,7 @@ export class PublicController {
   ) {
     try {
       const decodedName = decodeURIComponent(imageName);
-      const bucket = minioBucket;
+      const bucket = this.config.minioBucket;
 
       // เช็คว่าไฟล์มีจริง
       const stat = await this.minioService.statFile(bucket, decodedName);
@@ -146,7 +146,7 @@ export class PublicController {
   async getPublicVdo(@Param('vdoName') vdoName: string, @Res() res: Response) {
     try {
       const decodedName = decodeURIComponent(vdoName);
-      const bucket = minioBucketVdo;
+      const bucket = this.config.minioBucketVdo;
 
       // // เช็คไฟล์ใน MinIO
       // const stat = await this.minioService.statFile(bucket, decodedName);
@@ -180,7 +180,7 @@ export class PublicController {
   async getPublicFile(@Param('file') file: string, @Res() res: Response) {
     try {
       const decodedName = decodeURIComponent(file);
-      const bucket = minioBucketFile;
+      const bucket = this.config.minioBucketFile;
 
       // เช็คไฟล์ใน MinIO
       const stat = await this.minioService.statFile(bucket, decodedName);
