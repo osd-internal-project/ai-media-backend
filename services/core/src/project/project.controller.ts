@@ -25,12 +25,12 @@ export class ProjectController {
     return this.projectService.findAll();
   }
 
-  @Get('manage/:organizationId')
+  @Get('organization/:organizationId')
   findByOrganizationId(
     @Param('organizationId') organizationId: string,
-    @Query('userId') userId: string,
+    @Query('token') token: string,
   ) {
-    return this.projectService.findByOrganizationId(organizationId, userId);
+    return this.projectService.findByOrganizationId(organizationId, token);
   }
 
   @Get('manage/:id')
