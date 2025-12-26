@@ -53,4 +53,25 @@ export class ProjectController {
   remove(@Param('id') id: string) {
     return this.projectService.remove(id);
   }
+
+  @Get(':projectId/members')
+  getProjectMembers(@Param('projectId') projectId: string) {
+    return this.projectService.getProjectMembers(projectId);
+  }
+
+  @Get(':projectId/role/:userId')
+  getUserRole(
+    @Param('projectId') projectId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.projectService.checkUserRole(projectId, userId);
+  }
+
+  @Get(':projectId/admin/:userId')
+  isProjectAdmin(
+    @Param('projectId') projectId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.projectService.isProjectAdmin(projectId, userId);
+  }
 }
