@@ -31,4 +31,12 @@ export class PromptGuideService {
   remove(id: number) {
     return this.promptguideRepo.delete({ where: { id } });
   }
+
+  findByOrganization(organizationId: string) {
+    return this.promptguideRepo.findMany({
+      where: {
+        organizationId,
+      },
+    });
+  }
 }

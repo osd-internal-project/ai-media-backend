@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { CreateOrganizationMemberDto } from './dto/create-organization-members.dto';
 import { UpdateOrganizationMemberDto } from './dto/update-organization-members.dto';
 import { OrganizationMemberRepository } from '@ai-media/share';
+import { UsersRepository } from '@ai-media/share';
 
 @Injectable()
 export class OrganizationMembersService {
   constructor(
     private readonly organizationMemberRepo: OrganizationMemberRepository,
+    private readonly usersRepo: UsersRepository,
   ) {}
 
   create(createOrganizationMembersDto: CreateOrganizationMemberDto) {
@@ -30,7 +32,14 @@ export class OrganizationMembersService {
       where: { organizationId },
     });
   }
-
+  async findUserMemberByOrganization(organizationId: string, token: string) {
+    const user = await this.usersRepo.findOne({
+      where: { token },
+    });
+    return this.organizationMemberRepo.findOne({
+      where: { organizationId, userId: user?.userId },
+    });
+  }
   update(
     id: number,
     updateOrganizationMembersDto: UpdateOrganizationMemberDto,

@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { PromptGuideTypeService } from './prompt-guide-type.service';
 import { Prisma } from '@prisma/client';
@@ -24,8 +25,8 @@ export class PromptGuideTypeController {
   }
 
   @Get()
-  findAll() {
-    return this.promptGuideTypeService.findAll();
+  findAll(@Query('organizationId') organizationId?: string) {
+    return this.promptGuideTypeService.findAll(organizationId);
   }
 
   @Get(':id')
