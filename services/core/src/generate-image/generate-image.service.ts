@@ -159,6 +159,9 @@ export class GenerateImageService {
           status: 'pending',
           tokenUsed: 0,
           ImageUsed: 0,
+          referenceImages: createGenerateImageDto.image || [],
+          resolution: createGenerateImageDto.resolution || '2k',
+          ratio: createGenerateImageDto.ratio || '1:1',
         },
       });
       return { status: 200, data: generateVideo.data };
