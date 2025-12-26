@@ -48,6 +48,13 @@ export class UsersRepository {
     const prisma = option?.prisma ?? this.prisma;
     return prisma.users.update(data);
   }
+  async updateMany(
+    data: Prisma.usersUpdateManyArgs,
+    option?: { prisma?: TQueryClient },
+  ) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.users.updateMany(data);
+  }
   async delete(
     condition: Prisma.usersDeleteArgs,
     option?: { prisma?: TQueryClient },

@@ -15,6 +15,8 @@ import {
   PromptGuideRepository,
   PromptGuideTypeRepository,
   OmnihumenTaskRepository,
+  OrganizationRepository,
+  OrganizationMemberRepository,
 } from 'src/repositories';
 
 const services = [
@@ -33,6 +35,8 @@ const services = [
   PromptGuideRepository,
   PromptGuideTypeRepository,
   OmnihumenTaskRepository,
+  OrganizationRepository,
+  OrganizationMemberRepository,
 ];
 
 @Module({

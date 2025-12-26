@@ -12,6 +12,8 @@ import { GroupsModule } from './groups/groups.module';
 import { RolesModule } from './roles/roles.module';
 import { RolesOfGroupsModule } from './roles-of-groups/roles-of-groups.module';
 import { UsersOfGroupsModule } from './users-of-groups/users-of-groups.module';
+import { OrganizationModule } from './organization/organization.module';
+import { OrganizationMembersModule } from './organization-members/organization-members.module';
 @Module({
   imports: [
     PrismaModule,
@@ -21,6 +23,8 @@ import { UsersOfGroupsModule } from './users-of-groups/users-of-groups.module';
     RolesModule,
     RolesOfGroupsModule,
     UsersOfGroupsModule,
+    OrganizationModule,
+    OrganizationMembersModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

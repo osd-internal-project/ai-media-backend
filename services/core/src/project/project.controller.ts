@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { Prisma } from '@prisma/client';
@@ -24,16 +25,22 @@ export class ProjectController {
     return this.projectService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.projectService.findOne(id);
+  @Get('manage/:organizationId')
+  findByOrganizationId(
+    @Param('organizationId') organizationId: string,
+    @Query('userId') userId: string,
+  ) {
+    return this.projectService.findByOrganizationId(organizationId, userId);
   }
 
   @Get('manage/:id')
   findManageRoles(@Param('id') id: string) {
     return this.projectService.findById(id);
   }
-
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.projectService.findOne(id);
+  }
   @Patch(':id')
   update(
     @Param('id') id: string,

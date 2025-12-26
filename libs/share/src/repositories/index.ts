@@ -12,3 +12,5 @@ export * from './masterdataConfigApi.repository';
 export * from './promptGuide.repository';
 export * from './promptGuideType.repository';
 export * from './omnihumenTask.repository';
+export * from './organization.repository';
+export * from './organizationMember.repository';
