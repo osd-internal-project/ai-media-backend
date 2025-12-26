@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { appConfigs } from 'src/configs';
 import { ConfigType } from '@nestjs/config';
+import Redis from 'ioredis';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpegPath = require('ffmpeg-static');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -15,7 +16,7 @@ ffmpeg.setFfprobePath(ffprobePath.path);
 @Injectable()
 export class MinioClientService {
   constructor(@Inject(appConfigs.KEY)
-  private appconfigs: ConfigType<typeof appConfigs>, private readonly minio: MinioService) { }
+  private appconfigs: ConfigType<typeof appConfigs>, private readonly minio: MinioService, @Inject('REDIS_CLIENT') private readonly redis: Redis) { }
   private get minioClient() {
     return this.minio.client;
   }
@@ -51,17 +52,27 @@ export class MinioClientService {
   }
 
   async getPresignedUrl(bucket: string, filename: string): Promise<string> {
-    // สร้าง Presigned แบบปกติ (จะได้ URL เป็น internal IP)
-    const url = await this.minioClient.presignedGetObject(bucket, filename);
-    // ใช้ Class URL ของ Node.js เพื่อเปลี่ยน Host อย่างปลอดภัย (ดีกว่า .replace string ดิบๆ)
-    // console.log(this.appconfigs.storagePath)
-    const urlObj = new URL(url);
-    urlObj.protocol = 'https:';
-    urlObj.hostname = 'www.aicave.ai';
-    urlObj.port = ''; // ลบ port
-    urlObj.pathname = `/public/api/v1/s3${urlObj.pathname}`;
+    const cacheKey = `s3_url:${bucket}:${filename}`;
+    const cachedUrl = await this.redis.get(cacheKey);
+    if (cachedUrl) {
+      console.log('Cache HIT via Redis');
+      return cachedUrl;
+    } else {
 
-    return urlObj.toString();
+      console.log('Cache MISS - Generating new URL');
+      const storagePath = this.appconfigs.storagePath
+      const storageUrl = new URL(storagePath);
+      const url = await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60,);
+      const urlObj = new URL(url);
+      urlObj.protocol = storageUrl.protocol;
+      urlObj.hostname = storageUrl.hostname;
+      urlObj.port = storageUrl.port;
+      urlObj.pathname = `${storageUrl.pathname}${urlObj.pathname}`;
+      const finalUrl = urlObj.toString();
+      await this.redis.set(cacheKey, finalUrl, 'EX', 23 * 60 * 60);
+
+      return finalUrl;
+    }
   }
 
   async uploadVideoWithThumbnail(

@@ -21,6 +21,7 @@ import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AiModelModule } from './ai-model/ai-model.module';
 import { appConfigs, minioConfigs, byteplusConfigs } from './configs';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { appConfigs, minioConfigs, byteplusConfigs } from './configs';
     OmnihumenModule,
     OmnihumenTaskModule,
     AiModelModule,
+    RedisModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
