@@ -14,7 +14,7 @@ export const minioConfigs = registerAs('s3', () => ({
   minioSecretKey: process.env.MINIO_SECRETKEY,
   minioBucket: process.env.MINIO_BUCKET,
   minioBucketUpload: process.env.MINIO_BUCKET_UPLOAD,
-  minioBucketFile: process.env.MINIO_BUCKET_FILE || 'ai-media-file',
+  minioBucketFile: process.env.MINIO_BUCKET_FILE,
   minioBucketVdo: process.env.MINIO_BUCKET_VDO,
   minioUseSsl: process.env.MINIO_USE_SSL === 'true',
 }));

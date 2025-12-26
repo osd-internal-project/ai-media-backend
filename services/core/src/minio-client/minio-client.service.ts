@@ -1,8 +1,10 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { MinioService } from 'nestjs-minio-client';
 import * as ffmpeg from 'fluent-ffmpeg';
 import * as fs from 'fs';
 import * as path from 'path';
+import { appConfigs } from 'src/configs';
+import { ConfigType } from '@nestjs/config';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpegPath = require('ffmpeg-static');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -12,7 +14,8 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
 @Injectable()
 export class MinioClientService {
-  constructor(private readonly minio: MinioService) { }
+  constructor(@Inject(appConfigs.KEY)
+  private appconfigs: ConfigType<typeof appConfigs>, private readonly minio: MinioService) { }
   private get minioClient() {
     return this.minio.client;
   }
@@ -51,9 +54,12 @@ export class MinioClientService {
     // สร้าง Presigned แบบปกติ (จะได้ URL เป็น internal IP)
     const url = await this.minioClient.presignedGetObject(bucket, filename);
     // ใช้ Class URL ของ Node.js เพื่อเปลี่ยน Host อย่างปลอดภัย (ดีกว่า .replace string ดิบๆ)
+    // console.log(this.appconfigs.storagePath)
     const urlObj = new URL(url);
     urlObj.protocol = 'https:';
-    urlObj.host = 'media.aicave.ai'; // เปลี่ยนแค่ Host, Path และ Query Params (Signature) ยังอยู่ครบ
+    urlObj.hostname = 'www.aicave.ai';
+    urlObj.port = ''; // ลบ port
+    urlObj.pathname = `/public/api/v1/s3${urlObj.pathname}`;
 
     return urlObj.toString();
   }
