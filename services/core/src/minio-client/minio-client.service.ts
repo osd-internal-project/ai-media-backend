@@ -55,11 +55,11 @@ export class MinioClientService {
     const cacheKey = `s3_url:${bucket}:${filename}`;
     const cachedUrl = await this.redis.get(cacheKey);
     if (cachedUrl) {
-      console.log('Cache HIT via Redis');
+      // console.log('Cache HIT via Redis');
       return cachedUrl;
     } else {
 
-      console.log('Cache MISS - Generating new URL');
+      // console.log('Cache MISS - Generating new URL');
       const storagePath = this.appconfigs.storagePath
       const storageUrl = new URL(storagePath);
       const url = await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60,);
