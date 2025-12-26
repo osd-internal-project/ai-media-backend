@@ -45,10 +45,9 @@ export class GenerateImageService {
       httpsAgent: agent,
     };
 
-    const description = createGenerateImageDto.image
-      ? 'image-to-image'
-      : 'text-to-image';
-    // Use selected model if provided, otherwise fall back to automatic detection
+    const description = createGenerateImageDto.type === 'vdo'
+      ? (createGenerateImageDto.image ? 'image-to-video' : 'text-to-video')
+      : (createGenerateImageDto.image ? 'image-to-image' : 'text-to-image');
     const getModelType = createGenerateImageDto.modelName
       ? await this.modeltypeRepo.findOne({
         where: {

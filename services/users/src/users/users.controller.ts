@@ -32,6 +32,10 @@ export class UsersController {
   findBySearch(@Query('search') search?: string) {
     return this.usersService.findBySearch(search);
   }
+  @Get('/detail/:token')
+  findDetailByToken(@Param('token') token: string) {
+    return this.usersService.findDetailByToken(token);
+  }
   @Get(':userId')
   findOne(@Param('userId') userId: string) {
     return this.usersService.findOne(userId);
@@ -44,13 +48,13 @@ export class UsersController {
   ) {
     return this.usersService.update(userId, updateUserDto);
   }
-  @Patch('detail/:userId')
-  updateDetail(
-    @Param('userId') userId: string,
+  @Patch('detail/:token')
+  updateDetailByToken(
+    @Param('token') token: string,
     @Body('body') updateUserDto: Prisma.usersUpdateInput,
   ) {
     console.log(updateUserDto);
-    return this.usersService.updateDetail(userId, updateUserDto);
+    return this.usersService.updateDetailByToken(token, updateUserDto);
   }
   @Delete(':userId')
   remove(@Param('userId') userId: string) {

@@ -67,7 +67,8 @@ export class ProjectService {
   async findById(id: string) {
     return this.projectRepo.findOne({ where: { id } });
   }
-  async findByOrganizationId(organizationId: string, userId: string) {
+  async findByOrganizationId(organizationId: string, token: string) {
+    const { userId } = await this.usersRepo.findOne({ where: { token } });
     return this.projectRepo.findMany({
       where: {
         organizationId,
