@@ -6,7 +6,11 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { UsersRepository, GroupsRepository } from '@ai-media/share';
+import {
+  UsersRepository,
+  GroupsRepository,
+  OrganizationMemberRepository,
+} from '@ai-media/share';
 
 import axios from 'axios';
 import configs from 'src/configs';
@@ -16,6 +20,7 @@ export class UsersService {
   constructor(
     private readonly userRepo: UsersRepository,
     private readonly groupRepo: GroupsRepository,
+    private readonly organizationMemberRepo: OrganizationMemberRepository,
   ) {}
 
   async create(createUserDto: any) {
@@ -122,7 +127,21 @@ export class UsersService {
     });
     return getdataUser;
   }
-
+  async findOrganizationUserDetails(organizationId: string) {
+    const members = await this.organizationMemberRepo.findMany({
+      where: {
+        organizationId,
+      },
+    });
+    const userIds = members.map((member) => member.userId);
+    return this.userRepo.findMany({
+      where: {
+        userId: {
+          in: userIds,
+        },
+      },
+    });
+  }
   async update(userId: string, updateUserDto: any) {
     // 1. Update in Keycloak
     // We assume userId is the Keycloak User ID

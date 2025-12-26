@@ -36,6 +36,10 @@ export class UsersController {
   findDetailByToken(@Param('token') token: string) {
     return this.usersService.findDetailByToken(token);
   }
+  @Get('/organization/:organizationId')
+  findOrganizationUserDetails(@Param('organizationId') organizationId: string) {
+    return this.usersService.findOrganizationUserDetails(organizationId);
+  }
   @Get(':userId')
   findOne(@Param('userId') userId: string) {
     return this.usersService.findOne(userId);
