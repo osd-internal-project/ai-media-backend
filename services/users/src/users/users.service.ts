@@ -89,6 +89,13 @@ export class UsersService {
       orderBy: { createdAt: 'asc' },
     });
   }
+  findDetailByToken(token: string) {
+    return this.userRepo.findOne({
+      where: {
+        token,
+      },
+    });
+  }
   findOne(userId: string) {
     const getdataUser = this.groupRepo.findOne({
       where: {
@@ -149,9 +156,12 @@ export class UsersService {
       },
     });
   }
-  async updateDetail(userId: string, updateUserDto: Prisma.usersUpdateInput) {
+  async updateDetailByToken(
+    token: string,
+    updateUserDto: Prisma.usersUpdateInput,
+  ) {
     return this.userRepo.updateMany({
-      where: { userId },
+      where: { token },
       data: updateUserDto,
     });
   }
