@@ -20,11 +20,11 @@ import { OmnihumenModule } from './omnihumen/omnihumen.module';
 import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AiModelModule } from './ai-model/ai-model.module';
-import { appConfigs } from './configs';
+import { appConfigs, minioConfigs, byteplusConfigs } from './configs';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [appConfigs] }),
+    ConfigModule.forRoot({ isGlobal: true, load: [appConfigs, minioConfigs, byteplusConfigs] }),
     ScheduleModule.forRoot(),
     PrismaModule,
     GenerateImageModule,

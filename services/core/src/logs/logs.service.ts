@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   LogRepository,
   GalleryRepository,
@@ -12,6 +12,7 @@ import { ConfigType } from '@nestjs/config';
 @Injectable()
 export class LogsService {
   constructor(
+    @Inject(minioConfigs.KEY)
     private minioconfig: ConfigType<typeof minioConfigs>,
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,

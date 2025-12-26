@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { CreateOmnihumanDto } from './dto/create-omnihuman.dto';
 import { UpdateOmnihumanDto } from './dto/update-omnihuman.dto';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
@@ -26,7 +26,9 @@ export class OmnihumenService {
   private readonly contentType = 'application/json';
 
   constructor(
+    @Inject(minioConfigs.KEY)
     private minioconfigs: ConfigType<typeof minioConfigs>,
+    @Inject(byteplusConfigs.KEY)
     private byteplusconfigs: ConfigType<typeof byteplusConfigs>,
     private readonly generateImageService: GenerateImageService,
     private readonly minioclientSerives: MinioClientService,

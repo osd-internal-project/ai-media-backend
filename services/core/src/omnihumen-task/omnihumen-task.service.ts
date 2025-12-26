@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CreateOmnihumenTaskDto } from './dto/create-omnihumen-task.dto';
 import { UpdateOmnihumenTaskDto } from './dto/update-omnihumen-task.dto';
 import { GalleryRepository, OmnihumenTaskRepository } from '@ai-media/share';
@@ -18,7 +18,9 @@ export class OmnihumenTaskService {
   private readonly logger = new Logger(OmnihumenTaskService.name);
 
   constructor(
+    @Inject(byteplusConfigs.KEY)
     private byteplusconfigs: ConfigType<typeof byteplusConfigs>,
+    @Inject(minioConfigs.KEY)
     private minioconfigs: ConfigType<typeof minioConfigs>,
     private readonly omnihumenTaskRepo: OmnihumenTaskRepository,
     private readonly httpService: HttpService,

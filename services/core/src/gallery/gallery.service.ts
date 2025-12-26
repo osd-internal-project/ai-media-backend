@@ -6,8 +6,9 @@ import { ConfigType } from '@nestjs/config';
 import { minioConfigs } from 'src/configs';
 @Injectable()
 export class GalleryService {
-  constructor(@Inject(minioConfigs.KEY)
-  private minioconfigs: ConfigType<typeof minioConfigs>,
+  constructor(
+    @Inject(minioConfigs.KEY)
+    private minioconfigs: ConfigType<typeof minioConfigs>,
     private readonly galleryRepo: GalleryRepository,
     private readonly minioService: MinioClientService,
   ) { }

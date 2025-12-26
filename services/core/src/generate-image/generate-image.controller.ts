@@ -26,8 +26,9 @@ import { ConfigType } from '@nestjs/config';
 
 @Controller('generate-image')
 export class GenerateImageController {
-  constructor(@Inject(minioConfigs.KEY)
-  private config: ConfigType<typeof minioConfigs>,
+  constructor(
+    @Inject(minioConfigs.KEY)
+    private config: ConfigType<typeof minioConfigs>,
     private readonly GenerateImageService: GenerateImageService,
     private readonly minioclientSerives: MinioClientService,
   ) { }

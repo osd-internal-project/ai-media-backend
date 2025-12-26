@@ -19,6 +19,7 @@ import { minioConfigs } from 'src/configs';
 @Injectable()
 export class GenerateImageService {
   constructor(
+    @Inject(minioConfigs.KEY)
     private minioconfig: ConfigType<typeof minioConfigs>,
     private readonly generateimagerepo: GenerateImageRepository,
     private readonly logrepo: LogRepository,

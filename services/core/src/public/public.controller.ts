@@ -8,8 +8,9 @@ import { ConfigType } from '@nestjs/config';
 
 @Controller('public')
 export class PublicController {
-  constructor(@Inject(minioConfigs.KEY)
-  private config: ConfigType<typeof minioConfigs>, private readonly minioService: MinioClientService) { }
+  constructor(
+    @Inject(minioConfigs.KEY)
+    private config: ConfigType<typeof minioConfigs>, private readonly minioService: MinioClientService) { }
 
   @Get('generate-image/:id')
   async getNewsImageFile(@Param('id') id: string, @Res() res: Response) {
