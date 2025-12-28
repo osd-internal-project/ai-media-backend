@@ -16,7 +16,7 @@ export class PromptGuideService {
   }
 
   findOne(id: number) {
-    return `This action returns a #${id} promptGuide`;
+    return this.promptguideRepo.findOne({ where: { id } });
   }
 
   update(id: number, updatePromptGuideDto: Prisma.PromptGuideUpdateInput) {
@@ -30,5 +30,13 @@ export class PromptGuideService {
 
   remove(id: number) {
     return this.promptguideRepo.delete({ where: { id } });
+  }
+
+  findByOrganization(organizationId: string) {
+    return this.promptguideRepo.findMany({
+      where: {
+        organizationId,
+      },
+    });
   }
 }

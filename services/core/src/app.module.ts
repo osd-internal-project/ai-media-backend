@@ -1,4 +1,3 @@
-import configs from './configs';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { InventoryController } from './app.controller';
@@ -16,9 +15,18 @@ import { MasteradataConfigApiModule } from './masteradata-config-api/masteradata
 import { DashboardModule } from './dashboard/dashboard.module';
 import { MinioClientModule } from './minio-client/minio-client.module';
 import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
+import { PromptGuideTypeModule } from './prompt-guide-type/prompt-guide-type.module';
+import { OmnihumenModule } from './omnihumen/omnihumen.module';
+import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { AiModelModule } from './ai-model/ai-model.module';
+import { appConfigs, minioConfigs, byteplusConfigs } from './configs';
+import { RedisModule } from './redis/redis.module';
+
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [configs] }),
+    ConfigModule.forRoot({ isGlobal: true, load: [appConfigs, minioConfigs, byteplusConfigs] }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     GenerateImageModule,
     HttpModule,
@@ -30,6 +38,11 @@ import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
     DashboardModule,
     MinioClientModule,
     PromptGuideModule,
+    PromptGuideTypeModule,
+    OmnihumenModule,
+    OmnihumenTaskModule,
+    AiModelModule,
+    RedisModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

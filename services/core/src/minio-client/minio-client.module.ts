@@ -2,20 +2,19 @@ import { Module } from '@nestjs/common';
 import { MinioClientService } from './minio-client.service';
 import { MinioModule } from 'nestjs-minio-client';
 import { ConfigModule } from '@nestjs/config';
-import configs from 'src/configs';
-const { minioEndpoint, minioPort, minioAccesskey, minioSecretKey } = configs();
+import { minioConfigs } from 'src/configs';
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [configs] }),
+    ConfigModule.forRoot({ isGlobal: true, load: [minioConfigs] }),
     MinioModule.register({
-      endPoint: minioEndpoint,
-      port: +minioPort,
-      useSSL: false,
-      accessKey: minioAccesskey,
-      secretKey: minioSecretKey,
+      endPoint: minioConfigs().minioEndpoint,
+      port: +minioConfigs().minioPort,
+      accessKey: minioConfigs().minioAccesskey,
+      secretKey: minioConfigs().minioSecretKey,
+      useSSL: minioConfigs().minioUseSsl,
     }),
   ],
   providers: [MinioClientService],
   exports: [MinioClientService],
 })
-export class MinioClientModule {}
+export class MinioClientModule { }

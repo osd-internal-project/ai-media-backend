@@ -11,7 +11,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
 
   async onModuleInit() {
-    this.logger.log('connecting prisma DB Billing');
+    this.logger.log('connecting prisma DB Ai Media');
     await this.$connect();
   }
 

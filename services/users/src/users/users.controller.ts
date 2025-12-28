@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { Prisma } from '@prisma/client';
@@ -27,7 +28,18 @@ export class UsersController {
   summaryData() {
     return this.usersService.summaryData();
   }
-
+  @Get('search')
+  findBySearch(@Query('search') search?: string) {
+    return this.usersService.findBySearch(search);
+  }
+  @Get('/detail/:token')
+  findDetailByToken(@Param('token') token: string) {
+    return this.usersService.findDetailByToken(token);
+  }
+  @Get('/organization/:organizationId')
+  findOrganizationUserDetails(@Param('organizationId') organizationId: string) {
+    return this.usersService.findOrganizationUserDetails(organizationId);
+  }
   @Get(':userId')
   findOne(@Param('userId') userId: string) {
     return this.usersService.findOne(userId);
@@ -40,7 +52,14 @@ export class UsersController {
   ) {
     return this.usersService.update(userId, updateUserDto);
   }
-
+  @Patch('detail/:token')
+  updateDetailByToken(
+    @Param('token') token: string,
+    @Body('body') updateUserDto: Prisma.usersUpdateInput,
+  ) {
+    console.log(updateUserDto);
+    return this.usersService.updateDetailByToken(token, updateUserDto);
+  }
   @Delete(':userId')
   remove(@Param('userId') userId: string) {
     return this.usersService.remove(userId);

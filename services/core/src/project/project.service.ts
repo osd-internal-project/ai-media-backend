@@ -12,6 +12,7 @@ export class ProjectService {
     return this.projectRepo.create({
       data: {
         name: createProjectDto.name,
+        organizationId: createProjectDto?.organizationId,
         description: createProjectDto.description,
         members: createProjectDto.members?.length
           ? {
@@ -53,7 +54,12 @@ export class ProjectService {
     }
     const res = await this.projectRepo.findMany({
       where: {
+        ...(!isAdmin && { status: { not: 'deleted' } }),
         members: { some: { ...(!isAdmin && { userId: user.userId }) } },
+      },
+      include: { members: true },
+      orderBy: {
+        createdAt: 'desc',
       },
     });
     return res;
@@ -62,9 +68,40 @@ export class ProjectService {
   async findById(id: string) {
     return this.projectRepo.findOne({ where: { id } });
   }
-
-  update(id: string, updateProjectDto: Prisma.ProjectUpdateInput) {
-    return this.projectRepo.update({ where: { id }, data: updateProjectDto });
+  async findByOrganizationId(organizationId: string, token: string) {
+    const { userId } = await this.usersRepo.findOne({ where: { token } });
+    return this.projectRepo.findMany({
+      where: {
+        organizationId,
+        members: {
+          some: {
+            users: {
+              userId: userId,
+            },
+          },
+        },
+      },
+      include: { members: true },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
+  update(id: string, updateProjectDto: any) {
+    return this.projectRepo.update({
+      where: { id },
+      data: {
+        ...updateProjectDto,
+        members: updateProjectDto.members?.length
+          ? {
+              deleteMany: {},
+              create: updateProjectDto.members.map((userId) => ({
+                users: { connect: { userId: userId } },
+              })),
+            }
+          : undefined,
+      },
+    });
   }
 
   remove(id: string) {

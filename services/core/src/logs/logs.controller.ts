@@ -14,15 +14,21 @@ import { UpdateLogDto } from './dto/update-log.dto';
 
 @Controller('logs')
 export class LogsController {
-  constructor(private readonly logsService: LogsService) {}
+  constructor(private readonly logsService: LogsService) { }
 
   @Get(':projectId')
-  findOne(@Param('projectId') projectId: string) {
-    return this.logsService.findOne(projectId);
+  findOne(@Param('projectId') projectId: string,
+    @Query('skip') skip?: number,
+    @Query('take') take?: number,) {
+    return this.logsService.findOne(projectId, +skip, +take);
   }
   @Get('find-vdo/:projectId')
-  findOneVDO(@Param('projectId') projectId: string) {
-    return this.logsService.findOneVDO(projectId);
+  findOneVDO(
+    @Param('projectId') projectId: string,
+    @Query('skip') skip?: number,
+    @Query('take') take?: number,
+  ) {
+    return this.logsService.findOneVDO(projectId, +skip, +take);
   }
 
   @Get('generate-vdo-logs/:taskId')
