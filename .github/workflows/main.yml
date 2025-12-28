@@ -1,0 +1,169 @@
+name: Backend CI/CD (3 Services, direnv)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  VERSION: ${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # Checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Show version info
+      # -----------------------------------------------------------------------
+      - name: Show Build Version
+        run: |
+          echo "Deploy version: $VERSION"
+
+      # -----------------------------------------------------------------------
+      # Build Docker images (3 services)
+      # -----------------------------------------------------------------------
+      - name: Build Docker Images
+        run: |
+          docker build --platform linux/amd64 \
+            -f services/core/Dockerfile \
+            -t core:${VERSION} .
+
+          docker build --platform linux/amd64 \
+            -f services/report/Dockerfile \
+            -t report:${VERSION} .
+
+          docker build --platform linux/amd64 \
+            -f services/users/Dockerfile \
+            -t users:${VERSION} .
+
+      # -----------------------------------------------------------------------
+      # Save images as TAR
+      # -----------------------------------------------------------------------
+      - name: Save Docker Images as TAR
+        run: |
+          docker save -o core-${VERSION}.tar core:${VERSION}
+          docker save -o report-${VERSION}.tar report:${VERSION}
+          docker save -o users-${VERSION}.tar users:${VERSION}
+
+      # -----------------------------------------------------------------------
+      # Install OpenVPN
+      # -----------------------------------------------------------------------
+      - name: Install OpenVPN
+        run: |
+          sudo apt update
+          sudo apt install -y openvpn openvpn-systemd-resolved
+
+      - name: Enable TUN Device
+        run: |
+          sudo modprobe tun
+          sudo chmod 600 /dev/net/tun
+
+      - name: Patch OpenVPN Cipher
+        run: |
+          echo 'cipher AES-256-CBC' >> .github/workflows/client.ovpn
+          echo 'data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305:AES-256-CBC' >> .github/workflows/client.ovpn
+
+      # -----------------------------------------------------------------------
+      # Connect VPN
+      # -----------------------------------------------------------------------
+      - name: Connect VPN
+        uses: kota65535/github-openvpn-connect-action@v2
+        with:
+          config_file: .github/workflows/client.ovpn
+          username: ${{ secrets.OVPN_USERNAME }}
+          password: ${{ secrets.OVPN_PASSWORD }}
+
+      # -----------------------------------------------------------------------
+      # Upload TAR files to server
+      # -----------------------------------------------------------------------
+      - name: Upload Images via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          source: "*.tar"
+          target: "/home/osdadmin/"
+
+      # -----------------------------------------------------------------------
+      # Deploy on server (direnv aware)
+      # -----------------------------------------------------------------------
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            set -e
+            echo "Deploying version: ${VERSION}"
+            cd /home/osdadmin
+
+            # ---------------------------------------------------------------
+            # Load env from .envrc using direnv
+            # ---------------------------------------------------------------
+            if ! command -v direnv >/dev/null 2>&1; then
+              echo "direnv not found"
+              exit 1
+            fi
+
+            eval "$(direnv hook bash)"
+            direnv allow .
+            direnv export bash > /tmp/env.export
+            source /tmp/env.export
+
+            export_env_flags() {
+              env | grep -E '^[A-Z_][A-Z0-9_]*=' \
+                | grep -vE '^(HOME|PATH|PWD|SHLVL|USER|SHELL|TERM)=' \
+                | sed 's/^/-e /'
+            }
+
+            ENV_FLAGS="$(export_env_flags)"
+
+            # ---------------------------------------------------------------
+            # Core service (container port 4002)
+            # ---------------------------------------------------------------
+            docker load -i core-${VERSION}.tar
+            docker rm -f core || true
+            docker run -d \
+              --name core \
+              -p 4002:4002 \
+              --restart always \
+              $ENV_FLAGS \
+              core:${VERSION}
+            rm -f core-${VERSION}.tar
+
+            # ---------------------------------------------------------------
+            # Report service (container port 4001)
+            # ---------------------------------------------------------------
+            docker load -i report-${VERSION}.tar
+            docker rm -f report || true
+            docker run -d \
+              --name report \
+              -p 4001:4001 \
+              --restart always \
+              $ENV_FLAGS \
+              report:${VERSION}
+            rm -f report-${VERSION}.tar
+
+            # ---------------------------------------------------------------
+            # Users service (container port 4000)
+            # ---------------------------------------------------------------
+            docker load -i users-${VERSION}.tar
+            docker rm -f users || true
+            docker run -d \
+              --name users \
+              -p 4000:4000 \
+              --restart always \
+              $ENV_FLAGS \
+              users:${VERSION}
+            rm -f users-${VERSION}.tar
+
+            echo "Deployment completed successfully"
