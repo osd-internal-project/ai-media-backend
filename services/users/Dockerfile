@@ -1,38 +1,33 @@
-# ===== Base image =====
 FROM node:16.17.1-alpine3.16 AS base
-
-# ติดตั้ง tzdata และ dependencies อื่น ๆ
 RUN apk upgrade --update-cache && \
-    apk add --no-cache tzdata openssl musl && \
-    cp /usr/share/zoneinfo/Asia/Bangkok /etc/localtime && \
-    echo "Asia/Bangkok" > /etc/timezone
-
-ENV TZ=Asia/Bangkok
+    apk add --no-cache openssl musl tzdata && \
+    rm -rf /var/cache/apk/*
 WORKDIR /app
 ENV YARN_CACHE_FOLDER=.yarn-cache
+ENV TZ=Asia/Bangkok
 
-# ===== Pruner stage =====
+# pruner
 FROM base AS pruner
 RUN yarn global add turbo@1.5.5
 COPY . .
 RUN turbo prune --scope="@ai-media/users" --docker
 RUN yarn global remove turbo
 
-# ===== Development dependencies =====
+# development dependencies
 FROM base AS dev-deps
 COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/yarn.lock ./yarn.lock
-RUN yarn install --frozen-lockfile
+# เพิ่ม --ignore-engines flag
+RUN yarn install --frozen-lockfile --ignore-engines
 
-# ===== Production dependencies =====
+# production dependencies
 FROM base AS prod-deps
 COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/yarn.lock ./yarn.lock
-COPY --from=dev-deps /app/${YARN_CACHE_FOLDER} /${YARN_CACHE_FOLDER}
-RUN yarn install --frozen-lockfile --production --prefer-offline
-RUN rm -rf /app/${YARN_CACHE_FOLDER}
+# เพิ่ม --ignore-engines flag
+RUN yarn install --frozen-lockfile --production --ignore-engines
 
-# ===== Build stage =====
+# build
 FROM base AS builder
 COPY --from=dev-deps /app/ .
 COPY --from=pruner /app/out/full/ .
@@ -40,18 +35,13 @@ RUN yarn generate
 RUN yarn turbo run build --scope="@ai-media/users" --include-dependencies --no-deps
 RUN find . -name node_modules | xargs rm -rf
 
-# ===== Clean dependencies (reduce size) =====
-FROM base AS cleaner
-RUN yarn global add modclean
-COPY --from=prod-deps /app/ .
+# final
+FROM base AS runner
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/ .
 RUN yarn generate
-RUN modclean --run
-RUN yarn global remove modclean
 
-# ===== Final image (runner) =====
-FROM base AS runner
-COPY --from=cleaner /app/ .
 WORKDIR /app/services/users
 USER node
-CMD node dist/main
+CMD ["node", "dist/main"]

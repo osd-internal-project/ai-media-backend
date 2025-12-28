@@ -20,18 +20,11 @@ export class LogsService {
     private readonly minioService: MinioClientService,
   ) { }
   async findOne(projectId: string, skip?: number, take?: number) {
-    const startDate = dayjs().subtract(3, 'day').startOf('day').toDate(); // 3 วันก่อน
-    const endDate = dayjs().endOf('day').toDate();
-
     const taskIds = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'image',
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
       },
       select: { taskId: true },
       distinct: ['taskId'],
@@ -143,18 +136,12 @@ export class LogsService {
     return result;
   }
   async findOneVDO(projectId: string, skip?: number, take?: number) {
-    const startDate = dayjs().subtract(3, 'day').startOf('day').toDate();
-    const endDate = dayjs().endOf('day').toDate();
 
     const taskIds = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'vdo',
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
       },
       select: { taskId: true },
       distinct: ['taskId'],
