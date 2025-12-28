@@ -14,6 +14,18 @@ jobs:
 
     steps:
       # -----------------------------------------------------------------------
+      # Free Disk Space
+      # -----------------------------------------------------------------------
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      # -----------------------------------------------------------------------
       # Checkout
       # -----------------------------------------------------------------------
       - name: Checkout Repository
@@ -27,30 +39,31 @@ jobs:
           echo "Deploy version: $VERSION"
 
       # -----------------------------------------------------------------------
-      # Build Docker images (3 services)
+      # Build and Save Services Sequentially
       # -----------------------------------------------------------------------
-      - name: Build Docker Images
+      - name: Build and Save Core
         run: |
           docker build --platform linux/amd64 \
             -f services/core/Dockerfile \
             -t core:${VERSION} .
+          docker save -o core-${VERSION}.tar core:${VERSION}
+          docker rmi core:${VERSION}
 
+      - name: Build and Save Report
+        run: |
           docker build --platform linux/amd64 \
             -f services/report/Dockerfile \
             -t report:${VERSION} .
+          docker save -o report-${VERSION}.tar report:${VERSION}
+          docker rmi report:${VERSION}
 
+      - name: Build and Save Users
+        run: |
           docker build --platform linux/amd64 \
             -f services/users/Dockerfile \
             -t users:${VERSION} .
-
-      # -----------------------------------------------------------------------
-      # Save images as TAR
-      # -----------------------------------------------------------------------
-      - name: Save Docker Images as TAR
-        run: |
-          docker save -o core-${VERSION}.tar core:${VERSION}
-          docker save -o report-${VERSION}.tar report:${VERSION}
           docker save -o users-${VERSION}.tar users:${VERSION}
+          docker rmi users:${VERSION}
 
       # -----------------------------------------------------------------------
       # Install OpenVPN
