@@ -13,6 +13,7 @@
   "license": "MIT",
   "main": "dist/index.js",
   "scripts": {
+    "db:export": "ts-node libs/prisma/export/index.ts",
     "db:seed": "ts-node seed/index.ts"
   },
   "types": "dist/index.d.ts"
