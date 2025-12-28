@@ -12,6 +12,7 @@ export class ProjectService {
     return this.projectRepo.create({
       data: {
         name: createProjectDto.name,
+        organizationId: createProjectDto?.organizationId,
         description: createProjectDto.description,
         members: createProjectDto.members?.length
           ? {
