@@ -9,7 +9,8 @@ export class CreateOrganizationMemberDto {
   @IsNotEmpty()
   organizationId: string;
 
-  @IsString()
-  @IsNotEmpty()
-  role: string;
+  role?: string;
+  maxToken?: number;
+  maxImages?: number;
+  apiKeys?: string;
 }
