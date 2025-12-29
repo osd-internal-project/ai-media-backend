@@ -16,7 +16,16 @@ export class OrganizationMembersService {
       data: createOrganizationMembersDto,
     });
   }
-
+  createFromInvite(createOrganizationMembersDto: CreateOrganizationMemberDto) {
+    return this.organizationMemberRepo.create({
+      data: {
+        ...createOrganizationMembersDto,
+        role: 'MEMBER',
+        maxImages: 10000,
+        maxToken: 10000,
+      },
+    });
+  }
   findAll() {
     return this.organizationMemberRepo.findMany({});
   }
@@ -30,6 +39,7 @@ export class OrganizationMembersService {
   findByOrganization(organizationId: string) {
     return this.organizationMemberRepo.findMany({
       where: { organizationId },
+      orderBy: { joinedAt: 'desc' },
     });
   }
   async findUserMemberByOrganization(organizationId: string, token: string) {

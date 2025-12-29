@@ -18,6 +18,7 @@ export class OrganizationService {
     return this.organizationRepo.findMany({});
   }
   findManyByUserId(userId: string, search: { type: string }) {
+    console.log(userId);
     return this.organizationRepo.findMany({
       where: {
         type: search.type,

@@ -6,6 +6,8 @@ import {
   GalleryRepository,
   MasterDataConfigApiRepository,
   UsersRepository,
+  OrganizationRepository,
+  OrganizationMemberRepository,
 } from '@ai-media/share';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -28,7 +30,8 @@ export class GenerateImageService {
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioClientSerives: MinioClientService,
-  ) { }
+    private readonly organizationMemberRepo: OrganizationMemberRepository,
+  ) {}
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     const uuid = uuidv4();
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -38,6 +41,9 @@ export class GenerateImageService {
     const user = await this.userRepo.findOne({
       where: { token: createGenerateImageDto.userId },
     });
+    const organizationMember = await this.organizationMemberRepo.findOne({
+      where: { organizationId: user.recentOrganizationId },
+    });
     const axiosConfig = {
       headers: {
         'Content-Type': `${getConfigApi.configType}`,
@@ -46,22 +52,27 @@ export class GenerateImageService {
       httpsAgent: agent,
     };
 
-    const description = createGenerateImageDto.type === 'vdo'
-      ? (createGenerateImageDto.image ? 'image-to-video' : 'text-to-video')
-      : (createGenerateImageDto.image ? 'image-to-image' : 'text-to-image');
+    const description =
+      createGenerateImageDto.type === 'vdo'
+        ? createGenerateImageDto.image
+          ? 'image-to-video'
+          : 'text-to-video'
+        : createGenerateImageDto.image
+        ? 'image-to-image'
+        : 'text-to-image';
     const getModelType = createGenerateImageDto.modelName
       ? await this.modeltypeRepo.findOne({
-        where: {
-          modelType: createGenerateImageDto.modelName,
-          type: createGenerateImageDto.type,
-        },
-      } as Prisma.MasterModelTypeFindFirstArgs)
+          where: {
+            modelType: createGenerateImageDto.modelName,
+            type: createGenerateImageDto.type,
+          },
+        } as Prisma.MasterModelTypeFindFirstArgs)
       : await this.modeltypeRepo.findOne({
-        where: {
-          type: createGenerateImageDto.type,
-          description: description,
-        },
-      } as Prisma.MasterModelTypeFindFirstArgs);
+          where: {
+            type: createGenerateImageDto.type,
+            description: description,
+          },
+        } as Prisma.MasterModelTypeFindFirstArgs);
 
     if (createGenerateImageDto.type === 'vdo') {
       const totalVDOGenerate = await this.logrepo.findMany({
@@ -76,7 +87,7 @@ export class GenerateImageService {
         0,
       );
 
-      if (totalTokenUsed > user.maxToken) {
+      if (totalTokenUsed > (organizationMember?.maxToken || 0)) {
         return {
           status: 400,
           data: 'Token ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Token',
@@ -85,7 +96,6 @@ export class GenerateImageService {
       const imageArray = createGenerateImageDto.image;
       const imageCount =
         imageArray && Array.isArray(imageArray) ? imageArray.length : 0;
-      console.log(`imageCount: ${imageCount}`);
       let imageContents: any[] = [];
       if (imageCount === 1) {
         const imageUrl = await this.minioClientSerives.getPresignedUrl(
@@ -204,7 +214,10 @@ export class GenerateImageService {
       ) {
         imageUrl = await Promise.all(
           createGenerateImageDto.image.map((img) =>
-            this.minioClientSerives.getPresignedUrl(this.minioconfig.minioBucketUpload, img),
+            this.minioClientSerives.getPresignedUrl(
+              this.minioconfig.minioBucketUpload,
+              img,
+            ),
           ),
         );
       }
@@ -227,8 +240,8 @@ export class GenerateImageService {
         response_format: 'url',
         ...(createGenerateImageDto.width &&
           createGenerateImageDto.height && {
-          size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
-        }),
+            size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
+          }),
         ...(createGenerateImageDto.images && {
           sequential_image_generation: 'auto',
           sequential_image_generation_options: {

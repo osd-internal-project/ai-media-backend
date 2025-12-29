@@ -22,7 +22,14 @@ export class OrganizationMembersController {
   create(@Body() createOrganizationMembersDto: CreateOrganizationMemberDto) {
     return this.organizationMembersService.create(createOrganizationMembersDto);
   }
-
+  @Post('invite')
+  createFromInvite(
+    @Body() createOrganizationMembersDto: CreateOrganizationMemberDto,
+  ) {
+    return this.organizationMembersService.createFromInvite(
+      createOrganizationMembersDto,
+    );
+  }
   @Get()
   findAll() {
     return this.organizationMembersService.findAll();
