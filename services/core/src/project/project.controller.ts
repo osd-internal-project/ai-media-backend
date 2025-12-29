@@ -74,4 +74,13 @@ export class ProjectController {
   ) {
     return this.projectService.isProjectAdmin(projectId, userId);
   }
+
+  @Get(':projectId/permission/:userId')
+  hasProjectPermission(
+    @Param('projectId') projectId: string,
+    @Param('userId') userId: string,
+    @Query('requiredRole') requiredRole?: string,
+  ) {
+    return this.projectService.hasProjectPermission(projectId, userId, requiredRole as any);
+  }
 }
