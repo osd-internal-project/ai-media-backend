@@ -38,7 +38,6 @@ export class ProjectService {
         name: createProjectDto.name,
         organizationId: createProjectDto?.organizationId,
         description: createProjectDto.description,
-        organizationId: createProjectDto.organizationId,
         members: createProjectDto.members?.length
           ? {
               create: createProjectDto.members.map((member: string | ProjectMemberInput) => ({

@@ -299,7 +299,7 @@ export class GenerateImageService {
           }),
         );
       }
-      return { status: 400, data: generateImage.data };
+      return { status: 200, data: generateImage.data };
     }
   }
 
