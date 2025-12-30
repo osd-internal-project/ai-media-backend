@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ProjectRepository, UsersRepository, ProjectMemberRepository } from '@ai-media/share';
+import { ProjectRepository, UsersRepository, ProjectMemberRepository, OrganizationMemberRepository } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 
 interface ProjectMemberInput {
@@ -31,6 +31,7 @@ export class ProjectService {
     private readonly projectRepo: ProjectRepository,
     private readonly usersRepo: UsersRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
+    private readonly organizationMemberRepo: OrganizationMemberRepository,
   ) {}
   create(createProjectDto: any) {
     return this.projectRepo.create({
@@ -55,28 +56,23 @@ export class ProjectService {
   }
 
   async findOne(id: string) {
-    const user = (await this.usersRepo.findOne({
-      where: { token: id },
-      include: {
-        groups: {
-          include: {
-            group: {
-              select: {
-                name: true,
-                displayName: true,
-                id: true,
-              },
-            },
-          },
-        },
-      },
-    })) as any;
-    const isAdmin = user.groups.some(
-      (g: any) => g.group?.name === 'admin-user',
-    );
+    const user = await this.usersRepo.findOne({
+      where: { token: id }
+    });
+    
     if (!user) {
       throw new Error('User not found for this token');
     }
+    
+    const organizationMember = await this.organizationMemberRepo.findOne({
+      where: {
+        userId: user.userId,
+        role: 'ADMIN'
+      }
+    });
+    
+    const isAdmin = !!organizationMember;
+    
     const res = await this.projectRepo.findMany({
       where: {
         ...(!isAdmin && { status: { not: 'deleted' } }),
@@ -94,17 +90,29 @@ export class ProjectService {
     return this.projectRepo.findOne({ where: { id } });
   }
   async findByOrganizationId(organizationId: string, token: string) {
-    const { userId } = await this.usersRepo.findOne({ where: { token } });
+    const user = await this.usersRepo.findOne({ where: { token } });
+    
+    const organizationMember = await this.organizationMemberRepo.findOne({
+      where: {
+        userId: user.userId,
+        organizationId: organizationId,
+      }
+    });
+    
+    const isAdmin = organizationMember?.role === 'ADMIN';
+    
     return this.projectRepo.findMany({
       where: {
         organizationId,
-        members: {
-          some: {
-            users: {
-              userId: userId,
+        ...(!isAdmin && {
+          members: {
+            some: {
+              users: {
+                userId: user.userId,
+              },
             },
           },
-        },
+        }),
       },
       include: { members: true },
       orderBy: {
@@ -134,8 +142,16 @@ export class ProjectService {
     return this.projectRepo.delete({ where: { id } });
   }
 
-  // Check if user has specific role in project
   async checkUserRole(projectId: string, userId: string): Promise<string | null> {
+    const organizationMember = await this.organizationMemberRepo.findOne({
+      where: {
+        userId: userId,
+        role: 'ADMIN'
+      }
+    });
+    
+    if (organizationMember) return 'ADMIN';
+    
     const member = await this.projectMemberRepo.findOne({
       where: {
         projectId,
@@ -173,12 +189,20 @@ export class ProjectService {
     });
   }
 
-  // Check if user has permission for specific action
   async hasProjectPermission(
     projectId: string, 
     userId: string, 
     requiredRole: ProjectRole = 'USER'
   ): Promise<boolean> {
+    const organizationMember = await this.organizationMemberRepo.findOne({
+      where: {
+        userId: userId,
+        role: 'ADMIN'
+      }
+    });
+    
+    if (organizationMember) return true;
+    
     const userRole = await this.checkUserRole(projectId, userId);
     if (!userRole || !isValidRole(userRole)) return false;
     return hasPermission(userRole as ProjectRole, requiredRole);
