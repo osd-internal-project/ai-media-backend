@@ -16,6 +16,9 @@
 # Testing Output folder
 .output/
 
+# seed data
+libs/prisma/seed/data/*.json
+
 # Extension App-file
 *.app
 
