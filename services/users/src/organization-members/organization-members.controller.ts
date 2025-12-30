@@ -11,6 +11,7 @@ import {
 import { OrganizationMembersService } from './organization-members.service';
 import { CreateOrganizationMemberDto } from './dto/create-organization-members.dto';
 import { UpdateOrganizationMemberDto } from './dto/update-organization-members.dto';
+import { Prisma } from '@prisma/client';
 
 @Controller('organization-members')
 export class OrganizationMembersController {
@@ -19,7 +20,9 @@ export class OrganizationMembersController {
   ) {}
 
   @Post()
-  create(@Body() createOrganizationMembersDto: CreateOrganizationMemberDto) {
+  create(
+    @Body() createOrganizationMembersDto: Prisma.OrganizationMemberCreateInput,
+  ) {
     return this.organizationMembersService.create(createOrganizationMembersDto);
   }
   @Post('invite')
