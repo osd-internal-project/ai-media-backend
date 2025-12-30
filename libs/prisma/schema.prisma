@@ -10,27 +10,28 @@ datasource db {
 }
 
 model users {
-  id                   Int             @id @default(autoincrement())
-  userId               String          @unique @default(uuid()) @db.VarChar(50)
-  username             String          @unique @db.VarChar(100)
-  fullname             String          @db.VarChar(200)
-  email                String          @db.VarChar(200)
-  tier                 String          @default("free") @db.VarChar(200)
-  description          String?         @db.Text
-  phoneNumber          String          @default("phone_number") @db.VarChar(50)
-  status               String          @default("active") @db.VarChar(50)
-  lastOn               DateTime?       @map("last_on")
-  maxToken             Int?            @default(0)
-  maxImages            Int?            @default(0) @map("max_images")
-  apiKeys              String?         @map("api_keys") @db.Text
-  token                String?         @db.VarChar(50)
-  createdAt            DateTime        @default(now()) @map("created_at")
-  updatedAt            DateTime        @updatedAt @map("updated_at")
+  id                   Int                  @id @default(autoincrement())
+  userId               String               @unique @default(uuid()) @db.VarChar(50)
+  username             String               @unique @db.VarChar(100)
+  fullname             String               @db.VarChar(200)
+  email                String               @db.VarChar(200)
+  tier                 String               @default("free") @db.VarChar(200)
+  description          String?              @db.Text
+  phoneNumber          String               @default("phone_number") @db.VarChar(50)
+  status               String               @default("active") @db.VarChar(50)
+  lastOn               DateTime?            @map("last_on")
+  maxToken             Int?                 @default(0)
+  maxImages            Int?                 @default(0) @map("max_images")
+  apiKeys              String?              @map("api_keys") @db.Text
+  token                String?              @db.VarChar(50)
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
   groups               UserGroup[]
   projectMembers       ProjectMember[]
   galleries            Gallery[]
   logs                 Log[]
-  recentOrganizationId String?         @map("recent_organization_id") @db.VarChar(50)
+  recentOrganizationId String?              @map("recent_organization_id") @db.VarChar(50)
+  organizationMembers  OrganizationMember[]
 }
 
 model Project {
@@ -280,6 +281,7 @@ model OrganizationMember {
   maxToken       Int?         @default(0)
   maxImages      Int?         @default(0) @map("max_images")
   apiKeys        String?      @map("api_keys") @db.Text
+  users          users        @relation(fields: [userId], references: [userId])
 
   @@map("organization_member")
 }
