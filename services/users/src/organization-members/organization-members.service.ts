@@ -40,7 +40,7 @@ export class OrganizationMembersService {
   findByOrganization(organizationId: string) {
     return this.organizationMemberRepo.findMany({
       where: { organizationId },
-      // include:{ users},
+      include: { users: true },
       orderBy: { joinedAt: 'desc' },
     });
   }
