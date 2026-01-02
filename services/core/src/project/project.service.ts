@@ -125,13 +125,15 @@ export class ProjectService {
       where: { id },
       data: {
         ...updateProjectDto,
-        members: updateProjectDto.members?.length
+        members: updateProjectDto.members !== undefined
           ? {
               deleteMany: {},
-              create: updateProjectDto.members.map((member: string | ProjectMemberInput) => ({
-                users: { connect: { userId: typeof member === 'string' ? member : member.userId } },
-                role: typeof member === 'object' ? member.role : 'USER', // Default to USER role
-              })),
+              ...(updateProjectDto.members.length > 0 && {
+                create: updateProjectDto.members.map((member: string | ProjectMemberInput) => ({
+                  users: { connect: { userId: typeof member === 'string' ? member : member.userId } },
+                  role: typeof member === 'object' ? member.role : 'USER', // Default to USER role
+                })),
+              }),
             }
           : undefined,
       },
