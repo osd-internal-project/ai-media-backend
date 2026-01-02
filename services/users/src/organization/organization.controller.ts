@@ -21,7 +21,10 @@ export class OrganizationController {
   create(@Body() createOrganizationDto: Prisma.OrganizationCreateInput) {
     return this.organizationService.create(createOrganizationDto);
   }
-
+  @Post('owner')
+  createOwner(@Body() createOrganizationDto: Prisma.OrganizationCreateInput) {
+    return this.organizationService.createOwner(createOrganizationDto);
+  }
   @Get()
   findAll() {
     return this.organizationService.findAll();
