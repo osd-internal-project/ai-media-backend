@@ -9,22 +9,40 @@ import {
   Query,
 } from '@nestjs/common';
 import { OrganizationService } from './organization.service';
-import { CreateOrganizationDto } from './dto/create-organization.dto';
-import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { ApproveInviteUserDto } from './dto/approve-invite-user.dto';
+import { CreateInvitationDto } from './dto/create-invitation.dto';
+import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { Prisma } from '@prisma/client';
 
 @Controller('organization')
 export class OrganizationController {
-  constructor(private readonly organizationService: OrganizationService) {}
+  constructor(private readonly organizationService: OrganizationService) { }
 
   @Post()
   create(@Body() createOrganizationDto: Prisma.OrganizationCreateInput) {
     return this.organizationService.create(createOrganizationDto);
   }
+
   @Post('owner')
   createOwner(@Body() createOrganizationDto: Prisma.OrganizationCreateInput) {
     return this.organizationService.createOwner(createOrganizationDto);
   }
+
+  @Post('invitation')
+  createInvitation(@Body() createInvitationDto: CreateInvitationDto) {
+    return this.organizationService.createInvitation(createInvitationDto);
+  }
+
+  @Get('invitation/:token')
+  verifyInvitation(@Param('token') token: string) {
+    return this.organizationService.verifyInvitation(token);
+  }
+
+  @Post('invitation/accept')
+  acceptInvitation(@Body() acceptInvitationDto: AcceptInvitationDto) {
+    return this.organizationService.acceptInvitation(acceptInvitationDto);
+  }
+
   @Get()
   findAll() {
     return this.organizationService.findAll();
@@ -37,6 +55,7 @@ export class OrganizationController {
   ) {
     return this.organizationService.findManyByUserId(userId, search);
   }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.organizationService.findOne(id);

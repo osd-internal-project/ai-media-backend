@@ -5,15 +5,21 @@ import {
   ConflictException,
   BadRequestException,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
+import { RegisterUserDto } from './dto/register-user.dto';
 import {
   UsersRepository,
   GroupsRepository,
   OrganizationMemberRepository,
+  OrganizationRepository,
+  ProjectMemberRepository,
+  ProjectRepository,
 } from '@ai-media/share';
 
 import axios from 'axios';
 import configs from 'src/configs';
+import { KeycloakService } from 'src/keycloak/keycloak.service';
 
 @Injectable()
 export class UsersService {
@@ -21,7 +27,11 @@ export class UsersService {
     private readonly userRepo: UsersRepository,
     private readonly groupRepo: GroupsRepository,
     private readonly organizationMemberRepo: OrganizationMemberRepository,
-  ) {}
+    private readonly organizationRepo: OrganizationRepository,
+    private readonly projectRepo: ProjectRepository,
+    private readonly projectMemberRepo: ProjectMemberRepository,
+    private readonly keycloakService: KeycloakService,
+  ) { }
 
   async create(createUserDto: any) {
     const { password, groups, ...userData } = createUserDto;
@@ -37,7 +47,7 @@ export class UsersService {
       Logger.error('User already exists');
       throw new ConflictException('User already exists');
     }
-    const token = await this.createKeycloakUser(createUserDto);
+    const token = await this.keycloakService.createUser(createUserDto);
     if (!token) {
       Logger.error('Failed to create user in Keycloak');
       throw new InternalServerErrorException(
@@ -151,7 +161,7 @@ export class UsersService {
       const { token } = await this.userRepo.findOne({ where: { userId } });
 
       //Token of Users is Keycloak User ID
-      await this.updateKeycloakUser(token, updateUserDto);
+      await this.keycloakService.updateUser(token, updateUserDto);
     } catch (error) {
       Logger.error(`Failed to update user in Keycloak: ${error.message}`);
       // Decide if we should block the database update or just log the error.
@@ -189,7 +199,7 @@ export class UsersService {
     try {
       const user = await this.userRepo.findOne({ where: { userId } });
       if (user && user.token) {
-        await this.deleteKeycloakUser(user.token);
+        await this.keycloakService.deleteUser(user.token);
       } else {
         Logger.warn(
           `User ${userId} has no Keycloak token/ID, skipping Keycloak deletion`,
@@ -222,154 +232,98 @@ export class UsersService {
     });
   }
 
-  private async getAdminToken(): Promise<string> {
-    const config = configs().keycloak;
-    const params = new URLSearchParams();
-    if (!config.clientSecret) {
-      Logger.error('Not found client secret');
-      throw new InternalServerErrorException('Failed to get create user');
-    } else {
-      params.append('client_id', config.clientId);
-      params.append('client_secret', config.clientSecret);
-      params.append('grant_type', 'client_credentials');
-    }
-    Logger.debug(`params ${params}`);
-    const { data } = await axios.post(
-      `${config.url}/realms/${config.realm}/protocol/openid-connect/token`,
-      params,
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-    );
-    Logger.debug(data);
-    return data.access_token;
-  }
-
-  private async createKeycloakUser(userDto: any): Promise<string> {
-    try {
-      const config = configs().keycloak;
-      const token = await this.getAdminToken();
-      if (!token) {
-        Logger.error('Failed to get admin token');
-        throw new InternalServerErrorException('Failed to create user');
-      }
-      const newUser = {
-        attributes: {
-          attribute_key: 'create_aicave_user',
-        },
-        credentials: [
-          {
-            temporary: false,
-            type: 'password',
-            value: userDto.password,
-          },
-        ],
-        username: userDto.username,
-        firstName: userDto.fullname?.split(' ')[0] || userDto.username,
-        lastName: userDto.fullname?.split(' ').slice(1).join(' ') || '',
-        email: userDto.email || '',
-        emailVerified: false,
-        enabled: true,
-      };
-      Logger.debug(newUser);
-      // Create User
-      await axios.post(
-        `${config.url}/admin/realms/${config.realm}/users`,
-        newUser,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-
-      // Get User ID
-      const { data: users } = await axios.get(
-        `${config.url}/admin/realms/${config.realm}/users?username=${userDto.username}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      Logger.debug(users);
-
-      // const createdUser = users.find(
-      //   (u: any) => u.username === userDto.username,
-      // );
-      if (!users.length) {
-        Logger.error('User created but not found in Keycloak');
-        throw new InternalServerErrorException('Failed to create user ');
-      }
-      return users[0].id;
-    } catch (error) {
-      console.error(
-        'Error creating user in Keycloak:',
-        error?.response?.data || error.message,
-      );
-      // Determine if we should fail or proceed. Usually strictly fail if requirement is "in Keycloak THEN db"
-      Logger.error(
-        `Failed to create Keycloak user: ${
-          error?.response?.data?.errorMessage || error.message
-        }`,
-      );
-      throw new BadRequestException(`Failed to create user`);
-    }
-  }
-
-  private async updateKeycloakUser(userId: string, userDto: any) {
-    const config = configs().keycloak;
-    const token = await this.getAdminToken();
-
-    const updatePayload: any = {
-      email: userDto.email,
-      firstName: userDto.fullname?.split(' ')[0],
-      lastName: userDto.fullname?.split(' ').slice(1).join(' '),
-      enabled: userDto.status === 'active',
-    };
-
-    if (userDto.password) {
-      updatePayload.credentials = [
-        {
-          type: 'password',
-          value: userDto.password,
-          temporary: false,
-        },
-      ];
-    }
-
-    // Only update fields that are present
-    Object.keys(updatePayload).forEach(
-      (key) => updatePayload[key] === undefined && delete updatePayload[key],
-    );
-
-    // If password is provided (needs to be handled if it's in DTO)
-    // Note: Prisma.usersUpdateInput usually doesn't have 'password' unless added to schema,
-    // but the incoming DTO might have it if cast to 'any' or extended.
-    // Given the current signature using Prisma generated type, 'password' might not be there directly
-    // unless 'usersUpdateInput' has it (it doesn't seem to based on schema).
-    // If we need password reset, it's a separate implementation usually, or passed in a custom DTO.
-
-    await axios.put(
-      `${config.url}/admin/realms/${config.realm}/users/${userId}`,
-      updatePayload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+  async register(dto: RegisterUserDto) {
+    // 1. Check if user already exists
+    const existingUser = await this.userRepo.findOne({
+      where: {
+        OR: [{ email: dto.email }, { username: dto.username }],
       },
-    );
-  }
+    });
 
-  private async deleteKeycloakUser(keycloakUserId: string) {
-    const config = configs().keycloak;
-    const token = await this.getAdminToken();
+    if (existingUser) {
+      throw new ConflictException('User with this email or username already exists');
+    }
 
-    await axios.delete(
-      `${config.url}/admin/realms/${config.realm}/users/${keycloakUserId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+    // 2. Create User in Keycloak
+    const token = await this.keycloakService.createUser({
+      username: dto.username,
+      password: dto.password,
+      email: dto.email,
+      firstName: dto.fullname,
+      lastName: '',
+    });
+
+    if (!token) {
+      Logger.error('Failed to create user in Keycloak');
+      throw new InternalServerErrorException('Failed to create user in Keycloak');
+    }
+
+    // 3. Create User in Database
+    const newUser = await this.userRepo.create({
+      data: {
+        email: dto.email,
+        username: dto.username,
+        fullname: dto.fullname,
+        status: 'active',
+        phoneNumber: dto.phoneNumber,
+        token,
       },
-    );
+    });
+
+    const userId = newUser.userId;
+
+    // 4. Auto-create Personal Organization & Project
+    const personalOrg = await this.organizationRepo.create({
+      data: {
+        name: `${dto.username} Personal`,
+        slug: `${dto.username}-personal`,
+        type: 'personal',
+        createdById: userId,
+        status: true,
+      },
+    });
+
+    if (personalOrg) {
+      // Add User as Owner of Personal Org
+      await this.organizationMemberRepo.create({
+        data: {
+          organizationId: personalOrg.organizationId,
+          userId: userId,
+          role: 'OWNER',
+          maxImages: 1000000,
+          maxToken: 1000000,
+        },
+      });
+
+      // Create Personal Project
+      const personalProject = await this.projectRepo.create({
+        data: {
+          name: `${dto.username} Project`,
+          organizationId: personalOrg.organizationId,
+          status: 'active',
+        },
+      });
+
+      if (personalProject) {
+        // Add User as Owner of Personal Project
+        await this.projectMemberRepo.create({
+          data: {
+            projectId: personalProject.id,
+            userId: userId,
+            role: 'OWNER',
+          },
+        });
+      }
+
+      // Update recentOrganizationId
+      await this.userRepo.update({
+        where: { userId },
+        data: {
+          recentOrganizationId: personalOrg.organizationId,
+        },
+      });
+    }
+
+    return { message: 'User registered successfully', userId };
   }
 }

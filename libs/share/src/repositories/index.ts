@@ -14,3 +14,4 @@ export * from './promptGuideType.repository';
 export * from './omnihumenTask.repository';
 export * from './organization.repository';
 export * from './organizationMember.repository';
+export * from './invitation.repository';

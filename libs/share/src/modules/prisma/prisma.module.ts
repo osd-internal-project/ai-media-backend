@@ -17,6 +17,7 @@ import {
   OmnihumenTaskRepository,
   OrganizationRepository,
   OrganizationMemberRepository,
+  InvitationRepository,
 } from 'src/repositories';
 
 const services = [
@@ -37,10 +38,11 @@ const services = [
   OmnihumenTaskRepository,
   OrganizationRepository,
   OrganizationMemberRepository,
+  InvitationRepository,
 ];
 
 @Module({
   providers: [...services],
   exports: [...services],
 })
-export class PrismaModule {}
+export class PrismaModule { }
