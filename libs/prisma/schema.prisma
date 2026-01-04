@@ -9,6 +9,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum LogSeverity {
+  INFO
+  WARN
+  ERROR
+  FATAL
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  DOWNLOAD
+  // เพิ่ม action อื่นๆ ตามต้องการ
+}
+
 model users {
   id                   Int                  @id @default(autoincrement())
   userId               String               @unique @default(uuid()) @db.VarChar(50)
@@ -303,4 +319,39 @@ model Invitation {
 
   @@index([email])
   @@map("invitation")
+}
+
+model ErrorLog {
+  id          BigInt      @id @default(autoincrement())
+  serviceName String      @map("service_name") @db.VarChar(50)
+  environment String      @default("development") @db.VarChar(20)
+  severity    LogSeverity
+  errorCode   String?     @map("error_code") @db.VarChar(50)
+  message     String      @db.Text
+  stackTrace  String?     @map("stack_trace") @db.Text
+  context     Json?       @db.JsonB // Prisma รองรับ JSONB
+  userId      String?     @map("user_id") @db.VarChar(50)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([serviceName, severity])
+  @@index([createdAt])
+  @@map("error_logs") // ชื่อตารางจริงใน DB
+}
+
+model AuditLog {
+  id         BigInt      @id @default(autoincrement())
+  userId     String      @map("user_id") @db.VarChar(50)
+  action     AuditAction
+  entityName String      @map("entity_name") @db.VarChar(50)
+  entityId   String      @map("entity_id") @db.VarChar(50)
+  oldValues  Json?       @map("old_values") @db.JsonB
+  newValues  Json?       @map("new_values") @db.JsonB
+  ipAddress  String?     @map("ip_address") @db.Inet // Map INET เป็น String ใน JS
+  userAgent  String?     @map("user_agent") @db.Text
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityName, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs") // ชื่อตารางจริงใน DB
 }
