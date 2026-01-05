@@ -142,7 +142,7 @@ export class OrganizationService {
     });
 
     if (!invite) {
-      throw new Error('Invalid or expired invitation token');
+      throw new ConflictException('Invalid or expired invitation token');
     }
 
     if (new Date() > invite.expiresAt) {
@@ -150,7 +150,7 @@ export class OrganizationService {
         where: { id: invite.id },
         data: { status: 'EXPIRED' },
       });
-      throw new Error('Invitation expired');
+      throw new ConflictException('Invitation expired');
     }
 
     const user = await this.usersRepo.findOne({ where: { email: invite.email } });
