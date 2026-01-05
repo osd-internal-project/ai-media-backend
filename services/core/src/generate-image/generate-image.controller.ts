@@ -241,21 +241,7 @@ export class GenerateImageController {
           };
         }),
       );
-
-      console.log('All files uploaded!');
-      // const data = files.map((file) => {
-      //   const ext = path.extname(file.originalname); // นามสกุลไฟล์
-      //   const fileName = `${uuidv4()}${ext}`;
-      //   Logger.debug(fileName);
-      //   return {
-      //     filePath: `${bucketname}/${fileName}`,
-      //     fileType: file.mimetype,
-      //     fileName: fileName,
-      //   };
-      // });
-
       const fileList = await this.GenerateImageService.upload(savedFiles);
-      console.log(fileList);
       return fileList;
     }
   }

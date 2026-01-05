@@ -18,6 +18,8 @@ import {
   OrganizationRepository,
   OrganizationMemberRepository,
   InvitationRepository,
+  ErrorLogRepository,
+  AuditLogRepository,
 } from 'src/repositories';
 
 const services = [
@@ -39,6 +41,8 @@ const services = [
   OrganizationRepository,
   OrganizationMemberRepository,
   InvitationRepository,
+  ErrorLogRepository,
+  AuditLogRepository,
 ];
 
 @Module({
