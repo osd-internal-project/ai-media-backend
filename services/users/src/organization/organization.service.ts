@@ -198,7 +198,7 @@ export class OrganizationService {
         password: dto.password,
         email: invite.email,
         firstName: dto.fullname,
-        lastName: '',
+        lastName: dto.fullname,
       });
       if (!token) {
         Logger.error('Failed to create user in Keycloak');
