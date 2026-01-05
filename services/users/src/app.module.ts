@@ -15,6 +15,7 @@ import { UsersOfGroupsModule } from './users-of-groups/users-of-groups.module';
 import { OrganizationModule } from './organization/organization.module';
 import { OrganizationMembersModule } from './organization-members/organization-members.module';
 import { KeycloakModule } from './keycloak/keycloak.module';
+import { AuthModule } from './auth/auth.module';
 @Module({
   imports: [
     PrismaModule,
@@ -27,6 +28,7 @@ import { KeycloakModule } from './keycloak/keycloak.module';
     OrganizationModule,
     OrganizationMembersModule,
     KeycloakModule,
+    AuthModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
