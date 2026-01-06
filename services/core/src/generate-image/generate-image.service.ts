@@ -42,7 +42,10 @@ export class GenerateImageService {
       where: { token: createGenerateImageDto.userId },
     });
     const organizationMember = await this.organizationMemberRepo.findOne({
-      where: { organizationId: user.recentOrganizationId },
+      where: { 
+        organizationId: user.recentOrganizationId,
+        userId: user.userId 
+      },
     });
     const axiosConfig = {
       headers: {
@@ -86,7 +89,7 @@ export class GenerateImageService {
         (sum, item) => sum + item.tokenUsed,
         0,
       );
-
+      
       if (totalTokenUsed > (organizationMember?.maxToken || 0)) {
         return {
           status: 400,
@@ -143,34 +146,34 @@ export class GenerateImageService {
         ],
       };
 
-      const generateVideo = await axios.post(
-        `${getConfigApi.apiCreateTaskVdo}`,
-        base,
-        axiosConfig,
-      );
-      if (!generateVideo.data.id) {
-        Logger.error(`Error create task: ${generateVideo}`);
-        return {
-          status: 400,
-          data: 'Error create task',
-        };
-      }
-      await this.logrepo.create({
-        data: {
-          taskId: generateVideo.data.id,
-          projectId: createGenerateImageDto.projectId,
-          userId: user.userId,
-          prompt: `${createGenerateImageDto.text} `,
-          typeGenerate: createGenerateImageDto.type,
-          status: 'pending',
-          tokenUsed: 0,
-          ImageUsed: 0,
-          referenceImages: createGenerateImageDto.image || [],
-          resolution: createGenerateImageDto.resolution || '2k',
-          ratio: createGenerateImageDto.ratio || '1:1',
-        },
-      });
-      return { status: 200, data: generateVideo.data };
+      // const generateVideo = await axios.post(
+      //   `${getConfigApi.apiCreateTaskVdo}`,
+      //   base,
+      //   axiosConfig,
+      // );
+      // if (!generateVideo.data.id) {
+      //   Logger.error(`Error create task: ${generateVideo}`);
+      //   return {
+      //     status: 400,
+      //     data: 'Error create task',
+      //   };
+      // }
+      // await this.logrepo.create({
+      //   data: {
+      //     taskId: generateVideo.data.id,
+      //     projectId: createGenerateImageDto.projectId,
+      //     userId: user.userId,
+      //     prompt: `${createGenerateImageDto.text} `,
+      //     typeGenerate: createGenerateImageDto.type,
+      //     status: 'pending',
+      //     tokenUsed: 0,
+      //     ImageUsed: 0,
+      //     referenceImages: createGenerateImageDto.image || [],
+      //     resolution: createGenerateImageDto.resolution || '2k',
+      //     ratio: createGenerateImageDto.ratio || '1:1',
+      //   },
+      // });
+      // return { status: 200, data: generateVideo.data };
     } else {
       const totalImageGenerate = await this.logrepo.findMany({
         where: {
