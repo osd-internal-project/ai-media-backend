@@ -142,7 +142,7 @@ export class OrganizationService {
     });
 
     if (!invite) {
-      throw new Error('Invalid or expired invitation token');
+      throw new ConflictException('Invalid or expired invitation token');
     }
 
     if (new Date() > invite.expiresAt) {
@@ -150,7 +150,7 @@ export class OrganizationService {
         where: { id: invite.id },
         data: { status: 'EXPIRED' },
       });
-      throw new Error('Invitation expired');
+      throw new ConflictException('Invitation expired');
     }
 
     const user = await this.usersRepo.findOne({ where: { email: invite.email } });
@@ -173,7 +173,7 @@ export class OrganizationService {
     });
 
     if (!invite) {
-      throw new Error('Invalid or expired invitation token');
+      throw new ConflictException('Invalid or expired invitation token');
     }
 
     if (new Date() > invite.expiresAt) {
@@ -181,7 +181,7 @@ export class OrganizationService {
         where: { id: invite.id },
         data: { status: 'EXPIRED' },
       });
-      throw new Error('Invitation expired');
+      throw new ConflictException('Invitation expired');
     }
 
     let userId: string;
@@ -191,14 +191,14 @@ export class OrganizationService {
       userId = existingUser.userId;
     } else {
       if (!dto.username || !dto.password || !dto.fullname) {
-        throw new Error('New user registration requires username, password, and fullname');
+        throw new ConflictException('New user registration requires username, password, and fullname');
       }
       const token = await this.keycloakService.createUser({
         username: dto.username,
         password: dto.password,
         email: invite.email,
         firstName: dto.fullname,
-        lastName: '',
+        lastName: dto.fullname,
       });
       if (!token) {
         Logger.error('Failed to create user in Keycloak');

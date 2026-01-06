@@ -15,3 +15,5 @@ export * from './omnihumenTask.repository';
 export * from './organization.repository';
 export * from './organizationMember.repository';
 export * from './invitation.repository';
+export * from './errorLog.repository';
+export * from './auditLog.repository';
