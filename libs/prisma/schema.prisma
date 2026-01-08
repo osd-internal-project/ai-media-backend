@@ -84,7 +84,7 @@ model Gallery {
   taskId           String?
   projectId        String
   userId           String
-  imageUrl         String
+  imageUrl         String?
   prompt           String?
   thumbnailUrl     String?
   typeGenerate     String?
@@ -92,7 +92,7 @@ model Gallery {
   status           Boolean? @default(false)
   project          Project  @relation(fields: [projectId], references: [id])
   users            users    @relation(fields: [userId], references: [userId])
-  genneratedStatus String?  @default("pending") @db.VarChar(10)
+  genneratedStatus String?  @default("pending") @db.VarChar(50)
 
   @@map("gallery")
 }
@@ -110,10 +110,12 @@ model Log {
   referenceImages String[] @default([])
   resolution      String?
   ratio           String?
+  generateAudio   Boolean? @default(false)
   createdAt       DateTime @default(now())
-
-  project Project @relation(fields: [projectId], references: [id])
-  users   users   @relation(fields: [userId], references: [userId])
+  generateConfig  Json?    @map("generate_config") @db.JsonB
+  project         Project  @relation(fields: [projectId], references: [id])
+  users           users    @relation(fields: [userId], references: [userId])
+  galleryId       String?  @map("gallary_id") @VarChar(100)
 
   @@map("log")
 }
