@@ -22,6 +22,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AiModelModule } from './ai-model/ai-model.module';
 import { appConfigs, minioConfigs, byteplusConfigs } from './configs';
 import { RedisModule } from './redis/redis.module';
+import { PlanModule } from './plan/plan.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { RedisModule } from './redis/redis.module';
     OmnihumenTaskModule,
     AiModelModule,
     RedisModule,
+    PlanModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
