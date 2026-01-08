@@ -10,4 +10,4 @@ import { MinioClientModule } from 'src/minio-client/minio-client.module';
   providers: [GenerateImageService],
   exports: [GenerateImageService],
 })
-export class GenerateImageModule { }
+export class GenerateImageModule {}
