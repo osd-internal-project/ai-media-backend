@@ -21,6 +21,8 @@ export class LogsService {
     private readonly galleryRepo: GalleryRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioService: MinioClientService,
+    private readonly auditLogRepo: AuditLogRepository,
+    private readonly errorLogRepo: ErrorLogRepository,
   ) {}
   async findProjectImageByPage(
     projectId: string,
@@ -59,12 +61,6 @@ export class LogsService {
         taskId: { in: targetTaskIds },
         typeGenerate: 'image',
       },
-      select: {
-        taskId: true,
-        referenceImages: true,
-        resolution: true,
-        ratio: true,
-      },
     });
 
     const referenceImagesMap = new Map();
@@ -82,7 +78,6 @@ export class LogsService {
         ratioMap.set(log.taskId, log.ratio);
       }
     });
-
     const map = new Map();
 
     for (const item of data) {

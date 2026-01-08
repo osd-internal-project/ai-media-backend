@@ -1,0 +1,128 @@
+2026-01-08T10:09:37.301420Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/1.cookie")}
+2026-01-08T10:09:37.301436Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-01-08T10:09:37.804495Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/2.cookie"), AnchoredSystemPathBuf("libs/share/.turbo/turbo-build.log")}
+2026-01-08T10:09:37.804508Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }, WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-01-08T10:09:38.702660Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/dist")}
+2026-01-08T10:09:38.702673Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-01-08T10:09:45.001035Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/dist")}
+2026-01-08T10:09:45.001080Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-01-08T10:09:46.704298Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-01-08T10:09:47.301893Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/3.cookie"), AnchoredSystemPathBuf("libs/share/.turbo/turbo-build.log")}
+2026-01-08T10:09:47.301917Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }, WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-01-08T10:10:31.054628Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/logs/logs.service.ts")}
+2026-01-08T10:10:31.056305Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:11:14.517769Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:11:14.521296Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:11:24.624769Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:11:24.628761Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:11:48.744194Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:11:48.746690Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:12:17.715332Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:12:17.719544Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:12:19.797856Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:12:19.797886Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:12:38.829272Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:12:38.832365Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:12:39.072518Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-01-08T10:12:42.696939Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:12:42.697015Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:12:51.396627Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:12:51.396668Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:12:51.702002Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-01-08T10:12:54.596214Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:12:54.596232Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:12:54.677357Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-01-08T10:12:56.096950Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:12:56.096989Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:13:07.195722Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:13:07.195753Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:13:10.896710Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:13:10.897021Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:15:56.234316Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:15:56.267915Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:15:59.317213Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:15:59.317261Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:16:01.491313Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:16:01.491348Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:16:01.905331Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:16:01.905417Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:16:01.905571Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-01-08T10:16:08.091307Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:16:08.091432Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:17:08.453202Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:17:08.457459Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:17:19.114433Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:17:19.116502Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:17:54.186790Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:17:54.190785Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:19:39.861145Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:19:39.869505Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:21:21.942514Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:21:21.945978Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:21:40.834962Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:21:40.843919Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:21:49.682207Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:21:49.682611Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:22:09.485663Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:22:09.485711Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:22:14.879472Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:22:14.879492Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:22:14.999593Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-01-08T10:24:38.506721Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:24:38.511097Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:26:49.111648Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:26:49.115268Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:27:34.108296Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:27:34.112472Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:28:41.499505Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:28:41.506688Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:29:37.312472Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:29:37.315258Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:29:56.086305Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:29:56.088383Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:32:39.295159Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:32:39.298996Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:32:39.790812Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-01-08T10:33:12.249065Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:33:12.252131Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:33:13.360731Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:33:13.360784Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:37:43.480168Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:37:43.480958Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:39:11.594446Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:39:11.599631Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:40:01.602158Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:40:01.603612Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:40:26.190087Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:40:26.192454Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:41:32.191803Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:41:32.194775Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:42:13.483266Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:42:13.485517Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:44:30.157621Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:44:30.159476Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T10:44:57.363376Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T10:44:57.364274Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:00:37.555278Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T11:00:37.559386Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:00:57.651903Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T11:00:57.655795Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:00:59.910959Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T11:00:59.911492Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:07:15.627574Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/logs/logs.service.ts")}
+2026-01-08T11:07:15.629276Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:07:31.821035Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/logs/logs.service.ts")}
+2026-01-08T11:07:31.822801Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:07:34.496206Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/logs/logs.service.ts")}
+2026-01-08T11:07:34.496237Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:10:37.529979Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/logs/logs.service.ts")}
+2026-01-08T11:10:37.532475Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:11:07.416043Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/logs/logs.service.ts")}
+2026-01-08T11:11:07.416867Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:11:07.611916Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-01-08T11:11:22.808983Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/logs/logs.service.ts")}
+2026-01-08T11:11:22.811047Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:11:46.718884Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/logs/logs.service.ts")}
+2026-01-08T11:11:46.722265Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-01-08T11:14:25.422299Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/generate-image/generate-image.service.ts")}
+2026-01-08T11:14:25.424567Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
