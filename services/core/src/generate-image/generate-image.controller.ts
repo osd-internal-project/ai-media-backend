@@ -11,6 +11,7 @@ import {
   Query,
   Res,
   Inject,
+  Sse,
 } from '@nestjs/common';
 import { GenerateImageService } from './generate-image.service';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -23,6 +24,8 @@ import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { minioConfigs } from 'src/configs';
 import { ConfigType } from '@nestjs/config';
+import { Observable, fromEvent, map } from 'rxjs';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Controller('generate-image')
 export class GenerateImageController {
@@ -31,7 +34,8 @@ export class GenerateImageController {
     private config: ConfigType<typeof minioConfigs>,
     private readonly GenerateImageService: GenerateImageService,
     private readonly minioclientSerives: MinioClientService,
-  ) { }
+    private eventEmitter: EventEmitter2,
+  ) {}
 
   @Post()
   create(@Body('body') createGenerateImageDto: CreateGenerateImageDto) {
@@ -244,5 +248,23 @@ export class GenerateImageController {
       const fileList = await this.GenerateImageService.upload(savedFiles);
       return fileList;
     }
+  }
+  @Sse('sse/:userId')
+  sse(@Param('userId') userId: string): Observable<MessageEvent> {
+    // Keep for backward compatibility or remove?
+    // Since service emits to project, this won't fire unless we emit both.
+    // But we are moving to project-based.
+    // I'll keep it but it won't receive events.
+    return fromEvent(this.eventEmitter, `image.update.${userId}`).pipe(
+      map((data) => ({ data } as MessageEvent)),
+    );
+  }
+
+  @Sse('sse/project/:projectId')
+  sseProject(@Param('projectId') projectId: string): Observable<MessageEvent> {
+    return fromEvent(
+      this.eventEmitter,
+      `image.update.project.${projectId}`,
+    ).pipe(map((data) => ({ data } as MessageEvent)));
   }
 }

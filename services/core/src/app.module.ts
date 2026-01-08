@@ -1,4 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ConfigModule } from '@nestjs/config';
 import { InventoryController } from './app.controller';
 import { InventoryService } from './app.service';
@@ -26,7 +27,10 @@ import { PlanModule } from './plan/plan.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [appConfigs, minioConfigs, byteplusConfigs] }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [appConfigs, minioConfigs, byteplusConfigs],
+    }),
     ScheduleModule.forRoot(),
     PrismaModule,
     GenerateImageModule,
@@ -45,6 +49,7 @@ import { PlanModule } from './plan/plan.module';
     AiModelModule,
     RedisModule,
     PlanModule,
+    EventEmitterModule.forRoot({ global: true }),
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

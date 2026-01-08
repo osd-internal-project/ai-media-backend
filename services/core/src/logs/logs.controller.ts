@@ -14,21 +14,37 @@ import { UpdateLogDto } from './dto/update-log.dto';
 
 @Controller('logs')
 export class LogsController {
-  constructor(private readonly logsService: LogsService) { }
+  constructor(private readonly logsService: LogsService) {}
 
-  @Get(':projectId')
-  findOne(@Param('projectId') projectId: string,
-    @Query('skip') skip?: number,
-    @Query('take') take?: number,) {
-    return this.logsService.findOne(projectId, +skip, +take);
-  }
-  @Get('find-vdo/:projectId')
-  findOneVDO(
+  @Get('find-image/:projectId')
+  findProjectImageByPage(
     @Param('projectId') projectId: string,
     @Query('skip') skip?: number,
     @Query('take') take?: number,
   ) {
-    return this.logsService.findOneVDO(projectId, +skip, +take);
+    return this.logsService.findProjectImageByPage(projectId, +skip, +take);
+  }
+  @Get('find-image/:projectId/frist')
+  findProjectImageByFristId(
+    @Param('projectId') projectId: string,
+    @Query('fristid') fristId: string,
+  ) {
+    return this.logsService.findProjectImageByFristId(projectId, fristId);
+  }
+  @Get('find-vdo/:projectId')
+  findProjectViedoByPage(
+    @Param('projectId') projectId: string,
+    @Query('skip') skip?: number,
+    @Query('take') take?: number,
+  ) {
+    return this.logsService.findProjectViedoByPage(projectId, +skip, +take);
+  }
+  @Get('find-vdo/:projectId/frist')
+  findProjectViedoByFristId(
+    @Param('projectId') projectId: string,
+    @Query('fristid') fristId: string,
+  ) {
+    return this.logsService.findProjectViedoByFristId(projectId, fristId);
   }
 
   @Get('generate-vdo-logs/:taskId')

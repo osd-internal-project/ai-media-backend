@@ -21,10 +21,14 @@ export class LogsService {
     private readonly galleryRepo: GalleryRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioService: MinioClientService,
-    private readonly errorLogRepo: ErrorLogRepository,
     private readonly auditLogRepo: AuditLogRepository,
-  ) { }
-  async findOne(projectId: string, skip?: number, take?: number) {
+    private readonly errorLogRepo: ErrorLogRepository,
+  ) {}
+  async findProjectImageByPage(
+    projectId: string,
+    skip?: number,
+    take?: number,
+  ) {
     const taskIds = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
@@ -57,14 +61,13 @@ export class LogsService {
         taskId: { in: targetTaskIds },
         typeGenerate: 'image',
       },
-      select: { taskId: true, referenceImages: true, resolution: true, ratio: true },
     });
 
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
 
-    logData.forEach(log => {
+    logData.forEach((log) => {
       if (log.referenceImages && log.referenceImages.length > 0) {
         referenceImagesMap.set(log.taskId, log.referenceImages);
       }
@@ -75,21 +78,24 @@ export class LogsService {
         ratioMap.set(log.taskId, log.ratio);
       }
     });
-
     const map = new Map();
 
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'vdo' ? this.minioconfig.minioBucketVdo : this.minioconfig.minioBucket,
-          item.imageUrl,
-        )
+            item.typeGenerate === 'vdo'
+              ? this.minioconfig.minioBucketVdo
+              : this.minioconfig.minioBucket,
+            item.imageUrl,
+          )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'vdo' ? this.minioconfig.minioBucketVdo : this.minioconfig.minioBucket,
-          item.thumbnailUrl,
-        )
+            item.typeGenerate === 'vdo'
+              ? this.minioconfig.minioBucketVdo
+              : this.minioconfig.minioBucket,
+            item.thumbnailUrl,
+          )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -97,17 +103,26 @@ export class LogsService {
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
-          const fileStats = await this.minioService.statFile(this.minioconfig.minioBucketUpload, filename);
+          const fileStats = await this.minioService.statFile(
+            this.minioconfig.minioBucketUpload,
+            filename,
+          );
           if (fileStats) {
-            const url = await this.minioService.getPresignedUrl(this.minioconfig.minioBucketUpload, filename);
+            const url = await this.minioService.getPresignedUrl(
+              this.minioconfig.minioBucketUpload,
+              filename,
+            );
             referenceImageUrls.push(url);
           } else {
-            const placeholder = 'data:image/svg+xml;base64,' + Buffer.from(
-              `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+            console.log(`Reference image not found: ${filename}`);
+            const placeholder =
+              'data:image/svg+xml;base64,' +
+              Buffer.from(
+                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
                 <rect width="32" height="32" fill="#333"/>
                 <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-              </svg>`
-            ).toString('base64');
+              </svg>`,
+              ).toString('base64');
             referenceImageUrls.push(placeholder);
           }
         }
@@ -139,18 +154,22 @@ export class LogsService {
 
     return result;
   }
-  async findOneVDO(projectId: string, skip?: number, take?: number) {
-
+  async findProjectImageByFristId(projectId: string, fristId: string) {
+    const cerrentTask = await this.galleryRepo.findOne({
+      where: {
+        id: fristId,
+      },
+    });
     const taskIds = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
-        typeGenerate: 'vdo',
+        typeGenerate: 'image',
+        createdAt: { gte: cerrentTask.createdAt },
       },
       select: { taskId: true },
       distinct: ['taskId'],
       orderBy: { createdAt: 'desc' },
-      ...(skip !== undefined && take !== undefined && { skip, take }),
     });
 
     const targetTaskIds = taskIds.map((t) => t.taskId);
@@ -162,7 +181,7 @@ export class LogsService {
     const data = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
-        typeGenerate: 'vdo',
+        typeGenerate: 'image',
       },
       include: { users: true },
       orderBy: { createdAt: 'desc' },
@@ -171,16 +190,21 @@ export class LogsService {
     const logData = await this.logrepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
-        typeGenerate: 'vdo',
+        typeGenerate: 'image',
       },
-      select: { taskId: true, referenceImages: true, resolution: true, ratio: true },
+      select: {
+        taskId: true,
+        referenceImages: true,
+        resolution: true,
+        ratio: true,
+      },
     });
 
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
 
-    logData.forEach(log => {
+    logData.forEach((log) => {
       if (log.referenceImages && log.referenceImages.length > 0) {
         referenceImagesMap.set(log.taskId, log.referenceImages);
       }
@@ -192,17 +216,24 @@ export class LogsService {
       }
     });
 
-    Logger.debug(data);
-    const newData = new Map();
+    const map = new Map();
+
     for (const item of data) {
       const url = item.imageUrl
-        ? await this.minioService.getPresignedUrl(this.minioconfig.minioBucketVdo, item.imageUrl)
+        ? await this.minioService.getPresignedUrl(
+            item.typeGenerate === 'vdo'
+              ? this.minioconfig.minioBucketVdo
+              : this.minioconfig.minioBucket,
+            item.imageUrl,
+          )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-          this.minioconfig.minioBucketVdo,
-          item.thumbnailUrl,
-        )
+            item.typeGenerate === 'vdo'
+              ? this.minioconfig.minioBucketVdo
+              : this.minioconfig.minioBucket,
+            item.thumbnailUrl,
+          )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -210,17 +241,157 @@ export class LogsService {
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
-          const fileStats = await this.minioService.statFile(this.minioconfig.minioBucketUpload, filename);
+          const fileStats = await this.minioService.statFile(
+            this.minioconfig.minioBucketUpload,
+            filename,
+          );
           if (fileStats) {
-            const url = await this.minioService.getPresignedUrl(this.minioconfig.minioBucketUpload, filename);
+            const url = await this.minioService.getPresignedUrl(
+              this.minioconfig.minioBucketUpload,
+              filename,
+            );
             referenceImageUrls.push(url);
           } else {
-            const placeholder = 'data:image/svg+xml;base64,' + Buffer.from(
-              `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+            console.log(`Reference image not found: ${filename}`);
+            const placeholder =
+              'data:image/svg+xml;base64,' +
+              Buffer.from(
+                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
                 <rect width="32" height="32" fill="#333"/>
                 <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-              </svg>`
-            ).toString('base64');
+              </svg>`,
+              ).toString('base64');
+            referenceImageUrls.push(placeholder);
+          }
+        }
+      }
+
+      if (!map.has(item.taskId)) {
+        map.set(item.taskId, {
+          ...item,
+          referenceImages: referenceImageUrls, // All reference images
+          resolution: resolutionMap.get(item.taskId) || null,
+          ratio: ratioMap.get(item.taskId) || null,
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl: thumbnailUrl,
+            },
+          ],
+        });
+        delete map.get(item.taskId).imageUrl;
+        delete map.get(item.taskId).thumbnailUrl;
+      } else {
+        map.get(item.taskId).imageUrls.push({
+          imageUrl: url,
+          thumbnailUrl: thumbnailUrl,
+        });
+      }
+    }
+    const result = Array.from(map.values());
+
+    return result;
+  }
+  async findProjectViedoByPage(
+    projectId: string,
+    skip?: number,
+    take?: number,
+  ) {
+    const data = await this.galleryRepo.findMany({
+      where: {
+        projectId: projectId,
+        taskId: { not: null },
+        typeGenerate: 'vdo',
+      },
+      include: { users: true },
+      orderBy: { createdAt: 'desc' },
+      ...(skip !== undefined && take !== undefined && { skip, take }),
+    });
+
+    const targetTaskIds = data.map((t) => t.taskId);
+
+    if (targetTaskIds.length === 0) {
+      return [];
+    }
+
+    // const data = await this.galleryRepo.findMany({
+    //   where: {
+    //     taskId: { in: targetTaskIds },
+    //     typeGenerate: 'vdo',
+    //   },
+    //   include: { users: true },
+    //   orderBy: { createdAt: 'desc' },
+    // });
+
+    const logData = await this.logrepo.findMany({
+      where: {
+        taskId: { in: targetTaskIds },
+        typeGenerate: 'vdo',
+      },
+      select: {
+        taskId: true,
+        referenceImages: true,
+        resolution: true,
+        ratio: true,
+      },
+    });
+
+    const referenceImagesMap = new Map();
+    const resolutionMap = new Map();
+    const ratioMap = new Map();
+
+    logData.forEach((log) => {
+      if (log.referenceImages && log.referenceImages.length > 0) {
+        referenceImagesMap.set(log.taskId, log.referenceImages);
+      }
+      if (log.resolution) {
+        resolutionMap.set(log.taskId, log.resolution);
+      }
+      if (log.ratio) {
+        ratioMap.set(log.taskId, log.ratio);
+      }
+    });
+
+    const newData = new Map();
+    for (const item of data) {
+      const url = item.imageUrl
+        ? await this.minioService.getPresignedUrl(
+            this.minioconfig.minioBucketVdo,
+            item.imageUrl,
+          )
+        : '';
+      const thumbnailUrl = item.thumbnailUrl
+        ? await this.minioService.getPresignedUrl(
+            this.minioconfig.minioBucketVdo,
+            item.thumbnailUrl,
+          )
+        : '';
+
+      // Generate presigned URLs for multiple reference images
+      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
+      let referenceImageUrls = [];
+      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
+        for (const filename of referenceImageFilenames) {
+          const fileStats = await this.minioService.statFile(
+            this.minioconfig.minioBucketUpload,
+            filename,
+          );
+          if (fileStats) {
+            const url = await this.minioService.getPresignedUrl(
+              this.minioconfig.minioBucketUpload,
+              filename,
+            );
+            referenceImageUrls.push(url);
+          } else {
+            console.log(`Reference image not found: ${filename}`);
+            const placeholder =
+              'data:image/svg+xml;base64,' +
+              Buffer.from(
+                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" fill="#333"/>
+                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
+              </svg>`,
+              ).toString('base64');
             referenceImageUrls.push(placeholder);
           }
         }
@@ -248,10 +419,148 @@ export class LogsService {
         });
       }
     }
+
     const result = Array.from(newData.values());
 
     return result;
   }
+  async findProjectViedoByFristId(projectId: string, fristId: string) {
+    const cerrentTask = await this.galleryRepo.findOne({
+      where: {
+        id: fristId,
+      },
+    });
+    if (!cerrentTask) {
+      return [];
+    }
+    const data = await this.galleryRepo.findMany({
+      where: {
+        projectId: projectId,
+        taskId: { not: null },
+        typeGenerate: 'vdo',
+        createdAt: { gte: cerrentTask.createdAt },
+      },
+      include: { users: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const targetTaskIds = data.map((t) => t.taskId);
+
+    if (targetTaskIds.length === 0) {
+      return [];
+    }
+
+    // const data = await this.galleryRepo.findMany({
+    //   where: {
+    //     taskId: { in: targetTaskIds },
+    //     typeGenerate: 'vdo',
+    //   },
+    //   include: { users: true },
+    //   orderBy: { createdAt: 'desc' },
+    // });
+
+    const logData = await this.logrepo.findMany({
+      where: {
+        taskId: { in: targetTaskIds },
+        typeGenerate: 'vdo',
+      },
+      select: {
+        taskId: true,
+        referenceImages: true,
+        resolution: true,
+        ratio: true,
+      },
+    });
+
+    const referenceImagesMap = new Map();
+    const resolutionMap = new Map();
+    const ratioMap = new Map();
+
+    logData.forEach((log) => {
+      if (log.referenceImages && log.referenceImages.length > 0) {
+        referenceImagesMap.set(log.taskId, log.referenceImages);
+      }
+      if (log.resolution) {
+        resolutionMap.set(log.taskId, log.resolution);
+      }
+      if (log.ratio) {
+        ratioMap.set(log.taskId, log.ratio);
+      }
+    });
+
+    const newData = new Map();
+    for (const item of data) {
+      const url = item.imageUrl
+        ? await this.minioService.getPresignedUrl(
+            this.minioconfig.minioBucketVdo,
+            item.imageUrl,
+          )
+        : '';
+      const thumbnailUrl = item.thumbnailUrl
+        ? await this.minioService.getPresignedUrl(
+            this.minioconfig.minioBucketVdo,
+            item.thumbnailUrl,
+          )
+        : '';
+
+      // Generate presigned URLs for multiple reference images
+      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
+      let referenceImageUrls = [];
+      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
+        for (const filename of referenceImageFilenames) {
+          const fileStats = await this.minioService.statFile(
+            this.minioconfig.minioBucketUpload,
+            filename,
+          );
+          if (fileStats) {
+            const url = await this.minioService.getPresignedUrl(
+              this.minioconfig.minioBucketUpload,
+              filename,
+            );
+            referenceImageUrls.push(url);
+          } else {
+            console.log(`Reference image not found: ${filename}`);
+            const placeholder =
+              'data:image/svg+xml;base64,' +
+              Buffer.from(
+                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" fill="#333"/>
+                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
+              </svg>`,
+              ).toString('base64');
+            referenceImageUrls.push(placeholder);
+          }
+        }
+      }
+
+      if (!newData.has(item.taskId)) {
+        newData.set(item.taskId, {
+          ...item,
+          referenceImages: referenceImageUrls,
+          resolution: resolutionMap.get(item.taskId) || null,
+          ratio: ratioMap.get(item.taskId) || null,
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl: thumbnailUrl,
+            },
+          ],
+        });
+        delete newData.get(item.taskId).imageUrl;
+        delete newData.get(item.taskId).thumbnailUrl;
+      } else {
+        newData.get(item.taskId).imageUrls.push({
+          imageUrl: url,
+          thumbnailUrl: thumbnailUrl,
+        });
+      }
+    }
+
+    const result = Array.from(newData.values());
+
+    return result;
+  }
+
   async findByTaskId(taskId: string, query: any) {
     const data = await this.logrepo.findOne({
       where: {

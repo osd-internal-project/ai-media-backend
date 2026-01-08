@@ -84,7 +84,7 @@ model Gallery {
   taskId           String?
   projectId        String
   userId           String
-  imageUrl         String
+  imageUrl         String?
   prompt           String?
   thumbnailUrl     String?
   typeGenerate     String?
@@ -92,7 +92,7 @@ model Gallery {
   status           Boolean? @default(false)
   project          Project  @relation(fields: [projectId], references: [id])
   users            users    @relation(fields: [userId], references: [userId])
-  genneratedStatus String?  @default("pending") @db.VarChar(10)
+  genneratedStatus String?  @default("pending") @db.VarChar(50)
 
   @@map("gallery")
 }
@@ -110,10 +110,12 @@ model Log {
   referenceImages String[] @default([])
   resolution      String?
   ratio           String?
+  generateAudio   Boolean? @default(false)
   createdAt       DateTime @default(now())
-
-  project Project @relation(fields: [projectId], references: [id])
-  users   users   @relation(fields: [userId], references: [userId])
+  generateConfig  Json?    @map("generate_config") @db.JsonB
+  project         Project  @relation(fields: [projectId], references: [id])
+  users           users    @relation(fields: [userId], references: [userId])
+  galleryId       String?  @map("gallary_id") @db.VarChar(100)
 
   @@map("log")
 }
@@ -358,24 +360,24 @@ model AuditLog {
 }
 
 model Plan {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String   @db.VarChar(100)
-  description String?  @db.Text
-  badge       String?  @db.VarChar(50)
-  isPopular   Boolean  @default(false) @map("is_popular")
-  borderColor String?  @db.VarChar(50)  @map("border_color")
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @db.VarChar(100)
+  description String? @db.Text
+  badge       String? @db.VarChar(50)
+  isPopular   Boolean @default(false) @map("is_popular")
+  borderColor String? @map("border_color") @db.VarChar(50)
 
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt      @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  prices      PlanPrice[]
-  features    PlanFeature[]
+  prices   PlanPrice[]
+  features PlanFeature[]
 
   @@map("plans")
 }
 
 model PlanPrice {
-  id      String @id @default(uuid()) @db.Uuid
+  id     String @id @default(uuid()) @db.Uuid
   planId String @map("plan_id") @db.Uuid
   plan   Plan   @relation(fields: [planId], references: [id])
 
@@ -399,16 +401,16 @@ model Feature {
 }
 
 model PlanFeature {
-  id         String  @id @default(uuid()) @db.Uuid
-  planId    String  @map("plan_id")    @db.Uuid
-  featureId String  @map("feature_id") @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  planId    String @map("plan_id") @db.Uuid
+  featureId String @map("feature_id") @db.Uuid
 
-  plan      Plan    @relation(fields: [planId], references: [id])
-  feature   Feature @relation(fields: [featureId], references: [id])
+  plan    Plan    @relation(fields: [planId], references: [id])
+  feature Feature @relation(fields: [featureId], references: [id])
 
   value       String  @db.Text
   isHighlight Boolean @default(false) @map("is_highlight")
-  orderIndex  Int     @default(0)     @map("order_index")
+  orderIndex  Int     @default(0) @map("order_index")
 
   @@unique([planId, featureId])
   @@map("plan_features")
