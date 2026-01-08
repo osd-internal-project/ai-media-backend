@@ -89,8 +89,7 @@ export class KeycloakService {
         error?.response?.data || error.message,
       );
       Logger.error(
-        `Failed to create Keycloak user: ${
-          error?.response?.data?.errorMessage || error.message
+        `Failed to create Keycloak user: ${error?.response?.data?.errorMessage || error.message
         }`,
       );
       throw new BadRequestException(`Failed to create user`);
@@ -150,6 +149,11 @@ export class KeycloakService {
   }
   async login(loginDto: any): Promise<any> {
     const config = configs().keycloak;
+
+    Logger.log(
+      `Login attempt for user: ${loginDto.username} to Realm: ${config.realm} at URL: ${config.url}`,
+    );
+
     const params = new URLSearchParams();
     params.append('client_id', config.clientId);
     params.append('client_secret', config.clientSecret);
@@ -166,8 +170,17 @@ export class KeycloakService {
       );
       return data;
     } catch (error) {
-      Logger.error('Login failed', error.response?.data || error.message);
-      throw new BadRequestException('Invalid credentials');
+      Logger.error(
+        `Login failed for user ${loginDto.username}`,
+        JSON.stringify({
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+        }),
+      );
+      throw new BadRequestException(
+        error.response?.data?.error_description || 'Invalid credentials',
+      );
     }
   }
 }

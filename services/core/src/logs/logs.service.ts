@@ -3,7 +3,10 @@ import {
   LogRepository,
   GalleryRepository,
   UsersRepository,
+  ErrorLogRepository,
+  AuditLogRepository,
 } from '@ai-media/share';
+import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
 import * as dayjs from 'dayjs';
 import { MinioClientService } from '../minio-client/minio-client.service';
 import { minioConfigs } from 'src/configs';
@@ -610,5 +613,52 @@ export class LogsService {
       },
     });
     return { data, count };
+  }
+
+  async logError(
+    serviceName: string,
+    severity: LogSeverity,
+    message: string,
+    stackTrace?: string,
+    context?: any,
+    userId?: string,
+    errorCode?: string,
+  ) {
+    Logger.error(message, stackTrace, context);
+    return this.errorLogRepo.create({
+      data: {
+        serviceName,
+        severity,
+        message,
+        stackTrace,
+        context,
+        userId,
+        errorCode,
+      },
+    });
+  }
+
+  async logAudit(
+    userId: string,
+    action: AuditAction,
+    entityName: string,
+    entityId: string,
+    oldValues?: any,
+    newValues?: any,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    return this.auditLogRepo.create({
+      data: {
+        userId,
+        action,
+        entityName,
+        entityId,
+        oldValues,
+        newValues,
+        ipAddress,
+        userAgent,
+      },
+    });
   }
 }

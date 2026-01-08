@@ -250,7 +250,7 @@ export class UsersService {
       password: dto.password,
       email: dto.email,
       firstName: dto.fullname,
-      lastName: '',
+      lastName: dto.fullname,
     });
 
     if (!token) {

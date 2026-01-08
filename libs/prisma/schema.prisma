@@ -358,3 +358,60 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs") // ชื่อตารางจริงใน DB
 }
+
+model Plan {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  badge       String?  @db.VarChar(50)
+  isPopular   Boolean  @default(false) @map("is_popular")
+  borderColor String?  @db.VarChar(50)  @map("border_color")
+
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt      @map("updated_at") @db.Timestamptz(6)
+
+  prices      PlanPrice[]
+  features    PlanFeature[]
+
+  @@map("plans")
+}
+
+model PlanPrice {
+  id      String @id @default(uuid()) @db.Uuid
+  planId String @map("plan_id") @db.Uuid
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  period String  @db.VarChar(20)
+  price  Decimal @db.Decimal(10, 2)
+
+  @@unique([planId, period])
+  @@map("plan_prices")
+}
+
+model Feature {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique @db.VarChar(50)
+  label     String   @db.VarChar(100)
+  icon      String?  @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  planFeatures PlanFeature[]
+
+  @@map("features")
+}
+
+model PlanFeature {
+  id         String  @id @default(uuid()) @db.Uuid
+  planId    String  @map("plan_id")    @db.Uuid
+  featureId String  @map("feature_id") @db.Uuid
+
+  plan      Plan    @relation(fields: [planId], references: [id])
+  feature   Feature @relation(fields: [featureId], references: [id])
+
+  value       String  @db.Text
+  isHighlight Boolean @default(false) @map("is_highlight")
+  orderIndex  Int     @default(0)     @map("order_index")
+
+  @@unique([planId, featureId])
+  @@map("plan_features")
+}
