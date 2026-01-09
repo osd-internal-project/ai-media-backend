@@ -75,6 +75,9 @@ model ProjectMember {
   project Project @relation(fields: [projectId], references: [id])
   users   users   @relation(fields: [userId], references: [userId])
 
+  maxToken  Int? @default(0) @map("max_token")
+  maxImages Int? @default(0) @map("max_images")
+
   @@unique([projectId, userId]) // ห้ามซ้ำ
   @@map("project_member")
 }
