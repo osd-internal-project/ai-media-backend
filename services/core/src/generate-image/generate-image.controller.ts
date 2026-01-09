@@ -12,6 +12,7 @@ import {
   Res,
   Inject,
   Sse,
+  Logger,
 } from '@nestjs/common';
 import { GenerateImageService } from './generate-image.service';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -39,6 +40,7 @@ export class GenerateImageController {
 
   @Post()
   create(@Body('body') createGenerateImageDto: CreateGenerateImageDto) {
+    // Logger.debug(createGenerateImageDto);
     return this.GenerateImageService.create(createGenerateImageDto);
   }
 

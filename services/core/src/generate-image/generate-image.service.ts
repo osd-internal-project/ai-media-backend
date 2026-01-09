@@ -62,7 +62,6 @@ export class GenerateImageService implements OnModuleInit {
   }
 
   async create(createGenerateImageDto: CreateGenerateImageDto) {
-    console.log(createGenerateImageDto);
     const uuid = uuidv4();
 
     const getConfigApi = await this.masterdataconfigapiRepo.findOne({
@@ -126,6 +125,34 @@ export class GenerateImageService implements OnModuleInit {
         genneratedStatus: 'PENDING',
         imageUrl: '',
         status: false,
+        generateConfig: {
+          ...(createGenerateImageDto?.width && {
+            width: createGenerateImageDto?.width,
+          }),
+          ...(createGenerateImageDto?.height && {
+            height: createGenerateImageDto?.height,
+          }),
+          ...(createGenerateImageDto?.ratio && {
+            ratio: createGenerateImageDto?.ratio,
+          }),
+          ...(createGenerateImageDto?.images && {
+            imageCount: createGenerateImageDto?.images,
+          }),
+          ...(createGenerateImageDto?.resolution && {
+            resolution: createGenerateImageDto?.resolution,
+          }),
+          ...(createGenerateImageDto?.modelName && {
+            modelName: createGenerateImageDto?.modelName,
+          }),
+
+          ...(createGenerateImageDto?.duration && {
+            duration: createGenerateImageDto?.duration,
+          }),
+          content: createGenerateImageDto?.text,
+          ...(createGenerateImageDto?.generateAudio && {
+            generateAudio: createGenerateImageDto?.generateAudio,
+          }),
+        },
       },
     });
 
@@ -307,6 +334,34 @@ export class GenerateImageService implements OnModuleInit {
               : [],
             resolution: dto.resolution || '2k',
             ratio: dto.ratio || '1:1',
+            generateConfig: {
+              ...(dto?.width && {
+                width: dto?.width,
+              }),
+              ...(dto?.height && {
+                height: dto?.height,
+              }),
+              ...(dto?.ratio && {
+                ratio: dto?.ratio,
+              }),
+              ...(dto?.images && {
+                imageCount: dto?.images,
+              }),
+              ...(dto?.resolution && {
+                resolution: dto?.resolution,
+              }),
+              ...(dto?.modelName && {
+                modelName: dto?.modelName,
+              }),
+
+              ...(dto?.duration && {
+                duration: dto?.duration,
+              }),
+              content: dto?.text,
+              ...(dto?.generateAudio && {
+                generateAudio: dto?.generateAudio,
+              }),
+            },
           },
         });
 
@@ -398,7 +453,6 @@ export class GenerateImageService implements OnModuleInit {
               this.minioconfig.minioBucket,
               objectName,
             );
-            Logger.debug('IMAGE 3');
             if (index === 0) {
               await this.updateAndEmit(
                 user.userId,
@@ -445,6 +499,31 @@ export class GenerateImageService implements OnModuleInit {
             referenceImages: dto.image
               ? dto.image.map((img) => img.fileName)
               : [],
+            generateConfig: {
+              ...(dto?.width && {
+                width: dto?.width,
+              }),
+              ...(dto?.height && {
+                height: dto?.height,
+              }),
+              ...(dto?.ratio && {
+                ratio: dto?.ratio,
+              }),
+              ...(dto?.images && {
+                imageCount: dto?.images,
+              }),
+              ...(dto?.resolution && {
+                resolution: dto?.resolution,
+              }),
+              ...(dto?.modelName && {
+                modelName: dto?.modelName,
+              }),
+
+              ...(dto?.duration && {
+                duration: dto?.duration,
+              }),
+              content: dto?.text,
+            },
           },
         });
       } else {
