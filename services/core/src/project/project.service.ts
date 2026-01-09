@@ -21,17 +21,31 @@ const PROJECT_ROLES = {
   VIEWER: 'VIEWER',
 } as const;
 
+const ORGANIZATION_ROLES = {
+  OWNER: 'OWNER',
+  ADMIN: 'ADMIN',
+  MEMBER: 'MEMBER',
+  VIEWER: 'VIEWER'
+} as const;
+
 type ProjectRole = keyof typeof PROJECT_ROLES;
+type OrganizationRole = keyof typeof ORGANIZATION_ROLES;
 
 function isValidRole(role: string): role is ProjectRole {
   return Object.values(PROJECT_ROLES).includes(role as ProjectRole);
 }
 
-function hasPermission(
-  userRole: ProjectRole,
-  requiredRole: ProjectRole,
-): boolean {
+function isValidOrganizationRole(role: string): role is OrganizationRole {
+  return Object.values(ORGANIZATION_ROLES).includes(role as OrganizationRole);
+}
+
+function hasPermission(userRole: ProjectRole, requiredRole: ProjectRole): boolean {
   const hierarchy = { ADMIN: 3, USER: 2, VIEWER: 1 };
+  return hierarchy[userRole] >= hierarchy[requiredRole];
+}
+
+function hasOrganizationPermission(userRole: OrganizationRole, requiredRole: OrganizationRole): boolean {
+  const hierarchy = { OWNER: 4, ADMIN: 3, MEMBER: 2, VIEWER: 1 };
   return hierarchy[userRole] >= hierarchy[requiredRole];
 }
 
@@ -43,6 +57,23 @@ export class ProjectService {
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly organizationMemberRepo: OrganizationMemberRepository,
   ) {}
+
+  private async getUserOrganizationRole(userId: string, organizationId?: string): Promise<OrganizationRole | null> {
+    const whereClause: any = { userId };
+    if (organizationId) {
+      whereClause.organizationId = organizationId;
+    }
+
+    const organizationMember = await this.organizationMemberRepo.findOne({
+      where: whereClause
+    });
+
+    if (!organizationMember || !isValidOrganizationRole(organizationMember.role)) {
+      return null;
+    }
+
+    return organizationMember.role as OrganizationRole;
+  }
   create(createProjectDto: any) {
     return this.projectRepo.create({
       data: {
@@ -88,6 +119,7 @@ export class ProjectService {
     if (!user) {
       throw new Error('User not found for this token');
     }
+<<<<<<< HEAD
 
     const organizationMember = await this.organizationMemberRepo.findOne({
       where: {
@@ -98,10 +130,21 @@ export class ProjectService {
 
     const isAdmin = !!organizationMember;
 
+=======
+    
+    const organizationRole = await this.getUserOrganizationRole(user.userId);
+    
+    const isOwner = organizationRole === 'OWNER';
+    
+    const isAdmin = organizationRole === 'ADMIN';
+    
+>>>>>>> e0fad1034e759e02361c9f975ac474fc739ffdd1
     const res = await this.projectRepo.findMany({
       where: {
-        ...(!isAdmin && { status: { not: 'deleted' } }),
-        members: { some: { ...(!isAdmin && { userId: user.userId }) } },
+        ...(!isOwner && { status: { not: 'deleted' } }),
+        ...(!isOwner && {
+          members: { some: { userId: user.userId } }
+        }),
       },
       include: { members: true },
       orderBy: {
@@ -116,20 +159,19 @@ export class ProjectService {
   }
   async findByOrganizationId(organizationId: string, token: string) {
     const user = await this.usersRepo.findOne({ where: { token } });
-
-    const organizationMember = await this.organizationMemberRepo.findOne({
-      where: {
-        userId: user.userId,
-        organizationId: organizationId,
-      },
-    });
-
-    const isAdmin = organizationMember?.role === 'ADMIN';
-
+    
+    if (!user) {
+      throw new Error('User not found for this token');
+    }
+    
+    const organizationRole = await this.getUserOrganizationRole(user.userId, organizationId);
+    
+    const isOwner = organizationRole === 'OWNER';
+    
     return this.projectRepo.findMany({
       where: {
         organizationId,
-        ...(!isAdmin && {
+        ...(!isOwner && {
           members: {
             some: {
               users: {
@@ -181,19 +223,24 @@ export class ProjectService {
     return this.projectRepo.delete({ where: { id } });
   }
 
-  async checkUserRole(
-    projectId: string,
-    userId: string,
-  ): Promise<string | null> {
-    const organizationMember = await this.organizationMemberRepo.findOne({
-      where: {
-        userId: userId,
-        role: 'ADMIN',
-      },
-    });
-
-    if (organizationMember) return 'ADMIN';
-
+  async checkUserRole(projectId: string, userId: string): Promise<string | null> {
+    const organizationRole = await this.getUserOrganizationRole(userId);
+    
+    if (organizationRole === 'OWNER') {
+      return 'OWNER';
+    }
+    
+    if (organizationRole === 'ADMIN') {
+      const member = await this.projectMemberRepo.findOne({
+        where: {
+          projectId,
+          userId
+        }
+      });
+      
+      return member?.role || null;
+    }
+    
     const member = await this.projectMemberRepo.findOne({
       where: {
         projectId,
@@ -204,13 +251,11 @@ export class ProjectService {
     return member?.role || null;
   }
 
-  // Check if user has admin role in project
   async isProjectAdmin(projectId: string, userId: string): Promise<boolean> {
     const role = await this.checkUserRole(projectId, userId);
-    return role === 'ADMIN';
+    return role === 'ADMIN' || role === 'OWNER';
   }
 
-  // Get all project members with their roles
   async getProjectMembers(projectId: string) {
     return this.projectRepo.findOne({
       where: { id: projectId },
@@ -236,16 +281,10 @@ export class ProjectService {
     userId: string,
     requiredRole: ProjectRole = 'USER',
   ): Promise<boolean> {
-    const organizationMember = await this.organizationMemberRepo.findOne({
-      where: {
-        userId: userId,
-        role: 'ADMIN',
-      },
-    });
-
-    if (organizationMember) return true;
-
     const userRole = await this.checkUserRole(projectId, userId);
+    
+    if (userRole === 'OWNER') return true;
+    
     if (!userRole || !isValidRole(userRole)) return false;
     return hasPermission(userRole as ProjectRole, requiredRole);
   }
