@@ -412,6 +412,7 @@ model PlanFeature {
   value       String  @db.Text
   isHighlight Boolean @default(false) @map("is_highlight")
   orderIndex  Int     @default(0) @map("order_index")
+  category    String? @default("General") @db.VarChar(100)
 
   @@unique([planId, featureId])
   @@map("plan_features")
