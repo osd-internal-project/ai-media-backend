@@ -20,6 +20,7 @@ import {
   InvitationRepository,
   ErrorLogRepository,
   AuditLogRepository,
+  PlanRepository,
 } from 'src/repositories';
 
 const services = [
@@ -43,6 +44,7 @@ const services = [
   InvitationRepository,
   ErrorLogRepository,
   AuditLogRepository,
+  PlanRepository,
 ];
 
 @Module({
