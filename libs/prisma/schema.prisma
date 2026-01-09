@@ -62,6 +62,11 @@ model Project {
   logs           Log[]
   organizationId String?         @map("organization_id") @db.VarChar(50)
 
+  accessTokenAmount Int? @default(0) @map("access_token_amount")
+  accessImageAmount Int? @default(0) @map("access_image_amount")
+  remainTokenAmount Int? @default(0) @map("remain_token_amount")
+  remainImageAmount Int? @default(0) @map("remain_image_amount")
+
   @@map("project")
 }
 
@@ -294,6 +299,8 @@ model Organization {
 
   packageTokenAmount Int? @map("package_token_amount")
   packageImageAmount Int? @map("package_image_amount")
+  remainTokenAmount  Int? @default(0) @map("remain_token_amount")
+  remainImageAmount  Int? @default(0) @map("remain_image_amount")
   maxUserAccess      Int? @map("max_user_access")
 
   @@map("organization")
@@ -307,14 +314,10 @@ model OrganizationMember {
   joinedAt       DateTime     @default(now()) @map("joined_at")
   organization   Organization @relation(fields: [organizationId], references: [organizationId])
 
-  apiKeys              String? @map("api_keys") @db.Text
-  users                users   @relation(fields: [userId], references: [userId])
-  maxToken             Int?
-  maxImages            Int?    @default(0) @map("max_images")
-  remainTokenAmount    Int?    @default(0) @map("remain_token_amount")
-  remainImageAmount    Int?    @default(0) @map("remain_image_amount")
-  availableTokenAmount Int?    @default(0) @map("available_token_amount")
-  availableImageAmount Int?    @default(0) @map("available_image_amount")
+  apiKeys   String? @map("api_keys") @db.Text
+  users     users   @relation(fields: [userId], references: [userId])
+  maxToken  Int?
+  maxImages Int?    @default(0) @map("max_images")
 
   @@map("organization_member")
 }
