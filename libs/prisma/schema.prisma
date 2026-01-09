@@ -92,7 +92,8 @@ model Gallery {
   status           Boolean? @default(false)
   project          Project  @relation(fields: [projectId], references: [id])
   users            users    @relation(fields: [userId], references: [userId])
-  genneratedStatus String?  @default("pending") @db.VarChar(50)
+  genneratedStatus String?  @default("PENDING") @db.VarChar(50)
+  generateConfig   Json?    @map("generate_config") @db.JsonB
 
   @@map("gallery")
 }
