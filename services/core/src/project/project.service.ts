@@ -1,17 +1,24 @@
 import { Injectable } from '@nestjs/common';
-import { ProjectRepository, UsersRepository, ProjectMemberRepository, OrganizationMemberRepository } from '@ai-media/share';
+import {
+  ProjectRepository,
+  UsersRepository,
+  ProjectMemberRepository,
+  OrganizationMemberRepository,
+} from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 
 interface ProjectMemberInput {
   userId: string;
   role: 'ADMIN' | 'USER' | 'VIEWER';
+  maxToken?: number;
+  maxImages?: number;
 }
 
 // Role validation and hierarchy utilities
 const PROJECT_ROLES = {
   ADMIN: 'ADMIN',
-  USER: 'USER', 
-  VIEWER: 'VIEWER'
+  USER: 'USER',
+  VIEWER: 'VIEWER',
 } as const;
 
 type ProjectRole = keyof typeof PROJECT_ROLES;
@@ -20,7 +27,10 @@ function isValidRole(role: string): role is ProjectRole {
   return Object.values(PROJECT_ROLES).includes(role as ProjectRole);
 }
 
-function hasPermission(userRole: ProjectRole, requiredRole: ProjectRole): boolean {
+function hasPermission(
+  userRole: ProjectRole,
+  requiredRole: ProjectRole,
+): boolean {
   const hierarchy = { ADMIN: 3, USER: 2, VIEWER: 1 };
   return hierarchy[userRole] >= hierarchy[requiredRole];
 }
@@ -39,12 +49,27 @@ export class ProjectService {
         name: createProjectDto.name,
         organizationId: createProjectDto?.organizationId,
         description: createProjectDto.description,
+        accessImageAmount: createProjectDto.accessImageAmount,
+        remainImageAmount: createProjectDto.remainImageAmount,
+        accessTokenAmount: createProjectDto.accessTokenAmount,
+        remainTokenAmount: createProjectDto.remainTokenAmount,
         members: createProjectDto.members?.length
           ? {
-              create: createProjectDto.members.map((member: string | ProjectMemberInput) => ({
-                users: { connect: { userId: typeof member === 'string' ? member : member.userId } },
-                role: typeof member === 'object' ? member.role : 'USER',
-              })),
+              create: createProjectDto.members.map(
+                (member: string | ProjectMemberInput) => ({
+                  users: {
+                    connect: {
+                      userId:
+                        typeof member === 'string' ? member : member.userId,
+                    },
+                  },
+                  role: typeof member === 'object' ? member.role : 'USER',
+                  maxToken:
+                    typeof member === 'object' ? member.maxToken || 0 : 0,
+                  maxImages:
+                    typeof member === 'object' ? member.maxImages || 0 : 0,
+                }),
+              ),
             }
           : undefined,
       },
@@ -57,22 +82,22 @@ export class ProjectService {
 
   async findOne(id: string) {
     const user = await this.usersRepo.findOne({
-      where: { token: id }
+      where: { token: id },
     });
-    
+
     if (!user) {
       throw new Error('User not found for this token');
     }
-    
+
     const organizationMember = await this.organizationMemberRepo.findOne({
       where: {
         userId: user.userId,
-        role: 'ADMIN'
-      }
+        role: 'ADMIN',
+      },
     });
-    
+
     const isAdmin = !!organizationMember;
-    
+
     const res = await this.projectRepo.findMany({
       where: {
         ...(!isAdmin && { status: { not: 'deleted' } }),
@@ -91,16 +116,16 @@ export class ProjectService {
   }
   async findByOrganizationId(organizationId: string, token: string) {
     const user = await this.usersRepo.findOne({ where: { token } });
-    
+
     const organizationMember = await this.organizationMemberRepo.findOne({
       where: {
         userId: user.userId,
         organizationId: organizationId,
-      }
+      },
     });
-    
+
     const isAdmin = organizationMember?.role === 'ADMIN';
-    
+
     return this.projectRepo.findMany({
       where: {
         organizationId,
@@ -125,17 +150,29 @@ export class ProjectService {
       where: { id },
       data: {
         ...updateProjectDto,
-        members: updateProjectDto.members !== undefined
-          ? {
-              deleteMany: {},
-              ...(updateProjectDto.members.length > 0 && {
-                create: updateProjectDto.members.map((member: string | ProjectMemberInput) => ({
-                  users: { connect: { userId: typeof member === 'string' ? member : member.userId } },
-                  role: typeof member === 'object' ? member.role : 'USER', // Default to USER role
-                })),
-              }),
-            }
-          : undefined,
+        members:
+          updateProjectDto.members !== undefined
+            ? {
+                deleteMany: {},
+                ...(updateProjectDto.members.length > 0 && {
+                  create: updateProjectDto.members.map(
+                    (member: string | ProjectMemberInput) => ({
+                      users: {
+                        connect: {
+                          userId:
+                            typeof member === 'string' ? member : member.userId,
+                        },
+                      },
+                      role: typeof member === 'object' ? member.role : 'USER', // Default to USER role
+                      maxToken:
+                        typeof member === 'object' ? member.maxToken || 0 : 0,
+                      maxImages:
+                        typeof member === 'object' ? member.maxImages || 0 : 0,
+                    }),
+                  ),
+                }),
+              }
+            : undefined,
       },
     });
   }
@@ -144,23 +181,26 @@ export class ProjectService {
     return this.projectRepo.delete({ where: { id } });
   }
 
-  async checkUserRole(projectId: string, userId: string): Promise<string | null> {
+  async checkUserRole(
+    projectId: string,
+    userId: string,
+  ): Promise<string | null> {
     const organizationMember = await this.organizationMemberRepo.findOne({
       where: {
         userId: userId,
-        role: 'ADMIN'
-      }
+        role: 'ADMIN',
+      },
     });
-    
+
     if (organizationMember) return 'ADMIN';
-    
+
     const member = await this.projectMemberRepo.findOne({
       where: {
         projectId,
-        userId
-      }
+        userId,
+      },
     });
-    
+
     return member?.role || null;
   }
 
@@ -182,29 +222,29 @@ export class ProjectService {
                 userId: true,
                 username: true,
                 fullname: true,
-                email: true
-              }
-            }
-          }
-        }
-      }
+                email: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
   async hasProjectPermission(
-    projectId: string, 
-    userId: string, 
-    requiredRole: ProjectRole = 'USER'
+    projectId: string,
+    userId: string,
+    requiredRole: ProjectRole = 'USER',
   ): Promise<boolean> {
     const organizationMember = await this.organizationMemberRepo.findOne({
       where: {
         userId: userId,
-        role: 'ADMIN'
-      }
+        role: 'ADMIN',
+      },
     });
-    
+
     if (organizationMember) return true;
-    
+
     const userRole = await this.checkUserRole(projectId, userId);
     if (!userRole || !isValidRole(userRole)) return false;
     return hasPermission(userRole as ProjectRole, requiredRole);

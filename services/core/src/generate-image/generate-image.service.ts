@@ -9,6 +9,7 @@ import {
   OrganizationMemberRepository,
   ErrorLogRepository,
   AuditLogRepository,
+  ProjectMemberRepository,
 } from '@ai-media/share';
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -37,6 +38,8 @@ export class GenerateImageService implements OnModuleInit {
     private readonly galleryRepo: GalleryRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
+    private readonly projectMemberRepository: ProjectMemberRepository,
+
     private readonly userRepo: UsersRepository,
     private readonly minioClientSerives: MinioClientService,
     private readonly organizationMemberRepo: OrganizationMemberRepository,
@@ -75,8 +78,11 @@ export class GenerateImageService implements OnModuleInit {
       await this.logAudit(user.userId, 'CREATE', createGenerateImageDto, uuid);
     }
     // 1. Validate Quota
-    const organizationMember = await this.organizationMemberRepo.findOne({
-      where: { organizationId: user.recentOrganizationId },
+    const projectMember = await this.projectMemberRepository.findOne({
+      where: {
+        projectId: createGenerateImageDto.projectId,
+        userId: user.userId,
+      },
     });
 
     if (createGenerateImageDto.type === 'vdo') {
@@ -85,13 +91,21 @@ export class GenerateImageService implements OnModuleInit {
           userId: user.userId,
           typeGenerate: createGenerateImageDto.type,
           status: 'success',
+          createdAt: {
+            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            lt: new Date(
+              new Date().getFullYear(),
+              new Date().getMonth() + 1,
+              1,
+            ),
+          },
         },
       });
       const totalTokenUsed = totalVDOGenerate.reduce(
         (sum, item) => sum + item.tokenUsed,
         0,
       );
-      if (totalTokenUsed > (organizationMember?.maxToken || 0)) {
+      if (totalTokenUsed > (projectMember?.maxToken || 0)) {
         return { status: 400, data: 'Token token limit exceeded' };
       }
     } else {
@@ -100,15 +114,23 @@ export class GenerateImageService implements OnModuleInit {
           userId: user.userId,
           typeGenerate: createGenerateImageDto.type,
           status: 'success',
+          createdAt: {
+            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            lt: new Date(
+              new Date().getFullYear(),
+              new Date().getMonth() + 1,
+              1,
+            ),
+          },
         },
       });
-      const totalTokenUsed = totalImageGenerate.reduce(
+      const totalImageUsed = totalImageGenerate.reduce(
         (sum, item) => sum + item.ImageUsed,
         0,
       );
       if (
-        totalTokenUsed + Number(createGenerateImageDto.images) >
-        user.maxImages
+        totalImageUsed + Number(createGenerateImageDto.images) >
+        projectMember.maxImages
       ) {
         return { status: 400, data: 'Image limit exceeded' };
       }
