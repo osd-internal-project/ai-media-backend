@@ -292,6 +292,10 @@ model Organization {
   updatedById        String?              @map("updated_by") @db.VarChar(50)
   invitations        Invitation[]
 
+  packageTokenAmount Int? @map("package_token_amount")
+  packageImageAmount Int? @map("package_image_amount")
+  maxUserAccess      Int? @map("max_user_access")
+
   @@map("organization")
 }
 
@@ -302,10 +306,15 @@ model OrganizationMember {
   role           String       @map("role") @db.VarChar(50) //"OWNER | ADMIN | MEMBER | VIEWER"
   joinedAt       DateTime     @default(now()) @map("joined_at")
   organization   Organization @relation(fields: [organizationId], references: [organizationId])
-  maxToken       Int?         @default(0)
-  maxImages      Int?         @default(0) @map("max_images")
-  apiKeys        String?      @map("api_keys") @db.Text
-  users          users        @relation(fields: [userId], references: [userId])
+
+  apiKeys              String? @map("api_keys") @db.Text
+  users                users   @relation(fields: [userId], references: [userId])
+  maxToken             Int?
+  maxImages            Int?    @default(0) @map("max_images")
+  remainTokenAmount    Int?    @default(0) @map("remain_token_amount")
+  remainImageAmount    Int?    @default(0) @map("remain_image_amount")
+  availableTokenAmount Int?    @default(0) @map("available_token_amount")
+  availableImageAmount Int?    @default(0) @map("available_image_amount")
 
   @@map("organization_member")
 }
