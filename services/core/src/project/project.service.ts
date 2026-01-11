@@ -138,10 +138,12 @@ export class ProjectService {
 
     const isAdmin = organizationRole === 'ADMIN';
 
+    const isOwnerOrAdmin = isOwner || isAdmin;
+
     const res = await this.projectRepo.findMany({
       where: {
-        ...(!isOwner && { status: { not: 'deleted' } }),
-        ...(!isOwner && {
+        ...(!isOwnerOrAdmin && { status: { not: 'deleted' } }),
+        ...(!isOwnerOrAdmin && {
           members: { some: { userId: user.userId } },
         }),
       },
@@ -170,10 +172,14 @@ export class ProjectService {
 
     const isOwner = organizationRole === 'OWNER';
 
+    const isAdmin = organizationRole === 'ADMIN';
+
+    const isOwnerOrAdmin = isOwner || isAdmin;
+
     return this.projectRepo.findMany({
       where: {
         organizationId,
-        ...(!isOwner && {
+        ...(!isOwnerOrAdmin && {
           members: {
             some: {
               users: {
@@ -231,19 +237,8 @@ export class ProjectService {
   ): Promise<string | null> {
     const organizationRole = await this.getUserOrganizationRole(userId);
 
-    if (organizationRole === 'OWNER') {
+    if (organizationRole === 'OWNER' || organizationRole === 'ADMIN') {
       return 'OWNER';
-    }
-
-    if (organizationRole === 'ADMIN') {
-      const member = await this.projectMemberRepo.findOne({
-        where: {
-          projectId,
-          userId,
-        },
-      });
-
-      return member?.role || null;
     }
 
     const member = await this.projectMemberRepo.findOne({
