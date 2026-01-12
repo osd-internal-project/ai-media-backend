@@ -1,7 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CreateDashboardDto } from './dto/create-dashboard.dto';
 import { UpdateDashboardDto } from './dto/update-dashboard.dto';
-import { LogRepository, UsersRepository } from '@ai-media/share';
+import {
+  LogRepository,
+  ProjectMemberRepository,
+  ProjectRepository,
+  UsersRepository,
+} from '@ai-media/share';
+import { PrismaService } from '@ai-media/share';
 import * as dayjs from 'dayjs';
 
 @Injectable()
@@ -9,7 +15,99 @@ export class DashboardService {
   constructor(
     private readonly logRepo: LogRepository,
     private readonly userRepo: UsersRepository,
+    private readonly prismaService: PrismaService,
+    private readonly projectMemberRepo: ProjectMemberRepository,
+    private readonly projectRepo: ProjectRepository,
   ) {}
+  async summaryProject(organizationId: string, query: any) {
+    const { projectId, createdAt } = query || {};
+    const projects = await this.projectRepo.findMany({
+      where: {
+        organizationId: organizationId,
+        ...(projectId && { id: projectId }),
+      },
+      select: {
+        id: true,
+        name: true,
+        logs: {
+          where: {
+            status: 'success',
+            ...(projectId && { projectId: projectId }),
+            ...(createdAt && {
+              createdAt: {
+                gte: dayjs(createdAt).startOf('month').toDate(),
+                lte: dayjs(createdAt).endOf('month').toDate(),
+              },
+            }),
+          },
+          select: { tokenUsed: true, ImageUsed: true },
+        },
+        members: {
+          where: {
+            ...(projectId && { projectId: projectId }),
+            project: { organizationId: organizationId },
+          },
+          select: {
+            users: {
+              select: { userId: true, fullname: true },
+            },
+            project: {
+              select: {
+                logs: {
+                  where: {
+                    status: 'success',
+                    ...(projectId && { projectId: projectId }),
+                    ...(createdAt && {
+                      createdAt: {
+                        gte: dayjs(createdAt).startOf('month').toDate(),
+                        lte: dayjs(createdAt).endOf('month').toDate(),
+                      },
+                    }),
+                  },
+                  select: { tokenUsed: true, ImageUsed: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return projects;
+  }
+  async summaryUser(organizationId: string, query: any) {
+    const { projectId, createdAt } = query || {};
+
+    return await this.projectMemberRepo.findMany({
+      where: {
+        ...(projectId && { projectId: projectId }),
+        project: { organizationId: organizationId },
+      },
+      select: {
+        users: {
+          select: { fullname: true },
+        },
+        project: {
+          select: {
+            logs: {
+              where: {
+                status: 'success',
+                ...(projectId && { projectId: projectId }),
+                ...(createdAt && {
+                  createdAt: {
+                    gte: dayjs(createdAt).startOf('month').toDate(),
+                    lte: dayjs(createdAt).endOf('month').toDate(),
+                  },
+                }),
+              },
+              select: { tokenUsed: true, ImageUsed: true },
+            },
+          },
+        },
+      },
+    });
+  }
+
   async findSummaryDashboard(token: string, query: any) {
     const { projectId, createdAt } = query || {};
 
