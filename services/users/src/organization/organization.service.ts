@@ -1,4 +1,9 @@
-import { Injectable, InternalServerErrorException, Logger, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  ConflictException,
+} from '@nestjs/common';
 import { ApproveInviteUserDto } from './dto/approve-invite-user.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
@@ -9,6 +14,7 @@ import {
   ProjectMemberRepository,
   ProjectRepository,
   UsersRepository,
+  PlanRepository,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
@@ -27,7 +33,8 @@ export class OrganizationService {
     private readonly usersRepo: UsersRepository,
     private readonly keycloakService: KeycloakService,
     private readonly httpService: HttpService,
-  ) { }
+    private readonly planRepo: PlanRepository,
+  ) {}
 
   create(createOrganizationDto: Prisma.OrganizationCreateInput) {
     return this.organizationRepo.create({
@@ -55,7 +62,7 @@ export class OrganizationService {
 
   async createInvitation(dto: CreateInvitationDto) {
     // 1. Check if user already exists in Organization (via OrganizationMember check if we had userId, but here we only have email)
-    // We strictly follow requirements: Check if email exists in OrganizationMember. 
+    // We strictly follow requirements: Check if email exists in OrganizationMember.
     // Since OrganizationMember links to User, we find user by email first.
     const user = await this.usersRepo.findOne({ where: { email: dto.email } });
     if (user) {
@@ -63,7 +70,9 @@ export class OrganizationService {
         where: { organizationId: dto.organizationId, userId: user.userId },
       });
       if (member) {
-        throw new ConflictException('User is already a member of this organization');
+        throw new ConflictException(
+          'User is already a member of this organization',
+        );
       }
     }
 
@@ -76,7 +85,9 @@ export class OrganizationService {
       },
     });
 
-    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const token =
+      Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15);
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 48);
 
@@ -104,7 +115,9 @@ export class OrganizationService {
       });
     }
 
-    const organization = await this.organizationRepo.findOne({ where: { organizationId: dto.organizationId } });
+    const organization = await this.organizationRepo.findOne({
+      where: { organizationId: dto.organizationId },
+    });
     // Email Dispatch
     const emailPayload = {
       to: dto.email,
@@ -130,7 +143,11 @@ export class OrganizationService {
     }
 
     // Mock Email Dispatch (Legacy)
-    console.log(`[Email Service] Sending invitation to ${dto.email} with link: ${configs().frontendUrl}/accept-invite?token=${token}`);
+    console.log(
+      `[Email Service] Sending invitation to ${dto.email} with link: ${
+        configs().frontendUrl
+      }/accept-invite?token=${token}`,
+    );
 
     return { message: 'Invitation sent', token };
   }
@@ -153,7 +170,9 @@ export class OrganizationService {
       throw new ConflictException('Invitation expired');
     }
 
-    const user = await this.usersRepo.findOne({ where: { email: invite.email } });
+    const user = await this.usersRepo.findOne({
+      where: { email: invite.email },
+    });
 
     return {
       email: invite.email,
@@ -185,13 +204,17 @@ export class OrganizationService {
     }
 
     let userId: string;
-    const existingUser = await this.usersRepo.findOne({ where: { email: invite.email } });
+    const existingUser = await this.usersRepo.findOne({
+      where: { email: invite.email },
+    });
 
     if (existingUser) {
       userId = existingUser.userId;
     } else {
       if (!dto.username || !dto.password || !dto.fullname) {
-        throw new ConflictException('New user registration requires username, password, and fullname');
+        throw new ConflictException(
+          'New user registration requires username, password, and fullname',
+        );
       }
       const token = await this.keycloakService.createUser({
         username: dto.username,
@@ -220,6 +243,13 @@ export class OrganizationService {
       userId = newUser.userId;
 
       // Auto-create Personal Organization & Project
+      const freePlan = await this.planRepo.findOne({
+        where: { isDefault: true },
+      });
+      const freePlanDetails = freePlan.detailJson as any;
+      const maxDefaultImage = freePlanDetails?.packageImageAmount || 0;
+      const maxDefaultToken = freePlanDetails?.packageTokenAmount || 0;
+
       const personalOrg = await this.organizationRepo.create({
         data: {
           name: `${dto.username} Personal`,
@@ -227,6 +257,11 @@ export class OrganizationService {
           type: 'personal',
           createdById: userId,
           status: true,
+          remainImageAmount: 0,
+          remainTokenAmount: 0,
+          packageImageAmount: maxDefaultImage,
+          packageTokenAmount: maxDefaultToken,
+          maxUserAccess: 1,
         },
       });
 
@@ -237,8 +272,6 @@ export class OrganizationService {
             organizationId: personalOrg.organizationId,
             userId: userId,
             role: 'OWNER',
-            maxImages: 1000000,
-            maxToken: 1000000,
           },
         });
 
@@ -248,6 +281,10 @@ export class OrganizationService {
             name: `${dto.username} Project`,
             organizationId: personalOrg.organizationId,
             status: 'active',
+            remainImageAmount: 0,
+            remainTokenAmount: 0,
+            accessImageAmount: maxDefaultImage,
+            accessTokenAmount: maxDefaultToken,
           },
         });
 
@@ -258,6 +295,8 @@ export class OrganizationService {
               projectId: personalProject.id,
               userId: userId,
               role: 'OWNER',
+              maxImages: maxDefaultImage,
+              maxToken: maxDefaultToken,
             },
           });
         }
@@ -270,8 +309,6 @@ export class OrganizationService {
         organizationId: invite.organizationId,
         userId: userId,
         role: invite.role,
-        maxImages: 0,
-        maxToken: 0,
       },
     });
 
@@ -281,7 +318,10 @@ export class OrganizationService {
       data: { status: 'ACCEPTED' },
     });
 
-    return { message: 'Invitation accepted', organizationId: invite.organizationId };
+    return {
+      message: 'Invitation accepted',
+      organizationId: invite.organizationId,
+    };
   }
 
   findAll() {
