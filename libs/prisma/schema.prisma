@@ -383,6 +383,7 @@ model Plan {
   isPopular   Boolean @default(false) @map("is_popular")
   borderColor String? @map("border_color") @db.VarChar(50)
   isDefault   Boolean @default(false) @map("is_default")
+  detailJson  Json?   @map("detail_json") @db.JsonB
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
