@@ -90,6 +90,7 @@ export class GenerateImageService implements OnModuleInit {
         where: {
           userId: user.userId,
           typeGenerate: createGenerateImageDto.type,
+          projectId: createGenerateImageDto.projectId,
           status: 'success',
           createdAt: {
             gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -105,7 +106,11 @@ export class GenerateImageService implements OnModuleInit {
         (sum, item) => sum + item.tokenUsed,
         0,
       );
+
       if (totalTokenUsed > (projectMember?.maxToken || 0)) {
+        Logger.error(
+          `Token used ${totalTokenUsed} exceed max token ${projectMember?.maxToken}`,
+        );
         return { status: 400, data: 'Token token limit exceeded' };
       }
     } else {
@@ -113,6 +118,7 @@ export class GenerateImageService implements OnModuleInit {
         where: {
           userId: user.userId,
           typeGenerate: createGenerateImageDto.type,
+          projectId: createGenerateImageDto.projectId,
           status: 'success',
           createdAt: {
             gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -132,6 +138,9 @@ export class GenerateImageService implements OnModuleInit {
         totalImageUsed + Number(createGenerateImageDto.images) >
         projectMember.maxImages
       ) {
+        Logger.error(
+          `Token used ${totalImageUsed} exceed max token ${projectMember?.maxImages}`,
+        );
         return { status: 400, data: 'Image limit exceeded' };
       }
     }
