@@ -48,6 +48,7 @@ export class DashboardService {
             project: { organizationId: organizationId },
           },
           select: {
+            role: true,
             users: {
               select: { userId: true, fullname: true },
             },
@@ -84,8 +85,10 @@ export class DashboardService {
         project: { organizationId: organizationId },
       },
       select: {
+        userId: true,
+        role: true,
         users: {
-          select: { fullname: true },
+          select: { userId: true, fullname: true },
         },
         project: {
           select: {
