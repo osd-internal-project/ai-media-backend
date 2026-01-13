@@ -333,12 +333,14 @@ export class LogsService {
         referenceImages: true,
         resolution: true,
         ratio: true,
+        generateAudio: true,
       },
     });
 
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
+    const generateAudio = new Map();
 
     logData.forEach((log) => {
       if (log.referenceImages && log.referenceImages.length > 0) {
@@ -349,6 +351,9 @@ export class LogsService {
       }
       if (log.ratio) {
         ratioMap.set(log.taskId, log.ratio);
+      }
+      if (log.generateAudio) {
+        generateAudio.set(log.taskId, log.generateAudio);
       }
     });
 
@@ -403,6 +408,8 @@ export class LogsService {
           referenceImages: referenceImageUrls,
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
+          generateAudio: generateAudio.get(item.taskId) || null,
+
           imageUrls: [
             {
               imageUrl: url,
@@ -469,12 +476,14 @@ export class LogsService {
         referenceImages: true,
         resolution: true,
         ratio: true,
+        generateAudio: true,
       },
     });
 
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
+    const generateAudio = new Map();
 
     logData.forEach((log) => {
       if (log.referenceImages && log.referenceImages.length > 0) {
@@ -485,6 +494,9 @@ export class LogsService {
       }
       if (log.ratio) {
         ratioMap.set(log.taskId, log.ratio);
+      }
+      if (log.generateAudio) {
+        generateAudio.set(log.taskId, log.generateAudio);
       }
     });
 
@@ -539,6 +551,7 @@ export class LogsService {
           referenceImages: referenceImageUrls,
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
+          generateAudio: generateAudio.get(item.taskId) || false,
           imageUrls: [
             {
               imageUrl: url,
