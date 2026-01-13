@@ -31,7 +31,7 @@ export class UsersService {
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly keycloakService: KeycloakService,
-  ) { }
+  ) {}
 
   async create(createUserDto: any) {
     const { password, groups, ...userData } = createUserDto;
@@ -241,7 +241,9 @@ export class UsersService {
     });
 
     if (existingUser) {
-      throw new ConflictException('User with this email or username already exists');
+      throw new ConflictException(
+        'User with this email or username already exists',
+      );
     }
 
     // 2. Create User in Keycloak
@@ -249,13 +251,14 @@ export class UsersService {
       username: dto.username,
       password: dto.password,
       email: dto.email,
-      firstName: dto.fullname,
-      lastName: dto.fullname,
+      fullname: dto.fullname,
     });
 
     if (!token) {
       Logger.error('Failed to create user in Keycloak');
-      throw new InternalServerErrorException('Failed to create user in Keycloak');
+      throw new InternalServerErrorException(
+        'Failed to create user in Keycloak',
+      );
     }
 
     // 3. Create User in Database

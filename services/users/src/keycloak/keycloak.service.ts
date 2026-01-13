@@ -50,8 +50,10 @@ export class KeycloakService {
           },
         ],
         username: userDto.username,
-        firstName: userDto.fullname?.split(' ')[0] || userDto.username,
-        lastName: userDto.fullname?.split(' ').slice(1).join(' ') || '',
+        firstName: userDto.fullname?.trim().split(' ')[0] || userDto.username,
+        lastName:
+          userDto.fullname?.trim().split(' ').slice(1).join(' ') ||
+          'NOLASTNAME',
         email: userDto.email || '',
         emailVerified: false,
         enabled: true,
@@ -89,7 +91,8 @@ export class KeycloakService {
         error?.response?.data || error.message,
       );
       Logger.error(
-        `Failed to create Keycloak user: ${error?.response?.data?.errorMessage || error.message
+        `Failed to create Keycloak user: ${
+          error?.response?.data?.errorMessage || error.message
         }`,
       );
       throw new BadRequestException(`Failed to create user`);
