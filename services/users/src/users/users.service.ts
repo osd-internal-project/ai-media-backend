@@ -18,7 +18,10 @@ import {
   ProjectRepository,
   PlanRepository,
   RegisterRepository,
+  RequestChangePasswordRepository,
 } from '@ai-media/share';
+import { v4 as uuidv4 } from 'uuid';
+import * as dayjs from 'dayjs';
 
 import axios from 'axios';
 import configs from 'src/configs';
@@ -39,6 +42,7 @@ export class UsersService {
     private readonly planRepo: PlanRepository,
     private readonly httpService: HttpService,
     private readonly registerRepo: RegisterRepository,
+    private readonly requestChangePasswordRepo: RequestChangePasswordRepository,
 
   ) { }
 
@@ -381,7 +385,6 @@ export class UsersService {
     return { message: 'User registered successfully', userId };
   }
 
-
   async register(dto: RegisterUserDto) {
     const existingUser = await this.userRepo.findOne({
       where: {
@@ -453,4 +456,105 @@ export class UsersService {
   async test() {
     return this.keycloakService.getPasswordPolicy();
   }
+
+  async requestChangePassword(email: string) {
+    const user = await this.userRepo.findOne({
+      where: { email: email },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const token = uuidv4();
+    const expiredAt = dayjs().add(10, 'minute').toDate();
+
+    await this.requestChangePasswordRepo.create({
+      data: {
+        email: user.email,
+        username: user.username,
+        token: token,
+        status: 'PENDING',
+        expiresAt: expiredAt,
+      },
+    });
+
+    try {
+      const emailPayload = {
+        to: user.email,
+        subject: `Reset Password`,
+        template: 'resetpassword',
+        context: {
+          username: user.username, // Or fetch Org Name
+          email: user.email,
+          action_url: `${configs().frontendUrl}/change-password?token=${token}`,
+        },
+      };
+
+      const { data } = await firstValueFrom(
+        this.httpService.post(
+          `${configs().emailApiUrl}/email/send`,
+          emailPayload,
+        ),
+      );
+      Logger.log(`Email sent: ${JSON.stringify(data)}`);
+    } catch (error) {
+      Logger.error(`Failed to send email: ${error.message}`);
+    }
+
+    return { message: 'Email sent successfully' };
+  }
+
+  async checkResetPassword(token: string) {
+    const request = await this.requestChangePasswordRepo.findOne({
+      where: { token, status: 'PENDING' },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Token not found or expired');
+    }
+
+    const isExpired = dayjs().isAfter(dayjs(request.expiresAt));
+    if (isExpired) {
+      await this.requestChangePasswordRepo.update({
+        where: { id: request.id },
+        data: { status: 'EXPIRED' },
+      });
+      throw new BadRequestException('Token expired');
+    }
+
+    return request;
+  }
+
+  async confirmChangePassword(body: any) {
+    const { token, newPassword } = body;
+    const request = await this.checkResetPassword(token);
+
+    const user = await this.userRepo.findOne({
+      where: { email: request.email },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Update Password in Keycloak
+    try {
+      await this.keycloakService.updateUser(user.token, {
+        password: newPassword,
+      });
+    } catch (error) {
+      throw new InternalServerErrorException('Failed to update password');
+    }
+
+    // Update Request Status
+    await this.requestChangePasswordRepo.update({
+      where: { id: request.id },
+      data: { status: 'ACCEPTED' },
+    });
+
+    return { message: 'Password updated successfully' };
+  }
+
+
 }

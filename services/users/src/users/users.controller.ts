@@ -36,6 +36,21 @@ export class UsersController {
     return this.usersService.verifyEmail(token);
   }
 
+  @Post('request-change-password')
+  requestChangePassword(@Body('email') email: string) {
+    return this.usersService.requestChangePassword(email);
+  }
+
+  @Post('check-reset-password')
+  checkResetPassword(@Body('token') token: string) {
+    return this.usersService.checkResetPassword(token);
+  }
+
+  @Post('confirm-change-password')
+  confirmChangePassword(@Body() body: any) {
+    return this.usersService.confirmChangePassword(body);
+  }
+
   @Get()
   findAll() {
     return this.usersService.findAll();
