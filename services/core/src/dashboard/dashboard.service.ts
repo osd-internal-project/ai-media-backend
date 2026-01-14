@@ -23,7 +23,7 @@ export class DashboardService {
   ) {}
   async summaryProject(organizationId: string, query: any) {
     const { projectId, createdAt } = query || {};
-    const projects = await this.projectRepo.findMany({
+    const projects = (await this.projectRepo.findMany({
       where: {
         organizationId: organizationId,
         ...(projectId && { id: projectId }),
@@ -44,39 +44,62 @@ export class DashboardService {
           },
           select: { tokenUsed: true, ImageUsed: true },
         },
-      },
-    });
-    const members = await this.projectMemberRepo.findMany({
-      where: {
-        ...(projectId && { projectId: projectId }),
-        project: { organizationId: organizationId },
-      },
-      select: {
-        userId: true,
-        role: true,
-        users: {
-          select: { userId: true, fullname: true },
-        },
-        project: {
+        members: {
+          where: {
+            ...(projectId && { projectId: projectId }),
+            project: { organizationId: organizationId },
+          },
           select: {
-            logs: {
-              where: {
-                status: 'success',
-                ...(projectId && { projectId: projectId }),
-                ...(createdAt && {
-                  createdAt: {
-                    gte: dayjs(createdAt).startOf('month').toDate(),
-                    lte: dayjs(createdAt).endOf('month').toDate(),
+            userId: true,
+            role: true,
+            users: {
+              select: {
+                userId: true,
+                fullname: true,
+                logs: {
+                  where: {
+                    status: 'success',
+                    ...(projectId && { projectId: projectId }),
+                    ...(createdAt && {
+                      createdAt: {
+                        gte: dayjs(createdAt).startOf('month').toDate(),
+                        lte: dayjs(createdAt).endOf('month').toDate(),
+                      },
+                    }),
                   },
-                }),
+                  select: { tokenUsed: true, ImageUsed: true, projectId: true },
+                },
               },
-              select: { tokenUsed: true, ImageUsed: true },
             },
           },
         },
       },
-    });
-    return projects;
+      orderBy: {
+        createdAt: 'asc',
+      },
+    })) as any;
+
+    return projects.map((project) => ({
+      ...project,
+      tokenUsed: project.logs.reduce(
+        (sum, logs) => sum + (logs.tokenUsed ? Number(logs.tokenUsed) : 0),
+        0,
+      ),
+      imageUsed: project.logs.reduce(
+        (sum, logs) => sum + (logs.ImageUsed ? Number(logs.ImageUsed) : 0),
+        0,
+      ),
+      members: project.members.map((member) => ({
+        ...member,
+        project: {
+          logs: member.users.logs.filter((log) => log.projectId === project.id),
+        },
+        users: {
+          ...member.users,
+          logs: undefined,
+        },
+      })),
+    }));
   }
   async summaryUser(organizationId: string, query: any) {
     const { projectId, createdAt } = query || {};
@@ -106,7 +129,7 @@ left join
 	from
 		log
 	left join project on
-		log."projectId" = project.id where project.organization_id = '${organizationId}' ${
+		log."projectId" = project.id where log.status='success' and project.organization_id = '${organizationId}' ${
       projectId ? `and log."projectId" = '${projectId}'` : ''
     } ${
       createdAt
@@ -117,8 +140,8 @@ left join
             .toISOString()}'`
         : ''
     } group by log."userId" ) lg on
-	om.user_id = lg.user_id`;
-    console.log(sql);
+	om.user_id = lg.user_id order by fullname`;
+    // console.log(sql);
     const result = await this.prismaService.$queryRawUnsafe(sql);
 
     return result || [];
