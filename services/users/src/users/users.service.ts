@@ -15,6 +15,7 @@ import {
   OrganizationRepository,
   ProjectMemberRepository,
   ProjectRepository,
+  PlanRepository,
 } from '@ai-media/share';
 
 import axios from 'axios';
@@ -31,6 +32,7 @@ export class UsersService {
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly keycloakService: KeycloakService,
+    private readonly planRepo: PlanRepository,
   ) {}
 
   async create(createUserDto: any) {
@@ -274,7 +276,12 @@ export class UsersService {
     });
 
     const userId = newUser.userId;
-
+    const freePlan = await this.planRepo.findOne({
+      where: { isDefault: true },
+    });
+    const freePlanDetails = freePlan.detailJson as any;
+    const maxDefaultImage = freePlanDetails?.packageImageAmount || 0;
+    const maxDefaultToken = freePlanDetails?.packageTokenAmount || 0;
     // 4. Auto-create Personal Organization & Project
     const personalOrg = await this.organizationRepo.create({
       data: {
@@ -283,6 +290,11 @@ export class UsersService {
         type: 'personal',
         createdById: userId,
         status: true,
+        packageImageAmount: maxDefaultImage,
+        packageTokenAmount: maxDefaultToken,
+        remainImageAmount: 0,
+        remainTokenAmount: 0,
+        maxUserAccess: 1,
       },
     });
 
@@ -293,8 +305,6 @@ export class UsersService {
           organizationId: personalOrg.organizationId,
           userId: userId,
           role: 'OWNER',
-          maxImages: 1000000,
-          maxToken: 1000000,
         },
       });
 
@@ -304,6 +314,10 @@ export class UsersService {
           name: `${dto.username} Project`,
           organizationId: personalOrg.organizationId,
           status: 'active',
+          remainImageAmount: 0,
+          remainTokenAmount: 0,
+          accessImageAmount: maxDefaultImage,
+          accessTokenAmount: maxDefaultToken,
         },
       });
 
@@ -314,6 +328,8 @@ export class UsersService {
             projectId: personalProject.id,
             userId: userId,
             role: 'OWNER',
+            maxImages: maxDefaultImage,
+            maxToken: maxDefaultToken,
           },
         });
       }
