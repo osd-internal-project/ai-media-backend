@@ -11,7 +11,7 @@ export class GalleryService {
     private minioconfigs: ConfigType<typeof minioConfigs>,
     private readonly galleryRepo: GalleryRepository,
     private readonly minioService: MinioClientService,
-  ) { }
+  ) {}
 
   create(createGalleryDto: Prisma.GalleryCreateInput) {
     return this.galleryRepo.create({ data: createGalleryDto });
@@ -42,15 +42,19 @@ export class GalleryService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'vdo' ? this.minioconfigs.minioBucketVdo : this.minioconfigs.minioBucket,
-          item.imageUrl,
-        )
+            item.typeGenerate === 'vdo'
+              ? this.minioconfigs.minioBucketVdo
+              : this.minioconfigs.minioBucket,
+            item.imageUrl,
+          )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'vdo' ? this.minioconfigs.minioBucketVdo : this.minioconfigs.minioBucket,
-          item.thumbnailUrl,
-        )
+            item.typeGenerate === 'vdo'
+              ? this.minioconfigs.minioBucketVdo
+              : this.minioconfigs.minioBucket,
+            item.thumbnailUrl,
+          )
         : '';
       newData.set(item.id, {
         ...item,
@@ -88,7 +92,7 @@ export class GalleryService {
       where: {
         id: found.id,
       },
-      data: { status: !updateGalleryDto.status },
+      data: { status: updateGalleryDto.status },
     });
     return data;
   }
