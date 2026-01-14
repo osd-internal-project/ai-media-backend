@@ -280,8 +280,8 @@ export class UsersService {
       where: { isDefault: true },
     });
     const freePlanDetails = freePlan.detailJson as any;
-    const maxDefaultImage = freePlanDetails?.packageImageAmount || 0;
-    const maxDefaultToken = freePlanDetails?.packageTokenAmount || 0;
+    const maxDefaultImage = parseInt(freePlanDetails?.packageImageAmount) || 0;
+    const maxDefaultToken = parseInt(freePlanDetails?.packageTokenAmount) || 0;
     // 4. Auto-create Personal Organization & Project
     const personalOrg = await this.organizationRepo.create({
       data: {
