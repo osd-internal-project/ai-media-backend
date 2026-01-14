@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import {
   Injectable,
   Logger,
@@ -16,11 +17,14 @@ import {
   ProjectMemberRepository,
   ProjectRepository,
   PlanRepository,
+  RegisterRepository,
 } from '@ai-media/share';
 
 import axios from 'axios';
 import configs from 'src/configs';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
+import { firstValueFrom } from 'rxjs';
+import { HttpService } from '@nestjs/axios';
 
 @Injectable()
 export class UsersService {
@@ -33,7 +37,10 @@ export class UsersService {
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly keycloakService: KeycloakService,
     private readonly planRepo: PlanRepository,
-  ) {}
+    private readonly httpService: HttpService,
+    private readonly registerRepo: RegisterRepository,
+
+  ) { }
 
   async create(createUserDto: any) {
     const { password, groups, ...userData } = createUserDto;
@@ -49,13 +56,49 @@ export class UsersService {
       Logger.error('User already exists');
       throw new ConflictException('User already exists');
     }
-    const token = await this.keycloakService.createUser(createUserDto);
-    if (!token) {
-      Logger.error('Failed to create user in Keycloak');
-      throw new InternalServerErrorException(
-        'Failed to create user in Keycloak',
+
+    // Explicit check in Keycloak
+    const keycloakUsers = await this.keycloakService.findUserByUsernameOrEmail(
+      createUserDto.username,
+      createUserDto.email,
+    );
+    if (keycloakUsers.length > 0) {
+      Logger.error(
+        'User already exists in Keycloak (found by explicit check)',
       );
+      throw new ConflictException('User already exists');
     }
+
+    const token = await this.keycloakService.createUser(createUserDto);
+    const emailPayload = {
+      to: createUserDto.email,
+      subject: `Hello, ${createUserDto.username}!`,
+      template: 'welcome',
+      context: {
+        name: createUserDto.username,
+        email: createUserDto.email,
+        action_url: `${configs().frontendUrl}/verify-email?token=${token}`,
+      },
+    };
+
+    try {
+      const emailApiUrl = configs().emailApiUrl;
+      const { data } = await firstValueFrom(
+        this.httpService.post(`${emailApiUrl}/email/send`, emailPayload),
+      );
+      Logger.log(`Email sent: ${JSON.stringify(data)}`);
+    } catch (error) {
+      Logger.error(`Failed to send email: ${error.message}`);
+      // Not throwing error to avoid rolling back invitation? Or should we?
+      // Usually better to log failure but leave invitation pending so admin can resend or manual link.
+    }
+
+    // Mock Email Dispatch (Legacy)
+    console.log(
+      `[Email Service] Sending invitation to ${createUserDto.email} with link: ${configs().frontendUrl
+      }/accept-invite?token=${token}`,
+    );
+
     return this.userRepo.create({
       data: {
         ...userData,
@@ -65,6 +108,7 @@ export class UsersService {
             group: { connect: { groupId: gid } },
           })),
         },
+        status: 'verified'
       },
     });
   }
@@ -139,6 +183,7 @@ export class UsersService {
     });
     return getdataUser;
   }
+
   async findOrganizationUserDetails(organizationId: string) {
     const members = await this.organizationMemberRepo.findMany({
       where: {
@@ -154,6 +199,7 @@ export class UsersService {
       },
     });
   }
+
   async update(userId: string, updateUserDto: any) {
     // 1. Update in Keycloak
     // We assume userId is the Keycloak User ID
@@ -187,6 +233,7 @@ export class UsersService {
       },
     });
   }
+
   async updateDetailByToken(
     token: string,
     updateUserDto: Prisma.usersUpdateInput,
@@ -196,6 +243,7 @@ export class UsersService {
       data: updateUserDto,
     });
   }
+
   async remove(userId: string) {
     // 1. Delete in Keycloak
     try {
@@ -234,44 +282,36 @@ export class UsersService {
     });
   }
 
-  async register(dto: RegisterUserDto) {
-    // 1. Check if user already exists
-    const existingUser = await this.userRepo.findOne({
-      where: {
-        OR: [{ email: dto.email }, { username: dto.username }],
-      },
+  async verifyEmail(tokenRegister: string) {
+    const register = await this.registerRepo.findOne({
+      where: { token: tokenRegister },
     });
-
-    if (existingUser) {
-      throw new ConflictException(
-        'User with this email or username already exists',
-      );
+    if (!register) {
+      Logger.error('User not found');
+      throw new NotFoundException('User not found');
     }
-
-    // 2. Create User in Keycloak
-    const token = await this.keycloakService.createUser({
-      username: dto.username,
-      password: dto.password,
-      email: dto.email,
-      fullname: dto.fullname,
+    const tokenKeycloak = await this.keycloakService.createUser({
+      username: register.username,
+      password: register.password,
+      email: register.email,
+      fullname: register.fullname,
     });
 
-    if (!token) {
+    if (!tokenKeycloak) {
       Logger.error('Failed to create user in Keycloak');
       throw new InternalServerErrorException(
         'Failed to create user in Keycloak',
       );
     }
 
-    // 3. Create User in Database
     const newUser = await this.userRepo.create({
       data: {
-        email: dto.email,
-        username: dto.username,
-        fullname: dto.fullname,
+        email: register.email,
+        username: register.username,
+        fullname: register.fullname,
         status: 'active',
-        phoneNumber: dto.phoneNumber,
-        token,
+        phoneNumber: register.phoneNumber,
+        token: tokenKeycloak,
       },
     });
 
@@ -282,11 +322,10 @@ export class UsersService {
     const freePlanDetails = freePlan.detailJson as any;
     const maxDefaultImage = parseInt(freePlanDetails?.packageImageAmount) || 0;
     const maxDefaultToken = parseInt(freePlanDetails?.packageTokenAmount) || 0;
-    // 4. Auto-create Personal Organization & Project
     const personalOrg = await this.organizationRepo.create({
       data: {
-        name: `${dto.username} Personal`,
-        slug: `${dto.username}-personal`,
+        name: `${register.username} Personal`,
+        slug: `${register.username}-personal`,
         type: 'personal',
         createdById: userId,
         status: true,
@@ -299,7 +338,6 @@ export class UsersService {
     });
 
     if (personalOrg) {
-      // Add User as Owner of Personal Org
       await this.organizationMemberRepo.create({
         data: {
           organizationId: personalOrg.organizationId,
@@ -308,10 +346,9 @@ export class UsersService {
         },
       });
 
-      // Create Personal Project
       const personalProject = await this.projectRepo.create({
         data: {
-          name: `${dto.username} Project`,
+          name: `${register.username} Project`,
           organizationId: personalOrg.organizationId,
           status: 'active',
           remainImageAmount: 0,
@@ -322,7 +359,6 @@ export class UsersService {
       });
 
       if (personalProject) {
-        // Add User as Owner of Personal Project
         await this.projectMemberRepo.create({
           data: {
             projectId: personalProject.id,
@@ -334,7 +370,6 @@ export class UsersService {
         });
       }
 
-      // Update recentOrganizationId
       await this.userRepo.update({
         where: { userId },
         data: {
@@ -344,5 +379,78 @@ export class UsersService {
     }
 
     return { message: 'User registered successfully', userId };
+  }
+
+
+  async register(dto: RegisterUserDto) {
+    const existingUser = await this.userRepo.findOne({
+      where: {
+        OR: [{ email: dto.email }, { username: dto.username }],
+      },
+    });
+
+    if (existingUser) {
+      throw new ConflictException(
+        'User with this email or username already exists',
+      );
+    }
+
+    const keycloakUsers = await this.keycloakService.findUserByUsernameOrEmail(
+      dto.username,
+      dto.email,
+    );
+
+    if (keycloakUsers.length > 0) {
+      Logger.error(
+        'User already exists in Keycloak (found by explicit check)',
+      );
+      throw new ConflictException('User already exists');
+    }
+
+    const token =
+      Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15);
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 48);
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    const register = await this.registerRepo.create({
+      data: {
+        ...dto,
+        password: hashedPassword,
+        token,
+      },
+    });
+
+    const emailPayload = {
+      to: dto.email,
+      subject: `Hello, ${dto.username}!`,
+      template: 'welcome',
+      context: {
+        name: dto.username,
+        email: dto.email,
+        action_url: `${configs().frontendUrl}/verify-email?token=${token}`,
+      },
+    };
+
+    try {
+      const emailApiUrl = configs().emailApiUrl;
+      const { data } = await firstValueFrom(
+        this.httpService.post(`${emailApiUrl}/email/send`, emailPayload),
+      );
+      Logger.log(`Email sent: ${JSON.stringify(data)}`);
+    } catch (error) {
+      Logger.error(`Failed to send email: ${error.message}`);
+    }
+
+    console.log(
+      `[Email Service] Sending welcome email to ${dto.email} with link: ${configs().frontendUrl
+      }/verify-email?token=${token}`,
+    );
+    return register;
+  }
+  async test() {
+    return this.keycloakService.getPasswordPolicy();
   }
 }

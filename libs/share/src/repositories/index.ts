@@ -18,3 +18,4 @@ export * from './invitation.repository';
 export * from './errorLog.repository';
 export * from './auditLog.repository';
 export * from './plan.repository';
+export * from './registers.repository';

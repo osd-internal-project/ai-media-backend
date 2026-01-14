@@ -34,7 +34,7 @@ export class OrganizationService {
     private readonly keycloakService: KeycloakService,
     private readonly httpService: HttpService,
     private readonly planRepo: PlanRepository,
-  ) {}
+  ) { }
 
   create(createOrganizationDto: Prisma.OrganizationCreateInput) {
     return this.organizationRepo.create({
@@ -144,8 +144,7 @@ export class OrganizationService {
 
     // Mock Email Dispatch (Legacy)
     console.log(
-      `[Email Service] Sending invitation to ${dto.email} with link: ${
-        configs().frontendUrl
+      `[Email Service] Sending invitation to ${dto.email} with link: ${configs().frontendUrl
       }/accept-invite?token=${token}`,
     );
 
@@ -223,6 +222,7 @@ export class OrganizationService {
         firstName: dto.fullname,
         lastName: dto.fullname,
       });
+      console.log(`token`, token)
       if (!token) {
         Logger.error('Failed to create user in Keycloak');
         throw new InternalServerErrorException(

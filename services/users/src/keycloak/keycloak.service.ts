@@ -3,6 +3,8 @@ import {
   Logger,
   InternalServerErrorException,
   BadRequestException,
+  ConflictException,
+  HttpException,
 } from '@nestjs/common';
 import axios from 'axios';
 import configs from 'src/configs';
@@ -58,7 +60,6 @@ export class KeycloakService {
         emailVerified: false,
         enabled: true,
       };
-      Logger.debug(newUser);
       // Create User
       await axios.post(
         `${config.url}/admin/realms/${config.realm}/users`,
@@ -78,7 +79,6 @@ export class KeycloakService {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
-      Logger.debug(users);
 
       if (!users.length) {
         Logger.error('User created but not found in Keycloak');
@@ -86,16 +86,65 @@ export class KeycloakService {
       }
       return users[0].id;
     } catch (error) {
-      console.error(
-        'Error creating user in Keycloak:',
-        error?.response?.data || error.message,
-      );
       Logger.error(
-        `Failed to create Keycloak user: ${
-          error?.response?.data?.errorMessage || error.message
+        `Error creating user in Keycloak: ${error?.response?.data.error_description || error.message
         }`,
       );
-      throw new BadRequestException(`Failed to create user`);
+
+      if (axios.isAxiosError(error) && error.response) {
+        const { status, data } = error.response;
+        const message =
+          data?.errorMessage ||
+          data?.error_description ||
+          'Failed to create user in Keycloak';
+
+        if (status === 409) {
+          throw new ConflictException(message);
+        }
+        if (status === 400) {
+          throw new BadRequestException(message);
+        }
+
+        throw new HttpException(message, status);
+      }
+
+      throw new InternalServerErrorException('Failed to create user');
+    }
+  }
+
+  async findUserByUsernameOrEmail(username: string, email: string) {
+    const config = configs().keycloak;
+    const token = await this.getAdminToken();
+
+    try {
+      const [byUsername, byEmail] = await Promise.all([
+        axios.get(`${config.url}/admin/realms/${config.realm}/users`, {
+          params: { username, exact: true },
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        axios.get(`${config.url}/admin/realms/${config.realm}/users`, {
+          params: { email, exact: true },
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      const users = [...byUsername.data, ...byEmail.data];
+      // Deduplicate by ID just in case
+      const uniqueUsers = Array.from(
+        new Map(users.map((u) => [u.id, u])).values(),
+      );
+      return uniqueUsers;
+    } catch (error) {
+      Logger.error(
+        `Failed to search users in Keycloak: ${error.message}`,
+        error?.response?.data,
+      );
+      // If the search fails, we might not want to block creation entirely,
+      // but if the requirement is strict duplicate checking, we should probably throw (or return empty if we want to fail open, but fail closed is safer for data integrity).
+      // For now, let's rethrow as internal server error since we can't verify uniqueness.
+      throw new InternalServerErrorException(
+        'Failed to check user existence in Keycloak',
+      );
     }
   }
 
@@ -152,11 +201,6 @@ export class KeycloakService {
   }
   async login(loginDto: any): Promise<any> {
     const config = configs().keycloak;
-
-    Logger.log(
-      `Login attempt for user: ${loginDto.username} to Realm: ${config.realm} at URL: ${config.url}`,
-    );
-
     const params = new URLSearchParams();
     params.append('client_id', config.clientId);
     params.append('client_secret', config.clientSecret);
@@ -185,5 +229,16 @@ export class KeycloakService {
         error.response?.data?.error_description || 'Invalid credentials',
       );
     }
+  }
+  async getPasswordPolicy() {
+    const config = configs().keycloak;
+    const token = await this.getAdminToken();
+    const { data } = await axios.get(
+      `${config.url}/admin/realms/${config.realm}/password-policy`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    return data;
   }
 }
