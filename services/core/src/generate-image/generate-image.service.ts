@@ -734,6 +734,10 @@ export class GenerateImageService implements OnModuleInit {
     return data;
   }
 
+  async createFileLogs(data: { filePath: string; fileType: string; fileName: string }) {
+    return data;
+  }
+
   private async logAudit(
     userId: string,
     action: string,
