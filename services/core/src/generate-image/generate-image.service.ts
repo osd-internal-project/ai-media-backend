@@ -84,7 +84,10 @@ export class GenerateImageService implements OnModuleInit {
         userId: user.userId,
       },
     });
-
+    if (!projectMember) {
+      Logger.error(`Team member not found`);
+      return { status: 400, data: 'Token token limit exceeded' };
+    }
     if (createGenerateImageDto.type === 'vdo') {
       const totalVDOGenerate = await this.logrepo.findMany({
         where: {

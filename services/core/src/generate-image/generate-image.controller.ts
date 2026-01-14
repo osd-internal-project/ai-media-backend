@@ -263,8 +263,10 @@ export class GenerateImageController {
   }
 
   @Sse('sse/project/:projectId')
-  sseProject(@Param('projectId') projectId: string): Observable<MessageEvent> {
-    return fromEvent(
+  async sseProject(
+    @Param('projectId') projectId: string,
+  ): Promise<Observable<MessageEvent>> {
+    return await fromEvent(
       this.eventEmitter,
       `image.update.project.${projectId}`,
     ).pipe(map((data) => ({ data } as MessageEvent)));

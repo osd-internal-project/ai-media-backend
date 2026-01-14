@@ -138,6 +138,8 @@ export class LogsService {
             {
               imageUrl: url,
               thumbnailUrl: thumbnailUrl,
+              id: item.id,
+              status: item.status,
             },
           ],
         });
@@ -147,6 +149,8 @@ export class LogsService {
         map.get(item.taskId).imageUrls.push({
           imageUrl: url,
           thumbnailUrl: thumbnailUrl,
+          id: item.id,
+          status: item.status,
         });
       }
     }
@@ -414,6 +418,8 @@ export class LogsService {
             {
               imageUrl: url,
               thumbnailUrl: thumbnailUrl,
+              id: item.id,
+              status: item.status,
             },
           ],
         });
@@ -423,6 +429,8 @@ export class LogsService {
         newData.get(item.taskId).imageUrls.push({
           imageUrl: url,
           thumbnailUrl: thumbnailUrl,
+          id: item.id,
+          status: item.status,
         });
       }
     }
@@ -556,6 +564,8 @@ export class LogsService {
             {
               imageUrl: url,
               thumbnailUrl: thumbnailUrl,
+              id: item.id,
+              status: item.status,
             },
           ],
         });
@@ -565,6 +575,8 @@ export class LogsService {
         newData.get(item.taskId).imageUrls.push({
           imageUrl: url,
           thumbnailUrl: thumbnailUrl,
+          id: item.id,
+          status: item.status,
         });
       }
     }

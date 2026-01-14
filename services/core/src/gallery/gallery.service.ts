@@ -35,7 +35,7 @@ export class GalleryService {
       orderBy: { createdAt: 'desc' },
     });
     const total = await this.galleryRepo.count({
-      where: { projectId: projectId },
+      where: { projectId: projectId, ...(query?.status && { status: true }) },
     });
 
     const newData = new Map();
@@ -96,7 +96,15 @@ export class GalleryService {
     });
     return data;
   }
-
+  async updateById(id: string, updateGalleryDto: Prisma.GalleryUpdateInput) {
+    const data = await this.galleryRepo.update({
+      where: {
+        id: id,
+      },
+      data: { status: updateGalleryDto.status },
+    });
+    return data;
+  }
   remove(id: string) {
     return this.galleryRepo.delete({ where: { id: id } });
   }
