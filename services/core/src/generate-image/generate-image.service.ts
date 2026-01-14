@@ -588,8 +588,6 @@ export class GenerateImageService implements OnModuleInit {
       return;
     }
 
-    Logger.debug('LOOP');
-    Logger.debug(tasks);
     for (const task of tasks) {
       await this.checkTaskStatus(task);
     }

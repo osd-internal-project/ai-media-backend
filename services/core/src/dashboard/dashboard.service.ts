@@ -3,6 +3,7 @@ import { CreateDashboardDto } from './dto/create-dashboard.dto';
 import { UpdateDashboardDto } from './dto/update-dashboard.dto';
 import {
   LogRepository,
+  OrganizationMemberRepository,
   ProjectMemberRepository,
   ProjectRepository,
   UsersRepository,
@@ -17,6 +18,7 @@ export class DashboardService {
     private readonly userRepo: UsersRepository,
     private readonly prismaService: PrismaService,
     private readonly projectMemberRepo: ProjectMemberRepository,
+    private readonly orgMemberRepo: OrganizationMemberRepository,
     private readonly projectRepo: ProjectRepository,
   ) {}
   async summaryProject(organizationId: string, query: any) {
@@ -42,44 +44,9 @@ export class DashboardService {
           },
           select: { tokenUsed: true, ImageUsed: true },
         },
-        members: {
-          where: {
-            ...(projectId && { projectId: projectId }),
-            project: { organizationId: organizationId },
-          },
-          select: {
-            role: true,
-            users: {
-              select: { userId: true, fullname: true },
-            },
-            project: {
-              select: {
-                logs: {
-                  where: {
-                    status: 'success',
-                    ...(projectId && { projectId: projectId }),
-                    ...(createdAt && {
-                      createdAt: {
-                        gte: dayjs(createdAt).startOf('month').toDate(),
-                        lte: dayjs(createdAt).endOf('month').toDate(),
-                      },
-                    }),
-                  },
-                  select: { tokenUsed: true, ImageUsed: true },
-                },
-              },
-            },
-          },
-        },
       },
     });
-
-    return projects;
-  }
-  async summaryUser(organizationId: string, query: any) {
-    const { projectId, createdAt } = query || {};
-
-    return await this.projectMemberRepo.findMany({
+    const members = await this.projectMemberRepo.findMany({
       where: {
         ...(projectId && { projectId: projectId }),
         project: { organizationId: organizationId },
@@ -109,6 +76,52 @@ export class DashboardService {
         },
       },
     });
+    return projects;
+  }
+  async summaryUser(organizationId: string, query: any) {
+    const { projectId, createdAt } = query || {};
+    const sql = `
+select
+	om.user_id,
+	om.role,fullname,username,
+	COALESCE(lg.image_used,0) as "imageUsed",
+	COALESCE(lg.token_used,0) as "tokenUsed"
+from
+	(
+	select
+		om.user_id  as user_id,
+		om.role as role,
+		u.fullname,
+		u.username
+	from
+		organization_member om left join users u on u."userId" = om.user_id 
+	where
+		organization_id = '${organizationId}' ) om
+left join 
+	(
+	select
+		log."userId"  as user_id ,
+		SUM(log."ImageUsed") as image_used,
+		SUM(log."tokenUsed") as token_used
+	from
+		log
+	left join project on
+		log."projectId" = project.id where project.organization_id = '${organizationId}' ${
+      projectId ? `and log."projectId" = '${projectId}'` : ''
+    } ${
+      createdAt
+        ? `and log."createdAt" between '${dayjs(createdAt)
+            .startOf('month')
+            .toISOString()}' and '${dayjs(createdAt)
+            .endOf('month')
+            .toISOString()}'`
+        : ''
+    } group by log."userId" ) lg on
+	om.user_id = lg.user_id`;
+    console.log(sql);
+    const result = await this.prismaService.$queryRawUnsafe(sql);
+
+    return result || [];
   }
 
   async findSummaryDashboard(token: string, query: any) {
