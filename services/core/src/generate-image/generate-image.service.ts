@@ -189,7 +189,7 @@ export class GenerateImageService implements OnModuleInit {
         },
       },
     });
-
+    Logger.debug('GENERETE PENDING TASK', galleryItem.id);
     this.eventEmitter.emit(
       `image.update.project.${createGenerateImageDto.projectId}`,
       {
@@ -222,6 +222,7 @@ export class GenerateImageService implements OnModuleInit {
     // 4. Send Request (Async execution to avoid blocking if needed, but here we wait for initial response)
     try {
       if (createGenerateImageDto.type === 'vdo') {
+        Logger.debug('SEND GENERATE VIDEO :', galleryItem.id);
         const taskId = await this.handleVdoRequest(
           createGenerateImageDto,
           getModelType,
@@ -234,7 +235,7 @@ export class GenerateImageService implements OnModuleInit {
           galleryItem.taskId = taskId;
         }
       } else {
-        Logger.debug('handleImageRequest');
+        Logger.debug('SEND GENERATE IMAGE :', galleryItem.id);
         await this.handleImageRequest(
           uuid,
           createGenerateImageDto,
@@ -466,6 +467,9 @@ export class GenerateImageService implements OnModuleInit {
           where: { id: gallery.id },
           data: { genneratedStatus: 'PROCESSING' },
         });
+        Logger.debug('API RESPONSIVE :', res.data ?? res.data.data);
+        Logger.debug('UPDATE TASK PROCESSING :', gallery.id);
+
         this.eventEmitter.emit(`image.update.project.${gallery.projectId}`, {
           galleryId: gallery.id,
           status: 'PROCESSING',
@@ -487,6 +491,7 @@ export class GenerateImageService implements OnModuleInit {
               this.minioconfig.minioBucket,
               objectName,
             );
+
             if (index === 0) {
               await this.updateAndEmit(
                 user.userId,
@@ -495,6 +500,7 @@ export class GenerateImageService implements OnModuleInit {
                 'SUCCESS',
                 objectName,
               );
+              Logger.debug('UPDATE TASK SUCCESS ');
             } else {
               await this.galleryRepo.create({
                 data: {
