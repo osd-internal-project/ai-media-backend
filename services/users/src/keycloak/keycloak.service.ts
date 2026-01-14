@@ -104,10 +104,12 @@ export class KeycloakService {
     const token = await this.getAdminToken();
 
     const updatePayload: any = {
-      email: userDto.email,
-      firstName: userDto.fullname?.split(' ')[0],
-      lastName: userDto.fullname?.split(' ').slice(1).join(' '),
-      enabled: userDto.status === 'active',
+      ...(userDto.email && { email: userDto.email }),
+      ...(userDto.fullname && { firstName: userDto.fullname?.split(' ')[0] }),
+      ...(userDto.fullname && {
+        lastName: userDto.fullname?.split(' ').slice(1).join(' '),
+      }),
+      ...(userDto.status && { enabled: userDto.status === 'active' }),
     };
 
     if (userDto.password) {

@@ -3,10 +3,11 @@ import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { KeycloakModule } from '../keycloak/keycloak.module';
 import { PrismaModule } from '@ai-media/share';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
-  imports: [PrismaModule, KeycloakModule],
+  imports: [PrismaModule, KeycloakModule, HttpModule],
   controllers: [UsersController],
   providers: [UsersService],
 })
-export class UsersModule { }
+export class UsersModule {}

@@ -14,7 +14,7 @@ import { RegisterUserDto } from './dto/register-user.dto';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) { }
+  constructor(private readonly usersService: UsersService) {}
 
   @Post()
   create(@Body('body') createUserDto: Prisma.usersCreateInput) {
@@ -24,6 +24,21 @@ export class UsersController {
   @Post('register')
   register(@Body() registerUserDto: RegisterUserDto) {
     return this.usersService.register(registerUserDto);
+  }
+
+  @Post('request-change-password')
+  requestChangePassword(@Body('email') email: string) {
+    return this.usersService.requestChangePassword(email);
+  }
+
+  @Post('check-reset-password')
+  checkResetPassword(@Body('token') token: string) {
+    return this.usersService.checkResetPassword(token);
+  }
+
+  @Post('confirm-change-password')
+  confirmChangePassword(@Body() body: any) {
+    return this.usersService.confirmChangePassword(body);
   }
 
   @Get()
