@@ -340,6 +340,20 @@ model Invitation {
   @@map("invitation")
 }
 
+model RequestChangePassword {
+  id        String   @id @default(uuid())
+  username  String   @db.VarChar(200)
+  email     String   @db.VarChar(200)
+  token     String   @unique @db.VarChar(100)
+  expiresAt DateTime @map("expires_at")
+  status    String   @default("PENDING") @db.VarChar(20) // PENDING, ACCEPTED, EXPIRED
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([id])
+  @@map("request_change_password")
+}
+
 model ErrorLog {
   id          BigInt      @id @default(autoincrement())
   serviceName String      @map("service_name") @db.VarChar(50)
