@@ -247,8 +247,8 @@ export class OrganizationService {
         where: { isDefault: true },
       });
       const freePlanDetails = freePlan.detailJson as any;
-      const maxDefaultImage = freePlanDetails?.packageImageAmount || 0;
-      const maxDefaultToken = freePlanDetails?.packageTokenAmount || 0;
+      const maxDefaultImage = parseInt(freePlanDetails?.packageImageAmount) || 0;
+      const maxDefaultToken = parseInt(freePlanDetails?.packageTokenAmount) || 0;
 
       const personalOrg = await this.organizationRepo.create({
         data: {
