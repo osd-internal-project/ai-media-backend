@@ -434,3 +434,18 @@ model PlanFeature {
   @@unique([planId, featureId])
   @@map("plan_features")
 }
+
+model Register {
+  id          Int      @id @default(autoincrement())
+  username    String   @db.VarChar(100)
+  password    String   @db.VarChar(255)
+  email       String   @db.VarChar(200)
+  fullname    String   @db.VarChar(200)
+  phoneNumber String?  @map("phone_number") @db.VarChar(50)
+  token       String   @unique @db.VarChar(100)
+  isVerify    Boolean  @default(false) @map("is_verify")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("registers")
+}
