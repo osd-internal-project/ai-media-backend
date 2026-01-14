@@ -33,14 +33,20 @@ export class GalleryController {
   findByActivity(@Param('projectId') projectId: string, @Query() query: any) {
     return this.galleryService.findByActivity(projectId, query);
   }
-  @Patch(':taskId')
+  @Patch('task/:taskId')
   update(
     @Param('taskId') taskId: string,
     @Body('body') updateGalleryDto: Prisma.GalleryUpdateInput,
   ) {
     return this.galleryService.update(taskId, updateGalleryDto);
   }
-
+  @Patch(':id')
+  updateById(
+    @Param('id') id: string,
+    @Body('body') updateGalleryDto: Prisma.GalleryUpdateInput,
+  ) {
+    return this.galleryService.updateById(id, updateGalleryDto);
+  }
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.galleryService.remove(id);
