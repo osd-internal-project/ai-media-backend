@@ -236,11 +236,11 @@ export class KeycloakService {
     const config = configs().keycloak;
     const token = await this.getAdminToken();
     const { data } = await axios.get(
-      `${config.url}/admin/realms/${config.realm}/password-policy`,
+      `${config.url}/admin/realms/${config.realm}`,
       {
         headers: { Authorization: `Bearer ${token}` },
       },
     );
-    return data;
+    return data.passwordPolicy;
   }
 }

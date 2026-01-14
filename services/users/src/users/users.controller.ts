@@ -16,11 +16,6 @@ import { RegisterUserDto } from './dto/register-user.dto';
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
-  @Get('test')
-  test() {
-    return this.usersService.test();
-  }
-
   @Post()
   create(@Body('body') createUserDto: Prisma.usersCreateInput) {
     return this.usersService.create(createUserDto);
@@ -31,9 +26,9 @@ export class UsersController {
     return this.usersService.register(registerUserDto);
   }
 
-  @Post('verify-email')
-  verifyEmail(@Body() token: string) {
-    return this.usersService.verifyEmail(token);
+  @Post('verify-email/:token')
+  verifyEmail(@Param('token') token: string, @Body('password') password: string) {
+    return this.usersService.verifyEmail(token, password);
   }
 
   @Post('request-change-password')
@@ -75,6 +70,13 @@ export class UsersController {
   findOrganizationUserDetails(@Param('organizationId') organizationId: string) {
     return this.usersService.findOrganizationUserDetails(organizationId);
   }
+
+  @Get('/verify-email/check/:token')
+  checkVerifyEmail(@Param('token') token: string) {
+    return this.usersService.checkVerifyEmail(token);
+  }
+
+
 
   @Get(':userId')
   findOne(@Param('userId') userId: string) {

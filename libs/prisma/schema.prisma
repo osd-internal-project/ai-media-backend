@@ -42,6 +42,7 @@ model users {
   token                String?              @db.VarChar(50)
   createdAt            DateTime             @default(now()) @map("created_at")
   updatedAt            DateTime             @updatedAt @map("updated_at")
+  agreement            Boolean              @default(false)
   groups               UserGroup[]
   projectMembers       ProjectMember[]
   galleries            Gallery[]
@@ -452,11 +453,11 @@ model PlanFeature {
 model Register {
   id          Int      @id @default(autoincrement())
   username    String   @db.VarChar(100)
-  password    String   @db.VarChar(255)
   email       String   @db.VarChar(200)
   fullname    String   @db.VarChar(200)
   phoneNumber String?  @map("phone_number") @db.VarChar(50)
   token       String   @unique @db.VarChar(100)
+  agreement   Boolean  @default(false)
   isVerify    Boolean  @default(false) @map("is_verify")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")

@@ -1,5 +1,4 @@
 import { Prisma } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
 import {
   Injectable,
   Logger,
@@ -22,12 +21,12 @@ import {
 } from '@ai-media/share';
 import { v4 as uuidv4 } from 'uuid';
 import * as dayjs from 'dayjs';
-
 import axios from 'axios';
 import configs from 'src/configs';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
 import { firstValueFrom } from 'rxjs';
 import { HttpService } from '@nestjs/axios';
+import crypto from 'crypto';
 
 @Injectable()
 export class UsersService {
@@ -43,7 +42,6 @@ export class UsersService {
     private readonly httpService: HttpService,
     private readonly registerRepo: RegisterRepository,
     private readonly requestChangePasswordRepo: RequestChangePasswordRepository,
-
   ) { }
 
   async create(createUserDto: any) {
@@ -286,7 +284,18 @@ export class UsersService {
     });
   }
 
-  async verifyEmail(tokenRegister: string) {
+  async checkVerifyEmail(tokenRegister: string) {
+    const register = await this.registerRepo.findOne({
+      where: { token: tokenRegister },
+    });
+    if (!register) {
+      Logger.error('User not found');
+      throw new NotFoundException('User not found');
+    }
+    return register;
+  }
+
+  async verifyEmail(tokenRegister: string, password: string) {
     const register = await this.registerRepo.findOne({
       where: { token: tokenRegister },
     });
@@ -296,7 +305,7 @@ export class UsersService {
     }
     const tokenKeycloak = await this.keycloakService.createUser({
       username: register.username,
-      password: register.password,
+      password: password,
       email: register.email,
       fullname: register.fullname,
     });
@@ -374,6 +383,13 @@ export class UsersService {
         });
       }
 
+      await this.registerRepo.update({
+        where: { token: register.token },
+        data: {
+          isVerify: true,
+        },
+      });
+
       await this.userRepo.update({
         where: { userId },
         data: {
@@ -410,18 +426,21 @@ export class UsersService {
       throw new ConflictException('User already exists');
     }
 
+    // const passwordPolicy = await this.keycloakService.getPasswordPolicy();
+    // if (passwordPolicy) {
+    //   this.validatePasswordPolicy(dto.password, passwordPolicy);
+    // }
+
     const token =
       Math.random().toString(36).substring(2, 15) +
       Math.random().toString(36).substring(2, 15);
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 48);
 
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
 
     const register = await this.registerRepo.create({
       data: {
         ...dto,
-        password: hashedPassword,
         token,
       },
     });
@@ -452,9 +471,6 @@ export class UsersService {
       }/verify-email?token=${token}`,
     );
     return register;
-  }
-  async test() {
-    return this.keycloakService.getPasswordPolicy();
   }
 
   async requestChangePassword(email: string) {
@@ -538,6 +554,10 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    // Check Password Policy
+    const passwordPolicy = await this.keycloakService.getPasswordPolicy();
+    this.validatePasswordPolicy(newPassword, passwordPolicy);
+
     // Update Password in Keycloak
     try {
       await this.keycloakService.updateUser(user.token, {
@@ -556,5 +576,56 @@ export class UsersService {
     return { message: 'Password updated successfully' };
   }
 
+  private validatePasswordPolicy(password: string, policy: string) {
+    if (!policy) return;
 
+    const rules = policy.split(' and ');
+
+    for (const rule of rules) {
+      if (rule.startsWith('length')) {
+        const length = parseInt(rule.match(/\d+/)[0]);
+        if (password.length < length) {
+          throw new BadRequestException(
+            `Password must be at least ${length} characters long`,
+          );
+        }
+      } else if (rule.startsWith('upperCase')) {
+        const count = parseInt(rule.match(/\d+/)[0]);
+        const upperCaseCount = (password.match(/[A-Z]/g) || []).length;
+        if (upperCaseCount < count) {
+          throw new BadRequestException(
+            `Password must contain at least ${count} uppercase characters`,
+          );
+        }
+      } else if (rule.startsWith('lowerCase')) {
+        const count = parseInt(rule.match(/\d+/)[0]);
+        const lowerCaseCount = (password.match(/[a-z]/g) || []).length;
+        if (lowerCaseCount < count) {
+          throw new BadRequestException(
+            `Password must contain at least ${count} lowercase characters`,
+          );
+        }
+      } else if (rule.startsWith('digits')) {
+        const count = parseInt(rule.match(/\d+/)[0]);
+        const digitsCount = (password.match(/\d/g) || []).length;
+        if (digitsCount < count) {
+          throw new BadRequestException(
+            `Password must contain at least ${count} digits`,
+          );
+        }
+      } else if (rule.startsWith('specialChars')) {
+        const count = parseInt(rule.match(/\d+/)[0]);
+        const specialCharsCount = (password.match(/[^A-Za-z0-9]/g) || []).length;
+        if (specialCharsCount < count) {
+          throw new BadRequestException(
+            `Password must contain at least ${count} special characters`,
+          );
+        }
+      } else if (rule.startsWith('notUsername')) {
+        // Note: Username check might require passing username to this function
+        // Skipping for now as simple policy check is requested
+      }
+    }
+  }
 }
+
