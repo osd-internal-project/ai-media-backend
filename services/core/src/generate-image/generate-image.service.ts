@@ -236,6 +236,7 @@ export class GenerateImageService implements OnModuleInit {
         }
       } else {
         Logger.debug('SEND GENERATE IMAGE :', galleryItem.id);
+        Logger.debug('Detail :', galleryItem);
         await this.handleImageRequest(
           uuid,
           createGenerateImageDto,
@@ -450,12 +451,14 @@ export class GenerateImageService implements OnModuleInit {
         ...(dto.width && dto.height && { size: `${dto.width}x${dto.height}` }),
         ...(dto.images && {
           sequential_image_generation: 'auto',
-          sequential_image_generation_options: { max_images: config.maxImage },
+          sequential_image_generation_options: {
+            max_images: dto.images,
+          },
         }),
         stream: config.stream,
         watermark: config.watermark,
       };
-
+      Logger.debug('SEND IMAGE DETAIL :', base);
       const res = await axios.post(
         `${config.apiCreateImage}`,
         base,
@@ -734,7 +737,11 @@ export class GenerateImageService implements OnModuleInit {
     return data;
   }
 
-  async createFileLogs(data: { filePath: string; fileType: string; fileName: string }) {
+  async createFileLogs(data: {
+    filePath: string;
+    fileType: string;
+    fileName: string;
+  }) {
     return data;
   }
 
