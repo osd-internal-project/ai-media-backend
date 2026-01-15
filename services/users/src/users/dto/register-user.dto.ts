@@ -28,15 +28,6 @@ export class RegisterUserDto {
 
     @IsString()
     @IsNotEmpty()
-    @Length(6, 20)
-    @ApiProperty({
-        example: 'password123',
-        required: true,
-    })
-    password: string;
-
-    @IsString()
-    @IsNotEmpty()
     @ApiProperty({
         example: '0812345678',
         required: true,

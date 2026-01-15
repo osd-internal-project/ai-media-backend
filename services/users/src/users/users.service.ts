@@ -16,16 +16,17 @@ import {
   ProjectMemberRepository,
   ProjectRepository,
   PlanRepository,
+  RegisterRepository,
   RequestChangePasswordRepository,
 } from '@ai-media/share';
 import { v4 as uuidv4 } from 'uuid';
 import * as dayjs from 'dayjs';
-
 import axios from 'axios';
 import configs from 'src/configs';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
 import { firstValueFrom } from 'rxjs';
 import { HttpService } from '@nestjs/axios';
+import crypto from 'crypto';
 
 @Injectable()
 export class UsersService {
@@ -38,9 +39,10 @@ export class UsersService {
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly keycloakService: KeycloakService,
     private readonly planRepo: PlanRepository,
-    private readonly requestChangePasswordRepo: RequestChangePasswordRepository,
     private readonly httpService: HttpService,
-  ) {}
+    private readonly registerRepo: RegisterRepository,
+    private readonly requestChangePasswordRepo: RequestChangePasswordRepository,
+  ) { }
 
   async create(createUserDto: any) {
     const { password, groups, ...userData } = createUserDto;
@@ -56,13 +58,49 @@ export class UsersService {
       Logger.error('User already exists');
       throw new ConflictException('User already exists');
     }
-    const token = await this.keycloakService.createUser(createUserDto);
-    if (!token) {
-      Logger.error('Failed to create user in Keycloak');
-      throw new InternalServerErrorException(
-        'Failed to create user in Keycloak',
+
+    // Explicit check in Keycloak
+    const keycloakUsers = await this.keycloakService.findUserByUsernameOrEmail(
+      createUserDto.username,
+      createUserDto.email,
+    );
+    if (keycloakUsers.length > 0) {
+      Logger.error(
+        'User already exists in Keycloak (found by explicit check)',
       );
+      throw new ConflictException('User already exists');
     }
+
+    const token = await this.keycloakService.createUser(createUserDto);
+    const emailPayload = {
+      to: createUserDto.email,
+      subject: `Hello, ${createUserDto.username}!`,
+      template: 'welcome',
+      context: {
+        name: createUserDto.username,
+        email: createUserDto.email,
+        action_url: `${configs().frontendUrl}/verify-email?token=${token}`,
+      },
+    };
+
+    try {
+      const emailApiUrl = configs().emailApiUrl;
+      const { data } = await firstValueFrom(
+        this.httpService.post(`${emailApiUrl}/email/send`, emailPayload),
+      );
+      Logger.log(`Email sent: ${JSON.stringify(data)}`);
+    } catch (error) {
+      Logger.error(`Failed to send email: ${error.message}`);
+      // Not throwing error to avoid rolling back invitation? Or should we?
+      // Usually better to log failure but leave invitation pending so admin can resend or manual link.
+    }
+
+    // Mock Email Dispatch (Legacy)
+    console.log(
+      `[Email Service] Sending invitation to ${createUserDto.email} with link: ${configs().frontendUrl
+      }/accept-invite?token=${token}`,
+    );
+
     return this.userRepo.create({
       data: {
         ...userData,
@@ -72,6 +110,7 @@ export class UsersService {
             group: { connect: { groupId: gid } },
           })),
         },
+        status: 'verified'
       },
     });
   }
@@ -146,6 +185,7 @@ export class UsersService {
     });
     return getdataUser;
   }
+
   async findOrganizationUserDetails(organizationId: string) {
     const members = await this.organizationMemberRepo.findMany({
       where: {
@@ -161,6 +201,7 @@ export class UsersService {
       },
     });
   }
+
   async update(userId: string, updateUserDto: any) {
     // 1. Update in Keycloak
     // We assume userId is the Keycloak User ID
@@ -194,6 +235,7 @@ export class UsersService {
       },
     });
   }
+
   async updateDetailByToken(
     token: string,
     updateUserDto: Prisma.usersUpdateInput,
@@ -203,6 +245,7 @@ export class UsersService {
       data: updateUserDto,
     });
   }
+
   async remove(userId: string) {
     // 1. Delete in Keycloak
     try {
@@ -241,44 +284,47 @@ export class UsersService {
     });
   }
 
-  async register(dto: RegisterUserDto) {
-    // 1. Check if user already exists
-    const existingUser = await this.userRepo.findOne({
-      where: {
-        OR: [{ email: dto.email }, { username: dto.username }],
-      },
+  async checkVerifyEmail(tokenRegister: string) {
+    const register = await this.registerRepo.findOne({
+      where: { token: tokenRegister },
     });
-
-    if (existingUser) {
-      throw new ConflictException(
-        'User with this email or username already exists',
-      );
+    if (!register) {
+      Logger.error('User not found');
+      throw new NotFoundException('User not found');
     }
+    return register;
+  }
 
-    // 2. Create User in Keycloak
-    const token = await this.keycloakService.createUser({
-      username: dto.username,
-      password: dto.password,
-      email: dto.email,
-      fullname: dto.fullname,
+  async verifyEmail(tokenRegister: string, password: string) {
+    const register = await this.registerRepo.findOne({
+      where: { token: tokenRegister },
+    });
+    if (!register) {
+      Logger.error('User not found');
+      throw new NotFoundException('User not found');
+    }
+    const tokenKeycloak = await this.keycloakService.createUser({
+      username: register.username,
+      password: password,
+      email: register.email,
+      fullname: register.fullname,
     });
 
-    if (!token) {
+    if (!tokenKeycloak) {
       Logger.error('Failed to create user in Keycloak');
       throw new InternalServerErrorException(
         'Failed to create user in Keycloak',
       );
     }
 
-    // 3. Create User in Database
     const newUser = await this.userRepo.create({
       data: {
-        email: dto.email,
-        username: dto.username,
-        fullname: dto.fullname,
+        email: register.email,
+        username: register.username,
+        fullname: register.fullname,
         status: 'active',
-        phoneNumber: dto.phoneNumber,
-        token,
+        phoneNumber: register.phoneNumber,
+        token: tokenKeycloak,
       },
     });
 
@@ -289,11 +335,10 @@ export class UsersService {
     const freePlanDetails = freePlan.detailJson as any;
     const maxDefaultImage = parseInt(freePlanDetails?.packageImageAmount) || 0;
     const maxDefaultToken = parseInt(freePlanDetails?.packageTokenAmount) || 0;
-    // 4. Auto-create Personal Organization & Project
     const personalOrg = await this.organizationRepo.create({
       data: {
-        name: `${dto.username} Personal`,
-        slug: `${dto.username}-personal`,
+        name: `${register.username} Personal`,
+        slug: `${register.username}-personal`,
         type: 'personal',
         createdById: userId,
         status: true,
@@ -306,7 +351,6 @@ export class UsersService {
     });
 
     if (personalOrg) {
-      // Add User as Owner of Personal Org
       await this.organizationMemberRepo.create({
         data: {
           organizationId: personalOrg.organizationId,
@@ -315,10 +359,9 @@ export class UsersService {
         },
       });
 
-      // Create Personal Project
       const personalProject = await this.projectRepo.create({
         data: {
-          name: `${dto.username} Project`,
+          name: `${register.username} Project`,
           organizationId: personalOrg.organizationId,
           status: 'active',
           remainImageAmount: 0,
@@ -329,7 +372,6 @@ export class UsersService {
       });
 
       if (personalProject) {
-        // Add User as Owner of Personal Project
         await this.projectMemberRepo.create({
           data: {
             projectId: personalProject.id,
@@ -341,7 +383,13 @@ export class UsersService {
         });
       }
 
-      // Update recentOrganizationId
+      await this.registerRepo.update({
+        where: { token: register.token },
+        data: {
+          isVerify: true,
+        },
+      });
+
       await this.userRepo.update({
         where: { userId },
         data: {
@@ -352,6 +400,79 @@ export class UsersService {
 
     return { message: 'User registered successfully', userId };
   }
+
+  async register(dto: RegisterUserDto) {
+    const existingUser = await this.userRepo.findOne({
+      where: {
+        OR: [{ email: dto.email }, { username: dto.username }],
+      },
+    });
+
+    if (existingUser) {
+      throw new ConflictException(
+        'User with this email or username already exists',
+      );
+    }
+
+    const keycloakUsers = await this.keycloakService.findUserByUsernameOrEmail(
+      dto.username,
+      dto.email,
+    );
+
+    if (keycloakUsers.length > 0) {
+      Logger.error(
+        'User already exists in Keycloak (found by explicit check)',
+      );
+      throw new ConflictException('User already exists');
+    }
+
+    // const passwordPolicy = await this.keycloakService.getPasswordPolicy();
+    // if (passwordPolicy) {
+    //   this.validatePasswordPolicy(dto.password, passwordPolicy);
+    // }
+
+    const token =
+      Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15);
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 48);
+
+
+    const register = await this.registerRepo.create({
+      data: {
+        ...dto,
+        token,
+      },
+    });
+
+    const emailPayload = {
+      to: dto.email,
+      subject: `Hello, ${dto.username}!`,
+      template: 'welcome',
+      context: {
+        name: dto.username,
+        email: dto.email,
+        action_url: `${configs().frontendUrl}/verify-email?token=${token}`,
+      },
+    };
+
+    try {
+      const emailApiUrl = configs().emailApiUrl;
+      const { data } = await firstValueFrom(
+        this.httpService.post(`${emailApiUrl}/email/send`, emailPayload),
+      );
+      Logger.log(`Email sent: ${JSON.stringify(data)}`);
+    } catch (error) {
+      Logger.error(`Failed to send email: ${error.message}`);
+    }
+
+    console.log(
+      `[Email Service] Sending welcome email to ${dto.email} with link: ${configs().frontendUrl
+      }/verify-email?token=${token}`,
+    );
+    return register;
+  }
+
   async requestChangePassword(email: string) {
     const user = await this.userRepo.findOne({
       where: { email: email },
@@ -433,6 +554,10 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    // Check Password Policy
+    const passwordPolicy = await this.keycloakService.getPasswordPolicy();
+    this.validatePasswordPolicy(newPassword, passwordPolicy);
+
     // Update Password in Keycloak
     try {
       await this.keycloakService.updateUser(user.token, {
@@ -450,4 +575,57 @@ export class UsersService {
 
     return { message: 'Password updated successfully' };
   }
+
+  private validatePasswordPolicy(password: string, policy: string) {
+    if (!policy) return;
+
+    const rules = policy.split(' and ');
+
+    for (const rule of rules) {
+      if (rule.startsWith('length')) {
+        const length = parseInt(rule.match(/\d+/)[0]);
+        if (password.length < length) {
+          throw new BadRequestException(
+            `Password must be at least ${length} characters long`,
+          );
+        }
+      } else if (rule.startsWith('upperCase')) {
+        const count = parseInt(rule.match(/\d+/)[0]);
+        const upperCaseCount = (password.match(/[A-Z]/g) || []).length;
+        if (upperCaseCount < count) {
+          throw new BadRequestException(
+            `Password must contain at least ${count} uppercase characters`,
+          );
+        }
+      } else if (rule.startsWith('lowerCase')) {
+        const count = parseInt(rule.match(/\d+/)[0]);
+        const lowerCaseCount = (password.match(/[a-z]/g) || []).length;
+        if (lowerCaseCount < count) {
+          throw new BadRequestException(
+            `Password must contain at least ${count} lowercase characters`,
+          );
+        }
+      } else if (rule.startsWith('digits')) {
+        const count = parseInt(rule.match(/\d+/)[0]);
+        const digitsCount = (password.match(/\d/g) || []).length;
+        if (digitsCount < count) {
+          throw new BadRequestException(
+            `Password must contain at least ${count} digits`,
+          );
+        }
+      } else if (rule.startsWith('specialChars')) {
+        const count = parseInt(rule.match(/\d+/)[0]);
+        const specialCharsCount = (password.match(/[^A-Za-z0-9]/g) || []).length;
+        if (specialCharsCount < count) {
+          throw new BadRequestException(
+            `Password must contain at least ${count} special characters`,
+          );
+        }
+      } else if (rule.startsWith('notUsername')) {
+        // Note: Username check might require passing username to this function
+        // Skipping for now as simple policy check is requested
+      }
+    }
+  }
 }
+
