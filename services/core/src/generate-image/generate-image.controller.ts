@@ -13,6 +13,7 @@ import {
   Inject,
   Sse,
   Logger,
+  MessageEvent,
 } from '@nestjs/common';
 import { GenerateImageService } from './generate-image.service';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -25,7 +26,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { minioConfigs } from 'src/configs';
 import { ConfigType } from '@nestjs/config';
-import { Observable, fromEvent, map } from 'rxjs';
+import { Observable, fromEvent, interval, map, merge } from 'rxjs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Controller('generate-image')
@@ -253,10 +254,6 @@ export class GenerateImageController {
   }
   @Sse('sse/:userId')
   sse(@Param('userId') userId: string): Observable<MessageEvent> {
-    // Keep for backward compatibility or remove?
-    // Since service emits to project, this won't fire unless we emit both.
-    // But we are moving to project-based.
-    // I'll keep it but it won't receive events.
     return fromEvent(this.eventEmitter, `image.update.${userId}`).pipe(
       map((data) => ({ data } as MessageEvent)),
     );
@@ -266,9 +263,24 @@ export class GenerateImageController {
   async sseProject(
     @Param('projectId') projectId: string,
   ): Promise<Observable<MessageEvent>> {
-    return await fromEvent(
+    // 🔴 keep-alive ทุก 15 วินาที
+
+    const data$ = fromEvent(
       this.eventEmitter,
       `image.update.project.${projectId}`,
     ).pipe(map((data) => ({ data } as MessageEvent)));
+
+    // 🔴 keep-alive ทุก 15 วินาที
+    const keepAlive$ = interval(15000).pipe(
+      map(
+        () =>
+          ({
+            // comment ตาม SSE spec (ไม่ trigger onmessage)
+            data: null,
+            comment: 'keep-alive',
+          } as MessageEvent),
+      ),
+    );
+    return merge(data$, keepAlive$);
   }
 }
