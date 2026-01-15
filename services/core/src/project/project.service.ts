@@ -179,6 +179,7 @@ export class ProjectService {
     return this.projectRepo.findMany({
       where: {
         organizationId,
+        ...(!isOwnerOrAdmin && { status: { not: 'deleted' } }),
         ...(!isOwnerOrAdmin && {
           members: {
             some: {
