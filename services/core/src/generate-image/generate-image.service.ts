@@ -416,6 +416,17 @@ export class GenerateImageService implements OnModuleInit {
       if (user) {
         await this.logError(user.userId, error.message, error.stack, dto);
       }
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
+        console.log(user.userId, `${error.response.data.message}`, error.stack, dto);
+        this.logError(user.userId, `${error.response.data.message}`, error.stack, dto);
+      } else {
+        console.log(user.userId, `${error.message}`, error.stack, dto);
+        this.logError(user.userId, `${error.message}`, error.stack, dto);
+      }
       throw error;
     }
   }

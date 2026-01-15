@@ -8,7 +8,11 @@ import { Prisma } from '@prisma/client';
 export class PromptGuideService {
   constructor(private readonly promptguideRepo: PromptGuideRepository) {}
   create(createPromptGuideDto: Prisma.PromptGuideCreateInput) {
-    return this.promptguideRepo.create({ data: createPromptGuideDto });
+    const data = {
+      ...createPromptGuideDto,
+      organizationId: createPromptGuideDto.organizationId || null,
+    };
+    return this.promptguideRepo.create({ data });
   }
 
   findAll() {
@@ -20,11 +24,15 @@ export class PromptGuideService {
   }
 
   update(id: number, updatePromptGuideDto: Prisma.PromptGuideUpdateInput) {
+    const data = {
+      ...updatePromptGuideDto,
+      organizationId: updatePromptGuideDto.organizationId || null,
+    };
     return this.promptguideRepo.update({
       where: {
         id,
       },
-      data: updatePromptGuideDto,
+      data,
     });
   }
 
