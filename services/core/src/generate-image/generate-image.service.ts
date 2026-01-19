@@ -310,11 +310,11 @@ export class GenerateImageService implements OnModuleInit {
       if (dto.image.length >= 2) {
         const url1 = await this.minioClientSerives.getPresignedUrl(
           this.minioconfig.minioBucketUpload,
-          dto.image[0].filePath,
+          dto.image[0].fileName,
         );
         const url2 = await this.minioClientSerives.getPresignedUrl(
           this.minioconfig.minioBucketUpload,
-          dto.image[0].fileName,
+          dto.image[1].fileName,
         );
         imageContents = [
           { type: 'image_url', image_url: { url: url1 }, role: 'first_frame' },
@@ -330,6 +330,7 @@ export class GenerateImageService implements OnModuleInit {
         ];
       }
     }
+    Logger.debug('imageContents', imageContents);
     const base = {
       model: model.modelType,
       generate_audio: dto.generateAudio,
