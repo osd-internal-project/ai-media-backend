@@ -1,11 +1,11 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { PrismaService } from '@ai-media/share';
 import helmet from 'helmet';
 import { InventoryMainModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cors from 'cors';
-import { appConfigs } from './configs';
+import { appConfigs, redisConfigs } from './configs';
 
 async function bootstrap() {
   (BigInt.prototype as any).toJSON = function () {
@@ -32,7 +32,8 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   await app.listen(appConfigs().port);
-  console.log(`service start on port : ${appConfigs().port}`);
-  console.log(`Swagger documentation: http://localhost:${appConfigs().port}/api`);
+  Logger.log(`${redisConfigs().redisHost}`, "redis host")
+  Logger.log(`${appConfigs().port}`, "service start on port")
+  Logger.log(`http://localhost:${appConfigs().port}/api`, "Swagger documentation")
 }
 bootstrap();

@@ -21,9 +21,11 @@ import { OmnihumenModule } from './omnihumen/omnihumen.module';
 import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AiModelModule } from './ai-model/ai-model.module';
-import { appConfigs, minioConfigs, byteplusConfigs } from './configs';
+import { appConfigs, minioConfigs, byteplusConfigs, redisConfigs } from './configs';
 import { RedisModule } from './redis/redis.module';
 import { PlanModule } from './plan/plan.module';
+import { GenerateModule } from './generate/generate.module';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
@@ -50,6 +52,14 @@ import { PlanModule } from './plan/plan.module';
     RedisModule,
     PlanModule,
     EventEmitterModule.forRoot({ global: true }),
+    GenerateModule,
+    BullModule.forRoot({
+      connection: {
+        host: redisConfigs().redisHost || 'localhost',
+        port: redisConfigs().redisPort || 6379,
+        password: redisConfigs().redisPassword,
+      },
+    }),
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
