@@ -342,12 +342,15 @@ export class GenerateImageService implements OnModuleInit {
       ],
     };
     // const res = { data: { id: 'cgt-20260107165929-8ntxn' } };
+    Logger.debug(base);
     try {
       const res = await axios.post(
         `${config.apiCreateTaskVdo}`,
         base,
         axiosConfig,
       );
+
+      console.debug('sendvideo', res.data);
       if (res.data.id) {
         // Async Task ID returned
         await this.galleryRepo.update({
@@ -413,6 +416,7 @@ export class GenerateImageService implements OnModuleInit {
         throw new Error('No Task ID returned');
       }
     } catch (error) {
+      Logger.error(error);
       if (user) {
         await this.logError(user.userId, error.message, error.stack, dto);
       }
@@ -421,8 +425,18 @@ export class GenerateImageService implements OnModuleInit {
         error.response.data &&
         error.response.data.message
       ) {
-        console.log(user.userId, `${error.response.data.message}`, error.stack, dto);
-        this.logError(user.userId, `${error.response.data.message}`, error.stack, dto);
+        console.log(
+          user.userId,
+          `${error.response.data.message}`,
+          error.stack,
+          dto,
+        );
+        this.logError(
+          user.userId,
+          `${error.response.data.message}`,
+          error.stack,
+          dto,
+        );
       } else {
         console.log(user.userId, `${error.message}`, error.stack, dto);
         this.logError(user.userId, `${error.message}`, error.stack, dto);
