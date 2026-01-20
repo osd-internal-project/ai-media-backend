@@ -205,7 +205,7 @@ export class UsersService {
   async update(userId: string, updateUserDto: any) {
     // 1. Update in Keycloak
     // We assume userId is the Keycloak User ID
-    const { username, groups, password, ...userData } = updateUserDto;
+    const { username, groups, password, confirmPassword, ...userData } = updateUserDto;
 
     try {
       const { token } = await this.userRepo.findOne({ where: { userId } });
@@ -344,8 +344,8 @@ export class UsersService {
         status: true,
         packageImageAmount: maxDefaultImage,
         packageTokenAmount: maxDefaultToken,
-        remainImageAmount: 0,
-        remainTokenAmount: 0,
+        remainImageAmount: maxDefaultImage,
+        remainTokenAmount: maxDefaultToken,
         maxUserAccess: 1,
       },
     });
@@ -364,8 +364,8 @@ export class UsersService {
           name: `${register.username} Project`,
           organizationId: personalOrg.organizationId,
           status: 'active',
-          remainImageAmount: 0,
-          remainTokenAmount: 0,
+          remainImageAmount: maxDefaultImage,
+          remainTokenAmount: maxDefaultToken,
           accessImageAmount: maxDefaultImage,
           accessTokenAmount: maxDefaultToken,
         },
