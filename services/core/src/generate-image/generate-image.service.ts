@@ -695,7 +695,10 @@ export class GenerateImageService implements OnModuleInit {
         if (log) {
           await this.logrepo.update({
             where: { id: log.id },
-            data: { status: 'success' },
+            data: {
+              status: 'success',
+              tokenUsed: res.data.usage?.total_tokens || 0,
+            },
           });
         }
       } else if (res.data.status === 'failed') {
