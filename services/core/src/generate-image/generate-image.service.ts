@@ -10,6 +10,8 @@ import {
   ErrorLogRepository,
   AuditLogRepository,
   ProjectMemberRepository,
+  ProjectRepository,
+  OrganizationRepository,
 } from '@ai-media/share';
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -39,7 +41,8 @@ export class GenerateImageService implements OnModuleInit {
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly projectMemberRepository: ProjectMemberRepository,
-
+    private readonly projectRepo: ProjectRepository,
+    private readonly organizationRepo: OrganizationRepository,
     private readonly userRepo: UsersRepository,
     private readonly minioClientSerives: MinioClientService,
     private readonly organizationMemberRepo: OrganizationMemberRepository,
@@ -552,6 +555,9 @@ export class GenerateImageService implements OnModuleInit {
           }),
         );
 
+        const imageUsed = dto.images || 0;
+        const tokensUsed = res.data.usage?.total_tokens || 0;
+
         await this.logrepo.create({
           data: {
             taskId: taskId,
@@ -563,8 +569,8 @@ export class GenerateImageService implements OnModuleInit {
             resolution: dto.resolution,
             ratio: dto.ratio,
             generateAudio: dto.generateAudio || false,
-            tokenUsed: res.data.usage?.total_tokens || 0,
-            ImageUsed: dto.images || 0,
+            tokenUsed: tokensUsed,
+            ImageUsed: imageUsed,
             referenceImages: dto.image
               ? dto.image.map((img) => img.fileName)
               : [],
@@ -595,6 +601,8 @@ export class GenerateImageService implements OnModuleInit {
             },
           },
         });
+
+        await this.updateUsageTracking(dto.projectId, imageUsed, tokensUsed);
       } else {
         throw new Error('No Data in response');
       }
@@ -688,7 +696,6 @@ export class GenerateImageService implements OnModuleInit {
           result.thumbnail,
         );
 
-        // Update Log status
         const log = await this.logrepo.findOne({
           where: { taskId: task.taskId },
         });
@@ -700,6 +707,12 @@ export class GenerateImageService implements OnModuleInit {
               tokenUsed: res.data.usage?.total_tokens || 0,
             },
           });
+
+          await this.updateUsageTracking(
+            task.projectId,
+            0,
+            res.data.credits_used || 0,
+          );
         }
       } else if (res.data.status === 'failed') {
         await this.updateAndEmit(task.userId, task.projectId, task.id, 'FAIL');
@@ -814,6 +827,68 @@ export class GenerateImageService implements OnModuleInit {
       });
     } catch (e) {
       Logger.error(`Failed to create error log: ${e}`);
+    }
+  }
+
+  private async updateUsageTracking(
+    projectId: string,
+    imageCount: number,
+    tokenCount: number,
+  ) {
+    try {
+      const project = await this.projectRepo.findOne({
+        where: { id: projectId },
+      });
+
+      if (!project) {
+        return;
+      }
+      const newRemainImage = Math.max(
+        0,
+        (project.remainImageAmount || 0) - imageCount,
+      );
+      const newRemainToken = Math.max(
+        0,
+        (project.remainTokenAmount || 0) - tokenCount,
+      );
+
+      await this.projectRepo.update({
+        where: { id: projectId },
+        data: {
+          remainImageAmount: newRemainImage,
+          remainTokenAmount: newRemainToken,
+        },
+      });
+
+      if (project.organizationId) {
+        const org = await this.organizationRepo.findOne({
+          where: { organizationId: project.organizationId },
+        });
+
+        if (org) {
+          const newOrgRemainImage = Math.max(
+            0,
+            (org.remainImageAmount || 0) - imageCount,
+          );
+          const newOrgRemainToken = Math.max(
+            0,
+            (org.remainTokenAmount || 0) - tokenCount,
+          );
+
+          await this.organizationRepo.update({
+            where: { organizationId: project.organizationId },
+            data: {
+              remainImageAmount: newOrgRemainImage,
+              remainTokenAmount: newOrgRemainToken,
+            },
+          });
+        }
+      }
+    } catch (error) {
+      Logger.error(
+        `❌ Failed to update usage tracking: ${error.message}`,
+        error.stack,
+      );
     }
   }
 }
