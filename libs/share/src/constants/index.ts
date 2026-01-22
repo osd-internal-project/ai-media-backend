@@ -1,4 +1,5 @@
 export class CreateGenerateDto {
+    taskId?: string;
     type: 'image' | 'vdo';
     text: string;
     resolution: string;

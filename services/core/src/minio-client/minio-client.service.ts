@@ -6,6 +6,7 @@ import * as path from 'path';
 import { appConfigs } from 'src/configs';
 import { ConfigType } from '@nestjs/config';
 import Redis from 'ioredis';
+import { InjectRedis } from '@nestjs-modules/ioredis';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffmpegPath = require('ffmpeg-static');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -16,7 +17,7 @@ ffmpeg.setFfprobePath(ffprobePath.path);
 @Injectable()
 export class MinioClientService {
   constructor(@Inject(appConfigs.KEY)
-  private appconfigs: ConfigType<typeof appConfigs>, private readonly minio: MinioService, @Inject('REDIS_CLIENT') private readonly redis: Redis) { }
+  private appconfigs: ConfigType<typeof appConfigs>, private readonly minio: MinioService, @InjectRedis() private readonly redis: Redis) { }
   private get minioClient() {
     return this.minio.client;
   }

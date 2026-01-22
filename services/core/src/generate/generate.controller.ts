@@ -10,21 +10,19 @@ import { GenerateService } from './generate.service';
 
 @Controller('generate')
 export class GenerateController {
-  constructor(@InjectQueue(QUEUE_NAME_IMAGE) private imageQueue: Queue, @InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue, private readonly generateService: GenerateService) { }
+  constructor(@InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue, private readonly generateService: GenerateService) { }
 
   @Post('image')
-  async createImage(@Body() body: CreateGenerateDto) {
-    const error = await this.generateService.validateError();
-    if (error) {
-      throw error;
-    }
-    await this.imageQueue.add(QUEUE_NAME_IMAGE, body);
-
-    return { status: 'queued' };
+  async createImage(@Body('body') body: CreateGenerateDto) {
+    // return await this.generateService.validateErrorImage(body);
   }
 
   @Post('video')
-  async createVideo(@Body() body: CreateGenerateDto) {
+  async createVideo(@Body('body') body: CreateGenerateDto) {
+    // const error = await this.generateService.validateError(body);
+    // if (error) {
+    //   throw error;
+    // }
     await this.videoQueue.add(QUEUE_NAME_VDO, body);
     return { status: 'queued' };
   }

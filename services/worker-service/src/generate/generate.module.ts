@@ -7,19 +7,19 @@ import {
     QUEUE_NAME_IMAGE,
     QUEUE_NAME_VDO,
 } from '@ai-media/share';
+import { MinioClientModule } from 'src/minio-client/minio-client.module';
+import { PrismaModule } from '@ai-media/share';
 
 @Module({
     imports: [
-        // ลงทะเบียนชื่อคิวที่จะใช้ใน Module นี้
+        PrismaModule,
+        MinioClientModule,
         BullModule.registerQueue({
             name: QUEUE_NAME_IMAGE,
         }),
-        BullModule.registerQueue({
-            name: QUEUE_NAME_VDO,
-        }),
     ],
     controllers: [],
-    providers: [ImageProcessor, VideoProcessor], // อย่าลืมใส่ Processor
-    exports: [ImageProcessor, VideoProcessor],
+    providers: [ImageProcessor, VideoProcessor,], // อย่าลืมใส่ Processor
+    exports: [ImageProcessor, VideoProcessor,],
 })
 export class GenerateModule { }

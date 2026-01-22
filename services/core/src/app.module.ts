@@ -22,10 +22,10 @@ import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AiModelModule } from './ai-model/ai-model.module';
 import { appConfigs, minioConfigs, byteplusConfigs, redisConfigs } from './configs';
-import { RedisModule } from './redis/redis.module';
 import { PlanModule } from './plan/plan.module';
 import { GenerateModule } from './generate/generate.module';
 import { BullModule } from '@nestjs/bullmq';
+import { WebsocketModule } from './websocket/websocket.module';
 
 @Module({
   imports: [
@@ -49,7 +49,6 @@ import { BullModule } from '@nestjs/bullmq';
     OmnihumenModule,
     OmnihumenTaskModule,
     AiModelModule,
-    RedisModule,
     PlanModule,
     EventEmitterModule.forRoot({ global: true }),
     GenerateModule,
@@ -60,6 +59,7 @@ import { BullModule } from '@nestjs/bullmq';
         password: redisConfigs().redisPassword,
       },
     }),
+    WebsocketModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

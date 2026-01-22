@@ -1,7 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import { WorkerServiceModule } from './app.module';
-import { EMAIL_QUEUE } from '@ai-media/share';
 import { appConfigs } from './configs';
 import { Logger } from '@nestjs/common';
 

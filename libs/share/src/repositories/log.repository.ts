@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class LogRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
   async findAll(
     condition: Prisma.LogFindManyArgs,
     option?: { prisma?: TQueryClient },
@@ -66,5 +66,13 @@ export class LogRepository {
   ) {
     const prisma = option?.prisma ?? this.prisma;
     return prisma.log.count(condition);
+  }
+
+  async aggregate(
+    condition: Prisma.LogAggregateArgs,
+    option?: { prisma?: TQueryClient },
+  ) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.log.aggregate(condition);
   }
 }

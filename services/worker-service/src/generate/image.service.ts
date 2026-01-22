@@ -1,45 +1,314 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Logger } from '@nestjs/common';
-import {
-    QUEUE_NAME_IMAGE,
-} from '@ai-media/share';
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
+import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
+import * as https from 'https';
+import { CreateGenerateDto, GalleryRepository, LogRepository, QUEUE_NAME_IMAGE } from '@ai-media/share';
+import { MinioClientService } from 'src/minio-client/minio-client.service';
 
-// บอกว่า Class นี้รับผิดชอบคิวชื่อ 'image-Image-queue'
-// concurrency: 5 คือ ทำพร้อมกันได้ 5 งาน (ถ้าเครื่องไหว)
-@Processor(QUEUE_NAME_IMAGE, { concurrency: 5 })
+interface ImageProcessJob {
+    taskId: string;
+    clientId: string;
+    body: CreateGenerateDto;
+    userId: string;
+    dataImage: { url: string; size: string }[];
+    usage: {
+        generated_images: number;
+        output_tokens: number;
+        total_tokens: number;
+    };
+}
+
+@Injectable()
+@Processor(QUEUE_NAME_IMAGE)
 export class ImageProcessor extends WorkerHost {
     private readonly logger = new Logger(ImageProcessor.name);
+    private agent: https.Agent;
+    private redisPublisher: Redis;
 
-    // ฟังก์ชันนี้จะถูกเรียกอัตโนมัติเมื่อมีงานเข้า Queue
-    async process(job: Job<any, any, string>): Promise<any> {
-        const { userId, prompt, jobId } = job.data;
-        this.logger.log(`👨‍🍳 Chef is cooking job: ${job.id} | Prompt: ${prompt}`);
+    constructor(
+        @InjectRedis() private readonly redis: Redis,
+        private readonly minioClientService: MinioClientService,
+        private readonly galleryRepo: GalleryRepository,
+        private readonly logrepo: LogRepository,
+    ) {
+        super();
+        this.agent = new https.Agent({
+            rejectUnauthorized: false,
+        });
+
+        // สร้าง Redis Publisher สำหรับส่ง events ไปยัง Core Service
+        this.redisPublisher = new Redis({
+            host: 'localhost',
+            port: 6379,
+        });
+    }
+
+    @OnWorkerEvent('active')
+    onActive(job: Job) {
+        this.logger.log(`🟢 Job ${job.id} is now active`);
+    }
+
+    @OnWorkerEvent('completed')
+    onCompleted(job: Job) {
+        this.logger.log(`✅ Job ${job.id} completed`);
+    }
+
+    @OnWorkerEvent('failed')
+    onFailed(job: Job, error: Error) {
+        this.logger.error(`❌ Job ${job.id} failed: ${error.message}`);
+    }
+
+    async process(job: Job<ImageProcessJob>): Promise<any> {
+        const { taskId, clientId, body, userId, dataImage, usage } = job.data;
+
+        this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
 
         try {
-            // --- STEP 1: เรียก AI Model (สมมติว่าใช้เวลานาน) ---
-            // const imageBuffer = await this.aiService.generate(prompt);
-            const imageBuffer = await this.mockAiImage(prompt);
+            const totalImages = dataImage.length;
+            const uploadedImages: string[] = [];
 
-            // --- STEP 2: อัปโหลดขึ้น MinIO ---
-            // const url = await this.minioService.upload(imageBuffer);
-            const url = `https://minio.example.com/images/${jobId}.png`;
+            // 1. ส่ง event "started" ไปยัง Core Service
+            await this.publishToCore(clientId, 'generate:started', {
+                taskId,
+                totalImages,
+                timestamp: new Date().toISOString(),
+            });
 
-            // --- STEP 3: แจ้งเตือน User (WebSocket / Update DB) ---
-            this.logger.log(`✅ Finished! URL: ${url}`);
-            // await this.dbService.updateStatus(jobId, 'COMPLETED', url);
-            // await this.socketGateway.emitToUser(userId, 'Image_done', { url });
+            // อัพเดทสถานะใน Redis
+            await this.updateTaskStatus(taskId, {
+                status: 'processing',
+                startedAt: new Date().toISOString(),
+            });
 
-            return { success: true, url };
+            // 2. ประมวลผลทีละรูป
+            for (let index = 0; index < dataImage.length; index++) {
+                const imageData = dataImage[index];
 
+                this.logger.log(
+                    `📥 Downloading image ${index + 1}/${totalImages}: ${imageData.url}`,
+                );
+
+                // ส่ง progress: downloading
+                await this.publishToCore(clientId, 'generate:progress', {
+                    taskId,
+                    stage: 'downloading',
+                    current: index + 1,
+                    total: totalImages,
+                    percentage: Math.round(((index + 1) / totalImages) * 50),
+                });
+
+                // Download image
+                const imgRes = await axios.get(imageData.url, {
+                    responseType: 'arraybuffer',
+                    httpsAgent: this.agent,
+                    timeout: 60000,
+                });
+
+                const buffer = Buffer.from(imgRes.data);
+                const uuidName = uuidv4();
+                const ext = 'jpg';
+                const objectName = `${uuidv4()}/${uuidName}.${ext}`;
+
+                this.logger.debug(`📦 Buffer size: ${buffer.length} bytes`);
+
+                // ส่ง progress: uploading
+                await this.publishToCore(clientId, 'generate:progress', {
+                    taskId,
+                    stage: 'uploading',
+                    current: index + 1,
+                    total: totalImages,
+                    percentage: Math.round(50 + ((index + 1) / totalImages) * 50),
+                });
+
+                // Upload to MinIO
+                await this.minioClientService.uploadFile(
+                    buffer,
+                    buffer.length,
+                    process.env.MINIO_BUCKET || 'ai-media-image',
+                    objectName,
+                );
+
+                uploadedImages.push(objectName);
+
+                // Save to Gallery
+                await this.galleryRepo.create({
+                    data: {
+                        taskId,
+                        projectId: body.projectId,
+                        userId,
+                        prompt: body.text,
+                        imageUrl: objectName,
+                        typeGenerate: 'image',
+                        genneratedStatus: 'SUCCESS',
+                        status: true,
+                        generateConfig: this.buildGenerateConfig(body),
+                    },
+                });
+
+                // อัพเดท job progress
+                await job.updateProgress({
+                    stage: 'processing',
+                    total: totalImages,
+                    processed: index + 1,
+                    percentage: Math.round(((index + 1) / totalImages) * 100),
+                });
+
+                this.logger.log(`✅ Finished image ${index + 1}/${totalImages}`);
+
+                // ส่ง event แต่ละรูปที่เสร็จ
+                await this.publishToCore(clientId, 'generate:image-complete', {
+                    taskId,
+                    imageUrl: objectName,
+                    index: index + 1,
+                    total: totalImages,
+                });
+            }
+
+            // 3. Save Log
+            await this.logrepo.create({
+                data: {
+                    taskId,
+                    projectId: body.projectId,
+                    userId,
+                    prompt: body.text,
+                    typeGenerate: body.type,
+                    status: 'success',
+                    resolution: body.resolution,
+                    ratio: body.ratio,
+                    generateAudio: body.generateAudio || false,
+                    tokenUsed: usage?.total_tokens || 0,
+                    ImageUsed: usage?.generated_images || 0,
+                    referenceImages: body.image
+                        ? body.image.map((img) => img.fileName)
+                        : [],
+                    generateConfig: this.buildGenerateConfig(body),
+                },
+            });
+
+            // 4. อัพเดทสถานะเป็น completed
+            await this.updateTaskStatus(taskId, {
+                status: 'completed',
+                completedAt: new Date().toISOString(),
+                imageCount: uploadedImages.length,
+                images: uploadedImages,
+            });
+
+            // 5. ส่ง event "complete" ไปยัง Core Service
+            await this.publishToCore(clientId, 'generate:complete', {
+                taskId,
+                success: true,
+                imageCount: uploadedImages.length,
+                images: uploadedImages,
+                timestamp: new Date().toISOString(),
+            });
+
+            this.logger.log(
+                `🎉 Job ${job.id} completed! Processed ${uploadedImages.length} images`,
+            );
+
+            return {
+                success: true,
+                taskId,
+                imageCount: uploadedImages.length,
+                images: uploadedImages,
+            };
         } catch (error) {
-            this.logger.error(`❌ Job failed: ${error.message}`);
-            throw error; // Throw เพื่อให้ BullMQ รู้ว่า Fail (จะได้ Retry ตามที่ตั้งไว้)
+            this.logger.error(`❌ Job ${job.id} failed: ${error.message}`, error.stack);
+
+            // อัพเดทสถานะเป็น failed
+            await this.updateTaskStatus(taskId, {
+                status: 'failed',
+                failedAt: new Date().toISOString(),
+                error: error.message,
+            });
+
+            // ส่ง error event ไปยัง Core Service
+            await this.publishToCore(clientId, 'generate:error', {
+                taskId,
+                error: error.message,
+                timestamp: new Date().toISOString(),
+            });
+
+            // บันทึก error log
+            await this.logrepo.create({
+                data: {
+                    taskId,
+                    projectId: body.projectId,
+                    userId,
+                    prompt: body.text,
+                    typeGenerate: body.type,
+                    status: 'failed',
+                    resolution: body.resolution,
+                    ratio: body.ratio,
+                    generateAudio: body.generateAudio || false,
+                    tokenUsed: 0,
+                    ImageUsed: 0,
+                    referenceImages: body.image
+                        ? body.image.map((img) => img.fileName)
+                        : [],
+                    generateConfig: this.buildGenerateConfig(body),
+                },
+            });
+
+            throw error;
         }
     }
 
-    // ฟังก์ชันจำลอง AI หน่วงเวลา 5 วินาที
-    private async mockAiImage(prompt: string) {
-        return new Promise((resolve) => setTimeout(resolve, 5000));
+    /**
+     * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
+     */
+    private async publishToCore(clientId: string, event: string, payload: any) {
+        try {
+            await this.redisPublisher.publish(
+                `worker:${event.split(':')[1] || 'event'}`,
+                JSON.stringify({
+                    clientId,
+                    event,
+                    payload,
+                    timestamp: new Date().toISOString(),
+                }),
+            );
+        } catch (error) {
+            this.logger.error(`Failed to publish event: ${error.message}`);
+        }
+    }
+
+    /**
+     * อัพเดทสถานะของ task ใน Redis
+     */
+    private async updateTaskStatus(taskId: string, updates: any) {
+        const taskData = await this.redis.get(`task:${taskId}`);
+        if (taskData) {
+            const task = JSON.parse(taskData);
+            const updatedTask = { ...task, ...updates };
+            await this.redis.set(
+                `task:${taskId}`,
+                JSON.stringify(updatedTask),
+                'EX',
+                24 * 60 * 60,
+            );
+        }
+    }
+
+    private buildGenerateConfig(body: CreateGenerateDto) {
+        return {
+            ...(body?.width && { width: body?.width }),
+            ...(body?.height && { height: body?.height }),
+            ...(body?.ratio && { ratio: body?.ratio }),
+            ...(body?.images && { imageCount: body?.images }),
+            ...(body?.resolution && { resolution: body?.resolution }),
+            ...(body?.modelName && { modelName: body?.modelName }),
+            ...(body?.duration && { duration: body?.duration }),
+            content: body?.text,
+            ...(body?.generateAudio && { generateAudio: body?.generateAudio }),
+        };
+    }
+
+    async onModuleDestroy() {
+        await this.redisPublisher.quit();
     }
 }
