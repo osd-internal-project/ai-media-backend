@@ -5,26 +5,30 @@ import {
   SubscribeMessage,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { WebsocketService } from './websocket.service';
 import { ConfigService } from '@nestjs/config';
 import { GenerateService } from 'src/generate/generate.service';
 import { CreateGenerateDto } from '@ai-media/share';
 import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
+import { redisConfigs } from '../configs';
 
 @WebSocketGateway({
-  namespace: '/api/websocket',
+  path: '/websockets',
   cors: { origin: '*', credentials: true },
   transports: ['websocket'],
 })
 @Injectable()
-export class WebsocketGatewayService
-  implements OnGatewayConnection, OnGatewayDisconnect {
+export class WebsocketGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
+  private readonly logger = new Logger(WebsocketGateway.name);
+
   @WebSocketServer()
   server: Server;
   private redisSubscriber: Redis;
@@ -35,14 +39,35 @@ export class WebsocketGatewayService
     private readonly generateService: GenerateService,
   ) {
     // สร้าง Redis Subscriber แยกสำหรับรับ events จาก Worker
+    const redisConf = redisConfigs();
+    console.log('Redis Sub Config:', {
+      host: redisConf.redisHost,
+      port: redisConf.redisPort,
+    });
+
     this.redisSubscriber = new Redis({
-      host: 'localhost',
-      port: 6379,
+      host: redisConf.redisHost || 'localhost',
+      port: redisConf.redisPort || 6379,
+      password: redisConf.redisPassword,
+      retryStrategy: (times) => {
+        // limit retry to avoid infinite loop logging if config is wrong
+        return Math.min(times * 50, 2000);
+      },
+    });
+
+    this.redisSubscriber.on('error', (err) => {
+      console.error('Redis Subscriber Error:', err);
     });
   }
 
+  afterInit(server: Server) {
+    this.logger.log('✅ WebSocket Gateway Initialized');
+    this.logger.log(`🔌 Transports: ${server.opts.transports}`);
+    this.logger.log(`🔌 Path: ${server.opts.path}`);
+  }
+
   async handleConnection(client: Socket) {
-    console.log(`🔌 Client connected: ${client.id}`);
+    this.logger.log(`🔌 Client connected: ${client.id}`);
 
     // บันทึก client mapping ใน Redis (สำหรับ Worker ส่ง message กลับมา)
     await this.redis.hset(
