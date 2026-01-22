@@ -18,14 +18,13 @@ import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 
 @WebSocketGateway({
-  path: '/api/websocket',
+  namespace: '/api/websocket',
   cors: { origin: '*', credentials: true },
-  transports: ['websocket', 'polling'],
+  transports: ['websocket'],
 })
 @Injectable()
-export class WebsocketGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+export class WebsocketGatewayService
+  implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
   private redisSubscriber: Redis;

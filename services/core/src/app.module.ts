@@ -34,6 +34,7 @@ import { WebsocketModule } from './websocket/websocket.module';
       load: [appConfigs, minioConfigs, byteplusConfigs],
     }),
     ScheduleModule.forRoot(),
+    WebsocketModule,
     PrismaModule,
     GenerateImageModule,
     HttpModule,
@@ -54,12 +55,11 @@ import { WebsocketModule } from './websocket/websocket.module';
     GenerateModule,
     BullModule.forRoot({
       connection: {
-        host: redisConfigs().redisHost || 'localhost',
-        port: redisConfigs().redisPort || 6379,
+        host: 'localhost',
+        port: 6379,
         password: redisConfigs().redisPassword,
       },
     }),
-    WebsocketModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
