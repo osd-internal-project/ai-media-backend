@@ -25,9 +25,9 @@ import { redisConfigs } from '../configs';
   transports: ['websocket'],
 })
 @Injectable()
-export class WebsocketGateway
+export class WebsocketGatewayService
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
-  private readonly logger = new Logger(WebsocketGateway.name);
+  private readonly logger = new Logger(WebsocketGatewayService.name);
 
   @WebSocketServer()
   server: Server;
@@ -62,8 +62,6 @@ export class WebsocketGateway
 
   afterInit(server: Server) {
     this.logger.log('✅ WebSocket Gateway Initialized');
-    this.logger.log(`🔌 Transports: ${server.opts.transports}`);
-    this.logger.log(`🔌 Path: ${server.opts.path}`);
   }
 
   async handleConnection(client: Socket) {
