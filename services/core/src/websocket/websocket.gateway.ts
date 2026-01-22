@@ -18,12 +18,14 @@ import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 
 @WebSocketGateway({
-  namespace: '/api/websocket',
+  path: '/api/websocket',
   cors: { origin: '*', credentials: true },
-  transports: ['websocket'],
+  transports: ['websocket', 'polling'],
 })
 @Injectable()
-export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class WebsocketGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
   private redisSubscriber: Redis;
@@ -44,10 +46,14 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
     console.log(`🔌 Client connected: ${client.id}`);
 
     // บันทึก client mapping ใน Redis (สำหรับ Worker ส่ง message กลับมา)
-    await this.redis.hset('ws:clients', client.id, JSON.stringify({
-      connectedAt: new Date().toISOString(),
-      ip: client.handshake.address,
-    }));
+    await this.redis.hset(
+      'ws:clients',
+      client.id,
+      JSON.stringify({
+        connectedAt: new Date().toISOString(),
+        ip: client.handshake.address,
+      }),
+    );
 
     await this.redis.sadd('ws:active-clients', client.id);
 
@@ -87,9 +93,10 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
         console.error('Error processing worker message:', error);
       }
     });
-    console.log('✅ WebSocket Gateway initialized and listening to worker events');
+    console.log(
+      '✅ WebSocket Gateway initialized and listening to worker events',
+    );
   }
-
 
   async handleDisconnect(client: Socket) {
     console.log(`🔌 Client disconnected: ${client.id}`);
@@ -99,7 +106,9 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
     await this.redis.srem('ws:active-clients', client.id);
 
     // ยกเลิก tasks ที่เกี่ยวข้อง (ถ้ามี)
-    const activeTasks = await this.redis.smembers(`ws:client-tasks:${client.id}`);
+    const activeTasks = await this.redis.smembers(
+      `ws:client-tasks:${client.id}`,
+    );
     for (const taskId of activeTasks) {
       await this.generateService.cancelTask(taskId);
     }
@@ -143,11 +152,10 @@ export class WebsocketGateway implements OnGatewayConnection, OnGatewayDisconnec
         estimatedImages: result.data.estimatedImages,
         message: 'Task created and queued for processing',
       });
-
     } catch (error) {
       console.error('Generate error:', error);
       client.emit('generate:error', {
-        message: error.message || 'Internal server error'
+        message: error.message || 'Internal server error',
       });
     }
   }

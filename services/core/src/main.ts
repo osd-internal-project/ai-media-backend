@@ -78,6 +78,6 @@ async function bootstrap() {
   Logger.log(`🚀 Service started on port: ${appConfigs().port}`, 'Bootstrap');
   Logger.log(`📚 Swagger: http://localhost:${appConfigs().port}/api`, 'Bootstrap');
   Logger.log(`🔌 WebSocket: ws://localhost:${appConfigs().port}`, 'Bootstrap');
-  Logger.log(`🔌 WebSocket Namespace: ws://localhost:${appConfigs().port}/api/websocket`, 'Bootstrap');
+  Logger.log(`🔌 WebSocket Path: http://localhost:${appConfigs().port}/api/websocket`, 'Bootstrap');
 }
 bootstrap();
