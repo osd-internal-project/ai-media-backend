@@ -31,7 +31,7 @@ async function bootstrap() {
       contentSecurityPolicy: false, // ปิด CSP หรือปรับแต่งให้รองรับ WebSocket
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: { policy: 'cross-origin' },
-    })
+    }),
   );
 
   // ===================================
@@ -53,7 +53,7 @@ async function bootstrap() {
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: false,
-    })
+    }),
   );
 
   // ===================================
@@ -76,8 +76,14 @@ async function bootstrap() {
 
   Logger.log(`🌐 Redis Host: ${redisConfigs().redisHost}`, 'Bootstrap');
   Logger.log(`🚀 Service started on port: ${appConfigs().port}`, 'Bootstrap');
-  Logger.log(`📚 Swagger: http://localhost:${appConfigs().port}/api`, 'Bootstrap');
+  Logger.log(
+    `📚 Swagger: http://localhost:${appConfigs().port}/api`,
+    'Bootstrap',
+  );
   Logger.log(`🔌 WebSocket: ws://localhost:${appConfigs().port}`, 'Bootstrap');
-  Logger.log(`🔌 WebSocket Path: http://localhost:${appConfigs().port}/api/websocket`, 'Bootstrap');
+  Logger.log(
+    `🔌 WebSocket Path: http://localhost:${appConfigs().port}/websockets`,
+    'Bootstrap',
+  );
 }
 bootstrap();
