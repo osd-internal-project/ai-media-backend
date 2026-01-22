@@ -29,7 +29,7 @@ export class WebsocketGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
 {
   private readonly logger = new Logger(WebsocketGateway.name);
-  
+
   @WebSocketServer()
   server: Server;
   private redisSubscriber: Redis;
@@ -41,8 +41,11 @@ export class WebsocketGateway
   ) {
     // สร้าง Redis Subscriber แยกสำหรับรับ events จาก Worker
     const redisConf = redisConfigs();
-    console.log('Redis Sub Config:', { host: redisConf.redisHost, port: redisConf.redisPort });
-    
+    console.log('Redis Sub Config:', {
+      host: redisConf.redisHost,
+      port: redisConf.redisPort,
+    });
+
     this.redisSubscriber = new Redis({
       host: redisConf.redisHost || 'localhost',
       port: redisConf.redisPort || 6379,
@@ -50,7 +53,7 @@ export class WebsocketGateway
       retryStrategy: (times) => {
         // limit retry to avoid infinite loop logging if config is wrong
         return Math.min(times * 50, 2000);
-      }
+      },
     });
 
     this.redisSubscriber.on('error', (err) => {
