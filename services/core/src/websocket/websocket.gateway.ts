@@ -14,10 +14,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { WebsocketService } from './websocket.service';
 import { ConfigService } from '@nestjs/config';
 import { GenerateService } from 'src/generate/generate.service';
-import { CreateGenerateDto } from '@ai-media/share';
+import { CreateGenerateDto, LogRepository } from '@ai-media/share';
 import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { redisConfigs } from '../configs';
+import { LogsService } from 'src/logs/logs.service';
 
 @WebSocketGateway({
   path: '/websockets',
@@ -37,6 +38,8 @@ export class WebsocketGatewayService
     @InjectRedis() private readonly redis: Redis,
     private readonly workerService: WebsocketService,
     private readonly generateService: GenerateService,
+    private readonly logsService: LogsService,
+
   ) {
     // สร้าง Redis Subscriber แยกสำหรับรับ events จาก Worker
     const redisConf = redisConfigs();
@@ -178,6 +181,35 @@ export class WebsocketGatewayService
       console.error('Generate error:', error);
       client.emit('generate:error', {
         message: error.message || 'Internal server error',
+      });
+    }
+  }
+
+  @SubscribeMessage('chat:get-history')
+  async handleGetHistory(
+    @MessageBody() data: {
+      projectId: string,
+      skip: number,
+      take: number
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const projectId = data.projectId;
+    console.log('chat:get-history', data);
+    try {
+      const conversation = await this.logsService.findProjectImageByPage(
+        projectId,
+        data.skip,
+        data.take,
+      );
+
+      client.emit('chat:history', {
+        success: true,
+        data: { messages: conversation },
+      });
+    } catch (error) {
+      client.emit('chat:error', {
+        message: error.message,
       });
     }
   }

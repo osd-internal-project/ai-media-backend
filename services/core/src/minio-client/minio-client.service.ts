@@ -47,7 +47,7 @@ export class MinioClientService {
       const stat = await this.minioClient.statObject(bucket, fileName);
       return stat; // stat.metaData['content-type'] สามารถใช้ได้
     } catch (err) {
-      console.error('MinIO statObject error:', err);
+      // console.error('MinIO statObject error:', err);
       return null; // ถ้าไม่มีไฟล์
     }
   }

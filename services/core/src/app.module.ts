@@ -26,6 +26,7 @@ import { PlanModule } from './plan/plan.module';
 import { GenerateModule } from './generate/generate.module';
 import { BullModule } from '@nestjs/bullmq';
 import { WebsocketModule } from './websocket/websocket.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { WebsocketModule } from './websocket/websocket.module';
         password: redisConfigs().redisPassword,
       },
     }),
+    ChatModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

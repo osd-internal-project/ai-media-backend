@@ -7,6 +7,8 @@ import { GenerateService } from 'src/generate/generate.service';
 import { PrismaModule, QUEUE_NAME_IMAGE, QUEUE_NAME_VDO } from '@ai-media/share';
 import { MinioClientModule } from 'src/minio-client/minio-client.module';
 import { RedisModule } from '@nestjs-modules/ioredis';
+import { ChatService } from 'src/chat/chat.service';
+import { LogsService } from 'src/logs/logs.service';
 
 @Module({
   imports: [PrismaModule, MinioClientModule,
@@ -24,7 +26,7 @@ import { RedisModule } from '@nestjs-modules/ioredis';
       name: 'tasks',
     }),
   ],
-  providers: [WebsocketGatewayService, GenerateService, WebsocketService],
-  exports: [WebsocketGatewayService, GenerateService, WebsocketService],
+  providers: [WebsocketGatewayService, GenerateService, WebsocketService, LogsService],
+  exports: [WebsocketGatewayService, GenerateService, WebsocketService, LogsService],
 })
 export class WebsocketModule { }

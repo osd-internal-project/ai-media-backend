@@ -22,7 +22,8 @@ import {
   AuditLogRepository,
   PlanRepository,
   RegisterRepository,
-  RequestChangePasswordRepository
+  RequestChangePasswordRepository,
+  RefImageRepository
 } from 'src/repositories';
 
 const services = [
@@ -48,7 +49,8 @@ const services = [
   AuditLogRepository,
   PlanRepository,
   RegisterRepository,
-  RequestChangePasswordRepository
+  RequestChangePasswordRepository,
+  RefImageRepository
 ];
 
 @Module({

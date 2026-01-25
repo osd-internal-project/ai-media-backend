@@ -23,7 +23,7 @@ export class LogsService {
     private readonly minioService: MinioClientService,
     private readonly auditLogRepo: AuditLogRepository,
     private readonly errorLogRepo: ErrorLogRepository,
-  ) {}
+  ) { }
   async findProjectImageByPage(
     projectId: string,
     skip?: number,
@@ -83,19 +83,19 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo'
-              ? this.minioconfig.minioBucketVdo
-              : this.minioconfig.minioBucket,
-            item.imageUrl,
-          )
+          item.typeGenerate === 'vdo'
+            ? this.minioconfig.minioBucketVdo
+            : this.minioconfig.minioBucket,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo'
-              ? this.minioconfig.minioBucketVdo
-              : this.minioconfig.minioBucket,
-            item.thumbnailUrl,
-          )
+          item.typeGenerate === 'vdo'
+            ? this.minioconfig.minioBucketVdo
+            : this.minioconfig.minioBucket,
+          item.thumbnailUrl,
+        )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -103,6 +103,7 @@ export class LogsService {
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
+          console.log(filename)
           const fileStats = await this.minioService.statFile(
             this.minioconfig.minioBucketUpload,
             filename,
@@ -225,19 +226,19 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo'
-              ? this.minioconfig.minioBucketVdo
-              : this.minioconfig.minioBucket,
-            item.imageUrl,
-          )
+          item.typeGenerate === 'vdo'
+            ? this.minioconfig.minioBucketVdo
+            : this.minioconfig.minioBucket,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo'
-              ? this.minioconfig.minioBucketVdo
-              : this.minioconfig.minioBucket,
-            item.thumbnailUrl,
-          )
+          item.typeGenerate === 'vdo'
+            ? this.minioconfig.minioBucketVdo
+            : this.minioconfig.minioBucket,
+          item.thumbnailUrl,
+        )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -365,15 +366,15 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            this.minioconfig.minioBucketVdo,
-            item.imageUrl,
-          )
+          this.minioconfig.minioBucketVdo,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            this.minioconfig.minioBucketVdo,
-            item.thumbnailUrl,
-          )
+          this.minioconfig.minioBucketVdo,
+          item.thumbnailUrl,
+        )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -512,15 +513,15 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            this.minioconfig.minioBucketVdo,
-            item.imageUrl,
-          )
+          this.minioconfig.minioBucketVdo,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            this.minioconfig.minioBucketVdo,
-            item.thumbnailUrl,
-          )
+          this.minioconfig.minioBucketVdo,
+          item.thumbnailUrl,
+        )
         : '';
 
       // Generate presigned URLs for multiple reference images
