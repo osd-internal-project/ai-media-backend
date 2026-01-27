@@ -26,6 +26,7 @@ const ORGANIZATION_ROLES = {
   ADMIN: 'ADMIN',
   MEMBER: 'MEMBER',
   VIEWER: 'VIEWER',
+  SUPER_ADMIN: 'SUPER_ADMIN',
 } as const;
 
 type ProjectRole = keyof typeof PROJECT_ROLES;
@@ -133,17 +134,16 @@ export class ProjectService {
     }
 
     const organizationRole = await this.getUserOrganizationRole(user.userId);
-
+    const isSuperAdmin = organizationRole === 'SUPER_ADMIN';
     const isOwner = organizationRole === 'OWNER';
-
     const isAdmin = organizationRole === 'ADMIN';
 
-    const isOwnerOrAdmin = isOwner || isAdmin;
+    const isShowAll = isOwner || isAdmin || isSuperAdmin;
 
     const res = await this.projectRepo.findMany({
       where: {
-        ...(!isOwnerOrAdmin && { status: { not: 'deleted' } }),
-        ...(!isOwnerOrAdmin && {
+        ...(!isSuperAdmin && { status: { not: 'deleted' } }),
+        ...(!isShowAll && {
           members: { some: { userId: user.userId } },
         }),
       },
@@ -169,18 +169,17 @@ export class ProjectService {
       user.userId,
       organizationId,
     );
-
+    const isSuperAdmin = organizationRole === 'SUPER_ADMIN';
     const isOwner = organizationRole === 'OWNER';
-
     const isAdmin = organizationRole === 'ADMIN';
 
-    const isOwnerOrAdmin = isOwner || isAdmin;
+    const isShowAll = isOwner || isAdmin || isSuperAdmin;
 
     return this.projectRepo.findMany({
       where: {
         organizationId,
-        ...(!isOwnerOrAdmin && { status: { not: 'deleted' } }),
-        ...(!isOwnerOrAdmin && {
+        ...(!isSuperAdmin && { status: { not: 'deleted' } }),
+        ...(!isShowAll && {
           members: {
             some: {
               users: {
@@ -238,7 +237,11 @@ export class ProjectService {
   ): Promise<string | null> {
     const organizationRole = await this.getUserOrganizationRole(userId);
 
-    if (organizationRole === 'OWNER' || organizationRole === 'ADMIN') {
+    if (
+      organizationRole === 'OWNER' ||
+      organizationRole === 'ADMIN' ||
+      organizationRole === 'SUPER_ADMIN'
+    ) {
       return 'OWNER';
     }
 
@@ -254,7 +257,7 @@ export class ProjectService {
 
   async isProjectAdmin(projectId: string, userId: string): Promise<boolean> {
     const role = await this.checkUserRole(projectId, userId);
-    return role === 'ADMIN' || role === 'OWNER';
+    return role === 'ADMIN' || role === 'OWNER' || role === 'SUPER_ADMIN';
   }
 
   async getProjectMembers(projectId: string) {
