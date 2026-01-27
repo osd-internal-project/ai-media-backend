@@ -485,3 +485,20 @@ model RefImage {
 
   @@map("ref_images")
 }
+
+model PromptGuideImage {
+  id           Int      @id @default(autoincrement())
+  uid          String   @unique @db.VarChar(50)
+  userId       String   @map("user_id") @db.VarChar(50)
+  index        Int      @default(0)
+  imageName    String   @map("image_name") @db.VarChar(200)
+  imagePath    String   @map("image_path") @db.VarChar(200)
+  imageType    String   @map("image_type") @db.VarChar(50)
+  imageSize    Int      @default(0) @map("image_size")
+  generateType String   @map("generate_type") @db.VarChar(50)
+  status       String   @default("waiting") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("prompt_guide_images")
+}
