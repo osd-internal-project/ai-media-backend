@@ -8,7 +8,9 @@ import {
     MasterdataModelTypeRepository,
     ProjectMemberRepository,
     QUEUE_NAME_IMAGE,
-    UsersRepository
+    UsersRepository,
+    ByteplusePayloadImage,
+    RequestImageGenerateDto
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -54,7 +56,7 @@ export class GenerateService {
     /**
    * สร้าง Generation Task และส่งเข้า Queue
    */
-    async createGenerationTask(body: CreateGenerateDto, clientId: string) {
+    async createGenerationTask(body: RequestImageGenerateDto, clientId: string) {
         const taskId = uuidv4();
         const redisImageCacheKey = `image_used_${body.userId}`;
 
@@ -91,7 +93,7 @@ export class GenerateService {
             });
 
             const modelDetail = await this.modeltypeRepo.findOne({
-                where: { modelType: body.modelName, type: body.type },
+                where: { modelType: body.model, type: body.type },
             });
 
             if (!modelDetail) {
@@ -104,29 +106,32 @@ export class GenerateService {
                 modelDetail,
                 getConfigApi,
             );
+            console.log(getConfigApi.apiCreateImage)
+            console.log(basePayload)
+            console.log(axiosConfig)
 
             // 5. Call External API
-            // const res = await this.executeGenerationRequest(
-            //     getConfigApi.apiCreateImage,
-            //     basePayload,
-            //     axiosConfig,
-            // );
+            const res = await this.executeGenerationRequest(
+                getConfigApi.apiCreateImage,
+                basePayload,
+                axiosConfig,
+            );
 
-            const res = {
-                data: {
-                    data: [
-                        {
-                            url: 'https://www.aicave.ai/public/api/v1/s3/ai-media-image/608292c8-fdb2-49b9-8a9c-b61391867f7a/51afe541-16e1-4e2f-b015-41ce44d23f68.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260122%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260122T074412Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=f22bebff66be63eec3abc5895cba2cffccc3e60249c347d1f58d49d46c0a1924',
-                            size: '2048x2048'
-                        }
-                    ],
-                    usage: {
-                        generated_images: 1,
-                        output_tokens: 16280,
-                        total_tokens: 16280
-                    }
-                }
-            }
+            // const res = {
+            //     data: {
+            //         data: [
+            //             {
+            //                 url: 'https://www.aicave.ai/public/api/v1/s3/ai-media-image/608292c8-fdb2-49b9-8a9c-b61391867f7a/51afe541-16e1-4e2f-b015-41ce44d23f68.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260122%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260122T074412Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=f22bebff66be63eec3abc5895cba2cffccc3e60249c347d1f58d49d46c0a1924',
+            //                 size: '2048x2048'
+            //             }
+            //         ],
+            //         usage: {
+            //             generated_images: 1,
+            //             output_tokens: 16280,
+            //             total_tokens: 16280
+            //         }
+            //     }
+            // }
 
             // 6. อัพเดท cache
             await this.redis.set(
@@ -141,14 +146,14 @@ export class GenerateService {
                 QUEUE_NAME_IMAGE,
                 {
                     taskId,
-                    clientId, // ส่ง clientId ไปให้ Worker
+                    clientId,
                     body: { ...body, taskId },
                     userId: user.userId,
                     dataImage: res.data.data,
                     usage: res.data.usage,
                 },
                 {
-                    jobId: taskId, // ใช้ taskId เป็น jobId เพื่อให้ track ง่าย
+                    jobId: taskId,
                     attempts: 3,
                     backoff: {
                         type: 'exponential',
@@ -190,7 +195,7 @@ export class GenerateService {
         } catch (error) {
             console.error('Error creating generation task:', error);
             this.logError(body.userId, error.message, error.stack, error.response?.data);
-            throw error;
+            this.handleGenerationError(error);
         }
     }
 
@@ -314,9 +319,9 @@ export class GenerateService {
         return { user, projectMember };
     }
 
-    private async checkTokenQuota(userId: string, body: CreateGenerateDto, projectMember: any, cacheKey: string): Promise<{ isQuotaExceeded: boolean, currentImageUsed: number, maxImageInPlan: number }> {
+    private async checkTokenQuota(userId: string, body: RequestImageGenerateDto, projectMember: any, cacheKey: string): Promise<{ isQuotaExceeded: boolean, currentImageUsed: number, maxImageInPlan: number }> {
         let currentImageUsed = 0;
-        const requestImage = body.images || 0;
+        const maxImage = body.maxImages || 0;
 
         if (cacheKey) {
             const cachedImageUsed = await this.redis.get(cacheKey);
@@ -344,9 +349,9 @@ export class GenerateService {
         }
 
         const maxImageInPlan = projectMember?.maxImages || 0;
-        currentImageUsed = currentImageUsed + requestImage;
+        currentImageUsed = currentImageUsed + maxImage;
         if (currentImageUsed > maxImageInPlan) {
-            Logger.error(`Image used ${currentImageUsed + requestImage} exceed max image ${maxImageInPlan}`);
+            Logger.error(`Image used ${currentImageUsed + maxImage} exceed max image ${maxImageInPlan}`);
             return {
                 isQuotaExceeded: true,
                 currentImageUsed: currentImageUsed,
@@ -362,7 +367,7 @@ export class GenerateService {
     }
 
     private async prepareGenerationPayload(
-        body: CreateGenerateDto,
+        body: RequestImageGenerateDto,
         modelDetail: any,
         configApi: any
     ) {
@@ -374,43 +379,49 @@ export class GenerateService {
             httpsAgent: this.agent,
         };
 
-        let imageUrls: string[] = [];
-        if (body.image && body.image.length > 0) {
-            try {
-                imageUrls = await Promise.all(
-                    body.image.map((img) =>
-                        this.minioClientSerives.getPresignedUrl(
-                            this.minioconfig.minioBucketUpload,
-                            img.fileName,
-                        ),
-                    ),
-                );
-            } catch (error) {
-                throw new Error(`Failed to generate presigned URLs: ${error.message}`);
-            }
-        }
+        // let imageUrls: string[] = [];
+        // if (body.image && body.image.length > 0) {
+        //     try {
+        //         imageUrls = await Promise.all(
+        //             body.image.map((img) =>
+        //                 this.minioClientSerives.getPresignedUrl(
+        //                     this.minioconfig.minioBucketUpload,
+        //                     img.fileName,
+        //                 ),
+        //             ),
+        //         );
+        //     } catch (error) {
+        //         throw new Error(`Failed to generate presigned URLs: ${error.message}`);
+        //     }
+        // }
 
-        const basePayload: any = {
-            model: modelDetail.modelType,
-            prompt: `create ${body.images || 1} images ${body.text}`,
+        // prompt: `create ${body.images || 1} images ${body.text}`,
+        const basePayload = {
+            model: body.model,
+            prompt: body.prompt,
             response_format: 'url',
+            ...body.image && { image: body.image },
             stream: configApi.stream ?? false,
             watermark: configApi.watermark ?? false,
-        };
+            ratio: body.ratio,
+            size: body.size,
+            sequential_image_generation: body.sequentialImageGeneration,
+            ...body.maxImages && { sequential_image_generation_options: { max_images: body.maxImages } },
+        } as ByteplusePayloadImage;
 
-        if (imageUrls.length > 0) {
-            basePayload.image = imageUrls.length === 1 ? imageUrls[0] : imageUrls;
-        }
-        if (body.width && body.height) {
-            basePayload.size = `${body.width}x${body.height}`;
-        }
+        // if (imageUrls.length > 0) {
+        //     basePayload.image = imageUrls.length === 1 ? imageUrls[0] : imageUrls;
+        // }
+        // if (body.width && body.height) {
+        //     basePayload.size = `${body.width}x${body.height}`;
+        // }
 
-        if (body.images && body.images > 1) {
-            basePayload.sequential_image_generation = 'auto';
-            basePayload.sequential_image_generation_options = {
-                max_images: body.images,
-            };
-        }
+        // if (body.images && body.images > 1) {
+        //     basePayload.sequential_image_generation = 'auto';
+        //     basePayload.sequential_image_generation_options = {
+        //         max_images: body.images,
+        //     };
+        // }
 
         return { basePayload, axiosConfig };
     }

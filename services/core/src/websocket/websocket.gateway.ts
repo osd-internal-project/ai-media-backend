@@ -14,7 +14,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { WebsocketService } from './websocket.service';
 import { ConfigService } from '@nestjs/config';
 import { GenerateService } from 'src/generate/generate.service';
-import { CreateGenerateDto, LogRepository } from '@ai-media/share';
+import { CreateGenerateDto, LogRepository, RequestImageGenerateDto } from '@ai-media/share';
 import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { redisConfigs } from '../configs';
@@ -142,24 +142,26 @@ export class WebsocketGatewayService
 
   @SubscribeMessage('generate')
   async handleGenerate(
-    @MessageBody() data: CreateGenerateDto,
+    @MessageBody() data: RequestImageGenerateDto,
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      console.log(`🎨 Generate request from client: ${client.id}`);
+      console.log('🎨 Generate request from client: ', client.id);
+      console.log('🎨 Generate request from data: ', data);
 
-      // เรียก service เพื่อสร้าง task
+      // // เรียก service เพื่อสร้าง task
       const result = await this.generateService.createGenerationTask(
         data,
         client.id, // ส่ง clientId ไปด้วย
       );
+      console.log('🎨 Generate result from data: ', result);
       if (result.status !== 200) {
         client.emit('generate:error', {
           message: result.data,
         });
         return;
       }
-      // [NEW] Explicitly check if data is a string to satisfy TypeScript
+      // // [NEW] Explicitly check if data is a string to satisfy TypeScript
       if (typeof result.data === 'string') {
         client.emit('generate:error', {
           message: 'Invalid response from generation service',
@@ -167,10 +169,10 @@ export class WebsocketGatewayService
         return;
       }
 
-      // บันทึก task ที่เกี่ยวข้องกับ client
+      // // บันทึก task ที่เกี่ยวข้องกับ client
       await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
 
-      // ส่ง confirmation กลับไป
+      // // ส่ง confirmation กลับไป
       client.emit('task:created', {
         taskId: result.data.taskId,
         jobId: result.data.jobId,
@@ -195,7 +197,6 @@ export class WebsocketGatewayService
     @ConnectedSocket() client: Socket,
   ) {
     const projectId = data.projectId;
-    console.log('chat:get-history', data);
     try {
       const conversation = await this.logsService.findProjectImageByPage(
         projectId,

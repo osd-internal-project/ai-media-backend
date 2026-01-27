@@ -6,13 +6,13 @@ import Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import * as https from 'https';
-import { CreateGenerateDto, GalleryRepository, LogRepository, QUEUE_NAME_IMAGE } from '@ai-media/share';
+import { RequestImageGenerateDto, GalleryRepository, LogRepository, QUEUE_NAME_IMAGE } from '@ai-media/share';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
 
 interface ImageProcessJob {
     taskId: string;
     clientId: string;
-    body: CreateGenerateDto;
+    body: RequestImageGenerateDto;
     userId: string;
     dataImage: { url: string; size: string }[];
     usage: {
@@ -140,12 +140,22 @@ export class ImageProcessor extends WorkerHost {
                         taskId,
                         projectId: body.projectId,
                         userId,
-                        prompt: body.text,
+                        prompt: body.prompt,
                         imageUrl: objectName,
                         typeGenerate: 'image',
                         genneratedStatus: 'SUCCESS',
                         status: true,
-                        generateConfig: this.buildGenerateConfig(body),
+                        generateConfig: this.buildGenerateConfig({
+                            ratio: body.ratio,
+                            width: body.width,
+                            height: body.height,
+                            prompt: body.prompt,
+                            duration: 0,
+                            modelName: body.model,
+                            imageCount: body.maxImages,
+                            resolution: body.size,
+                            generateAudio: false,
+                        }),
                     },
                 });
 
@@ -174,18 +184,26 @@ export class ImageProcessor extends WorkerHost {
                     taskId,
                     projectId: body.projectId,
                     userId,
-                    prompt: body.text,
+                    prompt: body.prompt,
                     typeGenerate: body.type,
                     status: 'success',
-                    resolution: body.resolution,
+                    resolution: body.size,
                     ratio: body.ratio,
-                    generateAudio: body.generateAudio || false,
-                    tokenUsed: usage?.total_tokens || 0,
-                    ImageUsed: usage?.generated_images || 0,
-                    referenceImages: body.image
-                        ? body.image.map((img) => img.fileName)
-                        : [],
-                    generateConfig: this.buildGenerateConfig(body),
+                    generateAudio: false,
+                    tokenUsed: usage.total_tokens || 0,
+                    ImageUsed: usage.generated_images || 0,
+                    referenceImages: body.image.length > 0 ? body.image : [],
+                    generateConfig: this.buildGenerateConfig({
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        prompt: body.prompt,
+                        duration: 0,
+                        modelName: body.model,
+                        imageCount: body.maxImages,
+                        resolution: body.size,
+                        generateAudio: false,
+                    }),
                 },
             });
 
@@ -239,18 +257,26 @@ export class ImageProcessor extends WorkerHost {
                     taskId,
                     projectId: body.projectId,
                     userId,
-                    prompt: body.text,
+                    prompt: body.prompt,
                     typeGenerate: body.type,
                     status: 'failed',
-                    resolution: body.resolution,
+                    resolution: body.size,
                     ratio: body.ratio,
-                    generateAudio: body.generateAudio || false,
+                    generateAudio: false,
                     tokenUsed: 0,
                     ImageUsed: 0,
-                    referenceImages: body.image
-                        ? body.image.map((img) => img.fileName)
-                        : [],
-                    generateConfig: this.buildGenerateConfig(body),
+                    referenceImages: body.image.length > 0 ? body.image : [],
+                    generateConfig: this.buildGenerateConfig({
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        prompt: body.prompt,
+                        duration: 0,
+                        modelName: body.model,
+                        imageCount: body.maxImages,
+                        resolution: body.size,
+                        generateAudio: false,
+                    }),
                 },
             });
 
@@ -294,16 +320,26 @@ export class ImageProcessor extends WorkerHost {
         }
     }
 
-    private buildGenerateConfig(body: CreateGenerateDto) {
+    private buildGenerateConfig(body: {
+        ratio: string,
+        width: number,
+        height: number,
+        prompt: string,
+        duration: number,
+        modelName: string,
+        imageCount: number,
+        resolution: string,
+        generateAudio: boolean,
+    }) {
         return {
             ...(body?.width && { width: body?.width }),
             ...(body?.height && { height: body?.height }),
             ...(body?.ratio && { ratio: body?.ratio }),
-            ...(body?.images && { imageCount: body?.images }),
+            ...(body?.imageCount && { imageCount: body?.imageCount }),
             ...(body?.resolution && { resolution: body?.resolution }),
             ...(body?.modelName && { modelName: body?.modelName }),
             ...(body?.duration && { duration: body?.duration }),
-            content: body?.text,
+            content: body?.prompt,
             ...(body?.generateAudio && { generateAudio: body?.generateAudio }),
         };
     }

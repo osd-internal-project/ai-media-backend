@@ -1,9 +1,10 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { MinioClientService } from '../minio-client/minio-client.service';
 import { appConfigs } from '../configs';
 import { RefImageRepository } from '@ai-media/share';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class UploadImageService {
@@ -66,4 +67,30 @@ export class UploadImageService {
       appConfigs().minioBucketUpload,
     );
   }
+
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async handleCron() {
+    const files = await this.refImageRepository.findMany({
+      where: {
+        status: 'waiting',
+        createdAt: {
+          lt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      },
+    });
+    Logger.log(`Found ${files.length} files to delete`);
+    for (const file of files) {
+      const ext = path.extname(file.imagePath);
+      await this.minioClientSerives.deleteFile(
+        `${file.uid}${ext}`,
+        appConfigs().minioBucketUpload,
+      );
+      await this.refImageRepository.deleteMany({
+        where: {
+          uid: file.uid,
+        },
+      });
+    }
+  }
+
 }
