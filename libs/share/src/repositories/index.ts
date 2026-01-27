@@ -21,3 +21,4 @@ export * from './plan.repository';
 export * from './registers.repository';
 export * from './request-change-password.repository';
 export * from './ref-image.repository';
+export * from './promptGuideImage.repository';

@@ -3,7 +3,10 @@ import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { MinioClientService } from '../minio-client/minio-client.service';
 import { appConfigs } from '../configs';
-import { RefImageRepository } from '@ai-media/share';
+import {
+  PromptGuideImageRepository,
+  RefImageRepository,
+} from '@ai-media/share';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
@@ -11,10 +14,17 @@ export class UploadImageService {
   constructor(
     private readonly minioClientSerives: MinioClientService,
     private readonly refImageRepository: RefImageRepository,
-
+    private readonly promptGuideImageRepository: PromptGuideImageRepository,
   ) { }
 
-  async uploadImage(userId: string, index: number, projectId: string, generateType: "image" | "vdo", file: Express.Multer.File, uid: string) {
+  async uploadImage(
+    userId: string,
+    index: number,
+    projectId: string,
+    generateType: 'image' | 'vdo',
+    file: Express.Multer.File,
+    uid: string,
+  ) {
     const bucketname = appConfigs().minioBucketUpload;
     const ext = path.extname(file.originalname);
     await this.minioClientSerives.uploadFile(
@@ -69,6 +79,63 @@ export class UploadImageService {
     );
   }
 
+  async uploadPromptGuideImage(
+    userId: string,
+    index: number,
+    projectId: string,
+    generateType: 'image' | 'vdo',
+    file: Express.Multer.File,
+    uid: string,
+  ) {
+    const bucketname = appConfigs().minioBucketUpload;
+    const ext = path.extname(file.originalname);
+    await this.minioClientSerives.uploadFile(
+      file.buffer,
+      file.buffer.length,
+      bucketname,
+      `${uid}${ext}`,
+    );
+    await this.promptGuideImageRepository.create({
+      data: {
+        uid: uid,
+        userId: userId,
+        index: index,
+        imageName: file.originalname,
+        imagePath: `${bucketname}/${uid}${ext}`,
+        imageType: file.mimetype,
+        imageSize: file.size,
+        generateType: generateType,
+        status: 'waiting',
+      },
+    });
+    return {
+      uid: uid,
+      name: file.originalname,
+      url: await this.minioClientSerives.getPresignedUrl(bucketname, uid),
+      status: 'waiting', //waiting,processing,done
+    };
+  }
+  async deletePromptGuideImage(uid: string) {
+    const file = await this.promptGuideImageRepository.findOne({
+      where: {
+        uid: uid,
+      },
+    });
+    if (!file) {
+      throw new ConflictException('File not found');
+    }
+    const ext = path.extname(file.imagePath);
+    await this.promptGuideImageRepository.deleteMany({
+      where: {
+        uid: uid,
+      },
+    });
+    await this.minioClientSerives.deleteFile(
+      `${uid}${ext}`,
+      appConfigs().minioBucketUpload,
+    );
+  }
+
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleCron() {
     const files = await this.refImageRepository.findMany({
@@ -93,5 +160,4 @@ export class UploadImageService {
       });
     }
   }
-
 }
