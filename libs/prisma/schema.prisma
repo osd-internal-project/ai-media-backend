@@ -245,6 +245,8 @@ model PromptGuide {
   promptGuideType   PromptGuideType? @relation(fields: [promptGuideTypeId], references: [id])
   promptGuideTypeId Int?             @map("prompt_guide_type_id")
   organizationId    String?          @map("organization_id") @db.VarChar(50)
+  generateType      String           @default("image") @map("generate_type") @db.VarChar(10) // image/video
+  imagePaths        Json[]           @default([]) @map("image_paths") @db.JsonB
 
   @@map("prompt_guide")
 }
@@ -257,6 +259,7 @@ model PromptGuideType {
   updatedAt      DateTime      @default(now()) @map("updated_at")
   organizationId String?       @map("organization_id") @db.VarChar(50)
   promptGuide    PromptGuide[]
+  generateType   String        @default("image") @map("generate_type") @db.VarChar(10) // image/video
 
   @@map("prompt_guide_type")
 }
