@@ -42,8 +42,9 @@ export class UploadImageService {
       name: file.originalname,
       url: await this.minioClientSerives.getPresignedUrl(
         bucketname,
-        uid,
+        `${uid}${ext}`,
       ),
+      imagePath: `${uid}${ext}`,
       status: 'waiting',//waiting,processing,done
     };
   }

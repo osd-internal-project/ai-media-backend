@@ -29,6 +29,7 @@ export class LogsService {
     skip?: number,
     take?: number,
   ) {
+
     const taskIds = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,

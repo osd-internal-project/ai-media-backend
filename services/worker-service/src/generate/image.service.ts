@@ -70,6 +70,7 @@ export class ImageProcessor extends WorkerHost {
         try {
             const totalImages = dataImage.length;
             const uploadedImages: string[] = [];
+            const bytepluseUrl = []
 
             // 1. ส่ง event "started" ไปยัง Core Service
             await this.publishToCore(clientId, 'generate:started', {
@@ -87,13 +88,13 @@ export class ImageProcessor extends WorkerHost {
             // 2. ประมวลผลทีละรูป
             for (let index = 0; index < dataImage.length; index++) {
                 const imageData = dataImage[index];
-
+                bytepluseUrl.push(imageData.url)
                 this.logger.log(
                     `📥 Downloading image ${index + 1}/${totalImages}: ${imageData.url}`,
                 );
 
                 // ส่ง progress: downloading
-                await this.publishToCore(clientId, 'generate:progress', {
+                await this.publishToCore(clientId, 'worker:progress', {
                     taskId,
                     stage: 'downloading',
                     current: index + 1,
@@ -116,7 +117,7 @@ export class ImageProcessor extends WorkerHost {
                 this.logger.debug(`📦 Buffer size: ${buffer.length} bytes`);
 
                 // ส่ง progress: uploading
-                await this.publishToCore(clientId, 'generate:progress', {
+                await this.publishToCore(clientId, 'worker:progress', {
                     taskId,
                     stage: 'uploading',
                     current: index + 1,
@@ -172,7 +173,7 @@ export class ImageProcessor extends WorkerHost {
                 // ส่ง event แต่ละรูปที่เสร็จ
                 await this.publishToCore(clientId, 'generate:image-complete', {
                     taskId,
-                    imageUrl: objectName,
+                    imageUrl: bytepluseUrl,
                     index: index + 1,
                     total: totalImages,
                 });
@@ -222,6 +223,26 @@ export class ImageProcessor extends WorkerHost {
                 imageCount: uploadedImages.length,
                 images: uploadedImages,
                 timestamp: new Date().toISOString(),
+                data: {
+                    projectId: body.projectId,
+                    userId,
+                    prompt: body.prompt,
+                    imageUrl: bytepluseUrl,
+                    typeGenerate: 'image',
+                    genneratedStatus: 'SUCCESS',
+                    status: true,
+                    generateConfig: this.buildGenerateConfig({
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        prompt: body.prompt,
+                        duration: 0,
+                        modelName: body.model,
+                        imageCount: body.maxImages,
+                        resolution: body.size,
+                        generateAudio: false,
+                    }),
+                },
             });
 
             this.logger.log(
@@ -233,6 +254,26 @@ export class ImageProcessor extends WorkerHost {
                 taskId,
                 imageCount: uploadedImages.length,
                 images: uploadedImages,
+                data: {
+                    projectId: body.projectId,
+                    userId,
+                    prompt: body.prompt,
+                    imageUrl: bytepluseUrl,
+                    typeGenerate: 'image',
+                    genneratedStatus: 'SUCCESS',
+                    status: true,
+                    generateConfig: this.buildGenerateConfig({
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        prompt: body.prompt,
+                        duration: 0,
+                        modelName: body.model,
+                        imageCount: body.maxImages,
+                        resolution: body.size,
+                        generateAudio: false,
+                    }),
+                },
             };
         } catch (error) {
             this.logger.error(`❌ Job ${job.id} failed: ${error.message}`, error.stack);
