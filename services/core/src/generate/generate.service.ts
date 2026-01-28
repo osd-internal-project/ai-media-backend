@@ -114,6 +114,7 @@ export class GenerateService {
                 axiosConfig,
             );
 
+            // data test
             // const res = {
             //     data: {
             //         data: [
@@ -457,49 +458,6 @@ export class GenerateService {
 
         throw new InternalServerErrorException('Failed to generate image');
     }
-
-    private async saveGalleryItem(userId: string, body: CreateGenerateDto, uuid: string) {
-        return await this.galleryRepo.create({
-            data: {
-                taskId: body.type === 'image' ? uuid : null,
-                projectId: body.projectId,
-                userId: userId,
-                prompt: body.text,
-                typeGenerate: body.type,
-                genneratedStatus: 'PENDING',
-                imageUrl: '',
-                status: false,
-                generateConfig: {
-                    ...(body?.width && {
-                        width: body?.width,
-                    }),
-                    ...(body?.height && {
-                        height: body?.height,
-                    }),
-                    ...(body?.ratio && {
-                        ratio: body?.ratio,
-                    }),
-                    ...(body?.images && {
-                        imageCount: body?.images,
-                    }),
-                    ...(body?.resolution && {
-                        resolution: body?.resolution,
-                    }),
-                    ...(body?.modelName && {
-                        modelName: body?.modelName,
-                    }),
-                    ...(body?.duration && {
-                        duration: body?.duration,
-                    }),
-                    content: body?.text,
-                    ...(body?.generateAudio && {
-                        generateAudio: body?.generateAudio,
-                    }),
-                },
-            },
-        });
-    }
-
 
     private buildGenerateConfig(body: {
         ratio: string,

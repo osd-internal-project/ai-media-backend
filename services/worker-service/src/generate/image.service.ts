@@ -188,7 +188,7 @@ export class ImageProcessor extends WorkerHost {
                     projectId: body.projectId,
                     userId,
                     prompt: body.prompt,
-                    typeGenerate: body.type,
+                    typeGenerate: 'image',
                     status: 'success',
                     resolution: body.size,
                     ratio: body.ratio,
