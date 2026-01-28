@@ -9,6 +9,7 @@ import {
   UploadedFiles,
   UploadedFile,
   UseInterceptors,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadImageService } from './upload-image.service';
@@ -45,14 +46,14 @@ export class UploadImageController {
     @UploadedFile() file: Express.Multer.File,
     @Body(`userId`) userId: string,
     @Body(`index`) index: number,
-    @Body(`projectId`) projectId: string,
+    @Body(`promptGuideId`) promptGuideId: string,
     @Body(`generateType`) generateType: 'image' | 'vdo',
     @Body(`uid`) uid: string,
   ) {
-    return this.uploadImageService.uploadImage(
+    return this.uploadImageService.uploadPromptGuideImage(
       userId,
       Number(index),
-      projectId,
+      promptGuideId,
       generateType,
       file,
       uid,
@@ -66,6 +67,6 @@ export class UploadImageController {
 
   @Delete('prompt-guide-image/delete/:uid')
   async deletePromptGuideImage(@Param(`uid`) uid: string) {
-    return this.uploadImageService.deleteImage(uid);
+    return this.uploadImageService.deletePromptGuideImage(uid);
   }
 }

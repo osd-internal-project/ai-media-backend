@@ -46,4 +46,14 @@ export class PromptGuideController {
   findByOrganization(@Param('organizationId') organizationId: string) {
     return this.promptGuideService.findByOrganization(organizationId);
   }
+
+  @Get(':id/images')
+  findImagesByPromptGuideId(@Param('id') id: string) {
+    return this.promptGuideService.findImagesByPromptGuideId(+id);
+  }
+
+  @Get(':id/images-with-urls')
+  getPromptGuideImages(@Param('id') id: string) {
+    return this.promptGuideService.getPromptGuideImages(+id);
+  }
 }
