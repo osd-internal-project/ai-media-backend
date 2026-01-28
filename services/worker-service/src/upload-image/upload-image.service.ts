@@ -15,7 +15,7 @@ export class UploadImageService {
     private readonly minioClientSerives: MinioClientService,
     private readonly refImageRepository: RefImageRepository,
     private readonly promptGuideImageRepository: PromptGuideImageRepository,
-  ) {}
+  ) { }
 
   async uploadImage(
     userId: string,
@@ -50,8 +50,12 @@ export class UploadImageService {
     return {
       uid: uid,
       name: file.originalname,
-      url: await this.minioClientSerives.getPresignedUrl(bucketname, uid),
-      status: 'waiting', //waiting,processing,done
+      url: await this.minioClientSerives.getPresignedUrl(
+        bucketname,
+        `${uid}${ext}`,
+      ),
+      imagePath: `${uid}${ext}`,
+      status: 'waiting',//waiting,processing,done
     };
   }
   async deleteImage(uid: string) {

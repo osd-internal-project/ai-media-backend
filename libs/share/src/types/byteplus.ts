@@ -12,4 +12,5 @@ export class ByteplusePayloadImage {
     seed?: number;
     watermark?: boolean;
     ratio: string;
+    image_generate_type: string;
 }

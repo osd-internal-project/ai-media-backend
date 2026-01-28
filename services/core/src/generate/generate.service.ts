@@ -57,7 +57,7 @@ export class GenerateService {
    * สร้าง Generation Task และส่งเข้า Queue
    */
     async createGenerationTask(body: RequestImageGenerateDto, clientId: string) {
-        const taskId = uuidv4();
+        const taskId = body.taskId;
         const redisImageCacheKey = `image_used_${body.userId}`;
 
         try {
@@ -106,9 +106,6 @@ export class GenerateService {
                 modelDetail,
                 getConfigApi,
             );
-            console.log(getConfigApi.apiCreateImage)
-            console.log(basePayload)
-            console.log(axiosConfig)
 
             // 5. Call External API
             const res = await this.executeGenerationRequest(
@@ -117,11 +114,12 @@ export class GenerateService {
                 axiosConfig,
             );
 
+            // data test
             // const res = {
             //     data: {
             //         data: [
             //             {
-            //                 url: 'https://www.aicave.ai/public/api/v1/s3/ai-media-image/608292c8-fdb2-49b9-8a9c-b61391867f7a/51afe541-16e1-4e2f-b015-41ce44d23f68.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260122%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260122T074412Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=f22bebff66be63eec3abc5895cba2cffccc3e60249c347d1f58d49d46c0a1924',
+            //                 url: 'https://www.aicave.ai/public/api/v1/s3/ai-media-image-upload/rc-upload-1769501912336-3.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260127%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260127T085458Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=897ff133759fd3836dce03d3e9039b586cf030c2464635a9da5acff6fcf6bb73',
             //                 size: '2048x2048'
             //             }
             //         ],
@@ -182,20 +180,39 @@ export class GenerateService {
             );
 
             console.log(`✅ Task created: ${taskId}, Job ID: ${job.id}`);
-
             return {
                 status: 200,
+                // data: {
+                //     taskId: taskId.toString(),
+                //     jobId: job.id,
+                //     message: 'Image generation queued',
+                //     estimatedImages: res.data.data.length,
+                // },
                 data: {
-                    taskId: taskId.toString(),
-                    jobId: job.id,
-                    message: 'Image generation queued',
-                    estimatedImages: res.data.data.length,
+                    taskId,
+                    projectId: body.projectId,
+                    userId: user.userId,
+                    prompt: body.prompt,
+                    imageUrl: res.data.data,
+                    typeGenerate: 'image',
+                    genneratedStatus: 'SUCCESS',
+                    status: true,
+                    generateConfig: this.buildGenerateConfig({
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        prompt: body.prompt,
+                        duration: 0,
+                        modelName: body.model,
+                        imageCount: body.maxImages,
+                        resolution: body.size,
+                        generateAudio: false,
+                    }),
                 },
             };
         } catch (error) {
             console.error('Error creating generation task:', error);
-            this.logError(body.userId, error.message, error.stack, error.response?.data);
-            this.handleGenerationError(error);
+            this.handleGenerationError(error, body.userId);
         }
     }
 
@@ -379,28 +396,23 @@ export class GenerateService {
             httpsAgent: this.agent,
         };
 
-        // let imageUrls: string[] = [];
-        // if (body.image && body.image.length > 0) {
-        //     try {
-        //         imageUrls = await Promise.all(
-        //             body.image.map((img) =>
-        //                 this.minioClientSerives.getPresignedUrl(
-        //                     this.minioconfig.minioBucketUpload,
-        //                     img.fileName,
-        //                 ),
-        //             ),
-        //         );
-        //     } catch (error) {
-        //         throw new Error(`Failed to generate presigned URLs: ${error.message}`);
-        //     }
-        // }
-
+        let imageUrls: string[] = [];
+        if (body.image && body.image.length > 0) {
+            imageUrls = await Promise.all(
+                body.image.map((img) =>
+                    this.minioClientSerives.getPresignedUrl(
+                        this.minioconfig.minioBucketUpload,
+                        img,
+                    ),
+                ),
+            );
+        }
         // prompt: `create ${body.images || 1} images ${body.text}`,
         const basePayload = {
             model: body.model,
             prompt: body.prompt,
             response_format: 'url',
-            ...body.image && { image: body.image },
+            ...body.image.length > 0 && { image: imageUrls },
             stream: configApi.stream ?? false,
             watermark: configApi.watermark ?? false,
             ratio: body.ratio,
@@ -408,6 +420,7 @@ export class GenerateService {
             sequential_image_generation: body.sequentialImageGeneration,
             ...body.maxImages && { sequential_image_generation_options: { max_images: body.maxImages } },
         } as ByteplusePayloadImage;
+        Logger.log(basePayload, 'basePayload');
 
         // if (imageUrls.length > 0) {
         //     basePayload.image = imageUrls.length === 1 ? imageUrls[0] : imageUrls;
@@ -427,74 +440,47 @@ export class GenerateService {
     }
 
     private async executeGenerationRequest(url: string, payload: any, config: AxiosRequestConfig) {
-        console.log({ url, payload, config });
         return await axios.post(url, payload, config);
     }
 
-    private handleGenerationError(error: any) {
+    private handleGenerationError(error: any, userId: string) {
         Logger.error(
             `Error generate image: ${error?.response?.data?.error_description || error.message}`,
             error?.response?.data ? JSON.stringify(error.response.data) : error.stack,
         );
         if (axios.isAxiosError(error) && error.response) {
             const { status, data } = error.response;
-            const message = data?.errorMessage ||
-                data?.error_description ||
-                'Failed to generate image';
+            const message = data?.error?.message;
 
-            throw new HttpException(
-                {
-                    statusCode: status,
-                    message,
-                    details: data,
-                },
-                status,
-            );
+            this.logError(userId, message, error.stack, data);
+            throw new ConflictException(message);
         }
 
         throw new InternalServerErrorException('Failed to generate image');
     }
 
-    private async saveGalleryItem(userId: string, body: CreateGenerateDto, uuid: string) {
-        return await this.galleryRepo.create({
-            data: {
-                taskId: body.type === 'image' ? uuid : null,
-                projectId: body.projectId,
-                userId: userId,
-                prompt: body.text,
-                typeGenerate: body.type,
-                genneratedStatus: 'PENDING',
-                imageUrl: '',
-                status: false,
-                generateConfig: {
-                    ...(body?.width && {
-                        width: body?.width,
-                    }),
-                    ...(body?.height && {
-                        height: body?.height,
-                    }),
-                    ...(body?.ratio && {
-                        ratio: body?.ratio,
-                    }),
-                    ...(body?.images && {
-                        imageCount: body?.images,
-                    }),
-                    ...(body?.resolution && {
-                        resolution: body?.resolution,
-                    }),
-                    ...(body?.modelName && {
-                        modelName: body?.modelName,
-                    }),
-                    ...(body?.duration && {
-                        duration: body?.duration,
-                    }),
-                    content: body?.text,
-                    ...(body?.generateAudio && {
-                        generateAudio: body?.generateAudio,
-                    }),
-                },
-            },
-        });
+    private buildGenerateConfig(body: {
+        ratio: string,
+        width: number,
+        height: number,
+        prompt: string,
+        duration: number,
+        modelName: string,
+        imageCount: number,
+        resolution: string,
+        generateAudio: boolean,
+    }) {
+        return {
+            ...(body?.width && { width: body?.width }),
+            ...(body?.height && { height: body?.height }),
+            ...(body?.ratio && { ratio: body?.ratio }),
+            ...(body?.imageCount && { imageCount: body?.imageCount }),
+            ...(body?.resolution && { resolution: body?.resolution }),
+            ...(body?.modelName && { modelName: body?.modelName }),
+            ...(body?.duration && { duration: body?.duration }),
+            content: body?.prompt,
+            ...(body?.generateAudio && { generateAudio: body?.generateAudio }),
+        };
     }
 
     private async logAudit(

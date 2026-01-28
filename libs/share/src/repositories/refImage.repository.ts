@@ -48,6 +48,13 @@ export class RefImageRepository {
     const prisma = option?.prisma ?? this.prisma;
     return prisma.refImage.update(data);
   }
+  async updateMany(
+    data: Prisma.RefImageUpdateManyArgs,
+    option?: { prisma?: TQueryClient },
+  ) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.refImage.updateMany(data);
+  }
   async delete(
     condition: Prisma.RefImageDeleteArgs,
     option?: { prisma?: TQueryClient },

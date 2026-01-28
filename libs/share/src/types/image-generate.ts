@@ -1,4 +1,5 @@
 export class RequestImageGenerateDto {
+    taskId: string;
     model: string;
     prompt: string;
     image: string[];
@@ -12,4 +13,5 @@ export class RequestImageGenerateDto {
     userId: string;
     width: number;
     height: number;
+    imageGenerateType: string;
 }

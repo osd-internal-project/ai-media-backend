@@ -6,7 +6,8 @@ import Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import * as https from 'https';
-import { RequestImageGenerateDto, GalleryRepository, LogRepository, QUEUE_NAME_IMAGE } from '@ai-media/share';
+import * as path from 'path';
+import { RequestImageGenerateDto, GalleryRepository, LogRepository, QUEUE_NAME_IMAGE, RefImageRepository } from '@ai-media/share';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
 
 interface ImageProcessJob {
@@ -34,6 +35,7 @@ export class ImageProcessor extends WorkerHost {
         private readonly minioClientService: MinioClientService,
         private readonly galleryRepo: GalleryRepository,
         private readonly logrepo: LogRepository,
+        private readonly refImageRepository: RefImageRepository,
     ) {
         super();
         this.agent = new https.Agent({
@@ -70,9 +72,10 @@ export class ImageProcessor extends WorkerHost {
         try {
             const totalImages = dataImage.length;
             const uploadedImages: string[] = [];
+            const bytepluseUrl = []
 
             // 1. ส่ง event "started" ไปยัง Core Service
-            await this.publishToCore(clientId, 'generate:started', {
+            await this.publishToCore(clientId, 'worker:started', {
                 taskId,
                 totalImages,
                 timestamp: new Date().toISOString(),
@@ -87,18 +90,18 @@ export class ImageProcessor extends WorkerHost {
             // 2. ประมวลผลทีละรูป
             for (let index = 0; index < dataImage.length; index++) {
                 const imageData = dataImage[index];
-
+                bytepluseUrl.push(imageData.url)
                 this.logger.log(
                     `📥 Downloading image ${index + 1}/${totalImages}: ${imageData.url}`,
                 );
 
                 // ส่ง progress: downloading
-                await this.publishToCore(clientId, 'generate:progress', {
+                await this.publishToCore(clientId, 'worker:progress', {
                     taskId,
                     stage: 'downloading',
                     current: index + 1,
                     total: totalImages,
-                    percentage: Math.round(((index + 1) / totalImages) * 50),
+                    percentage: Math.round(30 + (index / totalImages) * 50),
                 });
 
                 // Download image
@@ -116,12 +119,12 @@ export class ImageProcessor extends WorkerHost {
                 this.logger.debug(`📦 Buffer size: ${buffer.length} bytes`);
 
                 // ส่ง progress: uploading
-                await this.publishToCore(clientId, 'generate:progress', {
+                await this.publishToCore(clientId, 'worker:progress', {
                     taskId,
                     stage: 'uploading',
                     current: index + 1,
                     total: totalImages,
-                    percentage: Math.round(50 + ((index + 1) / totalImages) * 50),
+                    percentage: Math.round(30 + ((index + 0.5) / totalImages) * 50),
                 });
 
                 // Upload to MinIO
@@ -144,7 +147,7 @@ export class ImageProcessor extends WorkerHost {
                         imageUrl: objectName,
                         typeGenerate: 'image',
                         genneratedStatus: 'SUCCESS',
-                        status: true,
+                        status: false,
                         generateConfig: this.buildGenerateConfig({
                             ratio: body.ratio,
                             width: body.width,
@@ -164,15 +167,15 @@ export class ImageProcessor extends WorkerHost {
                     stage: 'processing',
                     total: totalImages,
                     processed: index + 1,
-                    percentage: Math.round(((index + 1) / totalImages) * 100),
+                    percentage: Math.round(30 + ((index + 1) / totalImages) * 50),
                 });
 
                 this.logger.log(`✅ Finished image ${index + 1}/${totalImages}`);
 
                 // ส่ง event แต่ละรูปที่เสร็จ
-                await this.publishToCore(clientId, 'generate:image-complete', {
+                await this.publishToCore(clientId, 'worker:image-complete', {
                     taskId,
-                    imageUrl: objectName,
+                    imageUrl: bytepluseUrl,
                     index: index + 1,
                     total: totalImages,
                 });
@@ -185,7 +188,7 @@ export class ImageProcessor extends WorkerHost {
                     projectId: body.projectId,
                     userId,
                     prompt: body.prompt,
-                    typeGenerate: body.type,
+                    typeGenerate: 'image',
                     status: 'success',
                     resolution: body.size,
                     ratio: body.ratio,
@@ -216,13 +219,46 @@ export class ImageProcessor extends WorkerHost {
             });
 
             // 5. ส่ง event "complete" ไปยัง Core Service
-            await this.publishToCore(clientId, 'generate:complete', {
+            await this.publishToCore(clientId, 'worker:complete', {
                 taskId,
                 success: true,
                 imageCount: uploadedImages.length,
                 images: uploadedImages,
                 timestamp: new Date().toISOString(),
+                data: {
+                    projectId: body.projectId,
+                    userId,
+                    prompt: body.prompt,
+                    imageUrl: bytepluseUrl,
+                    typeGenerate: 'image',
+                    genneratedStatus: 'SUCCESS',
+                    status: true,
+                    generateConfig: this.buildGenerateConfig({
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        prompt: body.prompt,
+                        duration: 0,
+                        modelName: body.model,
+                        imageCount: body.maxImages,
+                        resolution: body.size,
+                        generateAudio: false,
+                    }),
+                },
             });
+            if (body.image.length > 0) {
+                body.image.map((image) => {
+                    const imageName = path.parse(image).name;
+                    this.refImageRepository.update({
+                        where: {
+                            uid: imageName,
+                        },
+                        data: {
+                            status: 'completed',
+                        },
+                    });
+                })
+            }
 
             this.logger.log(
                 `🎉 Job ${job.id} completed! Processed ${uploadedImages.length} images`,
@@ -233,6 +269,26 @@ export class ImageProcessor extends WorkerHost {
                 taskId,
                 imageCount: uploadedImages.length,
                 images: uploadedImages,
+                data: {
+                    projectId: body.projectId,
+                    userId,
+                    prompt: body.prompt,
+                    imageUrl: bytepluseUrl,
+                    typeGenerate: 'image',
+                    genneratedStatus: 'SUCCESS',
+                    status: true,
+                    generateConfig: this.buildGenerateConfig({
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        prompt: body.prompt,
+                        duration: 0,
+                        modelName: body.model,
+                        imageCount: body.maxImages,
+                        resolution: body.size,
+                        generateAudio: false,
+                    }),
+                },
             };
         } catch (error) {
             this.logger.error(`❌ Job ${job.id} failed: ${error.message}`, error.stack);
@@ -245,7 +301,7 @@ export class ImageProcessor extends WorkerHost {
             });
 
             // ส่ง error event ไปยัง Core Service
-            await this.publishToCore(clientId, 'generate:error', {
+            await this.publishToCore(clientId, 'worker:generate:error', {
                 taskId,
                 error: error.message,
                 timestamp: new Date().toISOString(),
@@ -258,7 +314,7 @@ export class ImageProcessor extends WorkerHost {
                     projectId: body.projectId,
                     userId,
                     prompt: body.prompt,
-                    typeGenerate: body.type,
+                    typeGenerate: 'image',
                     status: 'failed',
                     resolution: body.size,
                     ratio: body.ratio,
@@ -288,6 +344,7 @@ export class ImageProcessor extends WorkerHost {
      * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
      */
     private async publishToCore(clientId: string, event: string, payload: any) {
+        console.log(`worker:${event.split(':')[1] || 'event'}`)
         try {
             await this.redisPublisher.publish(
                 `worker:${event.split(':')[1] || 'event'}`,
