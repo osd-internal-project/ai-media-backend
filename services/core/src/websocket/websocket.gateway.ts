@@ -90,11 +90,11 @@ export class WebsocketGatewayService
   async onModuleInit() {
     // Subscribe to Worker events
     await this.redisSubscriber.subscribe(
+      'worker:started',
       'worker:progress',
       'worker:image-complete',
-      'worker:complete',
       'worker:error',
-      'worker:started',
+      'worker:complete',
     );
 
     // รับ messages จาก Worker
@@ -149,6 +149,7 @@ export class WebsocketGatewayService
 
       // // เรียก service เพื่อสร้าง task
       this.server.to(client.id).emit('task:started', {
+        taskId: data.taskId,
         message: 'Task started',
         timestamp: new Date().toISOString(),
       });
@@ -159,6 +160,7 @@ export class WebsocketGatewayService
       this.logger.log('🎨 Generate result from data: ', result);
       if (result.status !== 200) {
         client.emit('generate:error', {
+          taskId: data.taskId,
           message: result.data,
         });
         // [NEW] Return error acknowledgement
@@ -167,6 +169,7 @@ export class WebsocketGatewayService
       // // [NEW] Explicitly check if data is a string to satisfy TypeScript
       if (typeof result.data === 'string') {
         client.emit('generate:error', {
+          taskId: data.taskId,
           message: 'Invalid response from generation service',
         });
         // [NEW] Return error acknowledgement
@@ -184,6 +187,7 @@ export class WebsocketGatewayService
     } catch (error) {
       this.logger.error('Generate error:', error);
       client.emit('generate:error', {
+        taskId: data.taskId,
         message: error.message || 'Internal server error',
       });
       // [NEW] Return error acknowledgement
