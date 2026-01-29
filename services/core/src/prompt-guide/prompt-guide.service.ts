@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CreatePromptGuideDto } from './dto/create-prompt-guide.dto';
 import { UpdatePromptGuideDto } from './dto/update-prompt-guide.dto';
 import {
@@ -77,6 +77,59 @@ export class PromptGuideService {
         organizationId,
       },
     });
+  }
+  async findWithImageByTypes(promptGuideTypeId: number) {
+    const bucketname = minioConfigs().minioBucketUpload;
+
+    const promptGuides = await this.promptguideRepo.findMany({
+      where: {
+        promptGuideTypeId,
+      },
+    });
+    const templates = await Promise.all(
+      promptGuides.map(async (promptGuide) => {
+        const ImageUids = promptGuide?.promptGuideImages
+          ? promptGuide.promptGuideImages
+          : [];
+        const images = [];
+        // Logger.log(ImageUids);
+
+        await Promise.all(
+          ImageUids.map(async (uid: string) => {
+            const image = await this.promptGuideImageRepo.findOne({
+              where: {
+                uid: uid,
+                status: 'completed',
+              },
+              orderBy: {
+                index: 'asc',
+              },
+            });
+            // Logger.log(image);
+            const ext = path.extname(image.imagePath);
+            const url = await this.minioClientService.getPresignedUrl(
+              bucketname,
+              `${image.uid}${ext}`,
+            );
+            images.push({
+              uid: image.uid,
+              name: image.imageName,
+              url: url,
+              imagePath: image.imagePath,
+              status: image.status,
+              index: image.index,
+            });
+          }),
+        );
+        Logger.log(images);
+        return {
+          ...promptGuide,
+          images: images.sort((a, b) => a.index - b.index),
+        };
+      }),
+    );
+    // Logger.log(templates);
+    return templates;
   }
 
   findImagesByPromptGuideId(promptGuideId: number) {
