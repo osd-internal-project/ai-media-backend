@@ -11,7 +11,7 @@ import {
   UseInterceptors,
   Logger,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { UploadImageService } from './upload-image.service';
 import { MinioClientService } from '../minio-client/minio-client.service';
 import * as path from 'path';
@@ -38,6 +38,26 @@ export class UploadImageController {
       generateType,
       file,
       uid,
+    );
+  }
+  @Post('from-prompt')
+  @UseInterceptors(AnyFilesInterceptor())
+  async uploadImageFromPrompt(
+    @Body(`userId`) userId: string,
+    @Body(`index`) index: number,
+    @Body(`projectId`) projectId: string,
+    @Body(`generateType`) generateType: 'image' | 'vdo',
+    @Body(`uid`) uid: string,
+    @Body(`refUid`) refUid: string,
+    @Body() body: any,
+  ) {
+    return this.uploadImageService.uploadImageFromPrompt(
+      userId,
+      Number(index),
+      projectId,
+      generateType,
+      uid,
+      refUid,
     );
   }
   @Post('prompt-guide-image')
