@@ -265,17 +265,18 @@ export class GenerateService {
             console.log('basePayload', basePayload)
 
             // 5. Call External API
-            // const res = await this.executeGenerationRequestVideo(
-            //     getConfigApi.apiCreateTaskVdo,
-            //     basePayload,
-            //     axiosConfig,
-            // );
+            const res = await this.executeGenerationRequestVideo(
+                getConfigApi.apiCreateTaskVdo,
+                basePayload,
+                axiosConfig,
+            );
 
-            const res = {
-                data: {
-                    id: 'task-1234567890',
-                },
-            };
+            // data mockup
+            // const res = {
+            //     data: {
+            //         id: 'task-1234567890',
+            //     },
+            // };
             taskId = res.data.id;
             await this.galleryRepo.create({
                 data: {

@@ -121,47 +121,48 @@ export class VideoProcessor extends WorkerHost {
                     taskId,
                     timestamp: new Date().toISOString(),
                 });
-                // const url = `${getConfigApi.apiCreateTaskVdo}/${taskId}`;
-                // const token = getConfigApi.authorization;
-                // const authHeader = token.startsWith('Bearer ')
-                //     ? token
-                //     : `Bearer ${token}`;
+                const url = `${getConfigApi.apiCreateTaskVdo}/${taskId}`;
+                const token = getConfigApi.authorization;
+                const authHeader = token.startsWith('Bearer ')
+                    ? token
+                    : `Bearer ${token}`;
 
-                // const getResult = await axios.get(url, {
-                //     headers: {
-                //         'Content-Type': 'application/json',
-                //         Authorization: authHeader,
-                //     },
-                //     httpsAgent: this.agent,
-                // });
+                const getResult = await axios.get(url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: authHeader,
+                    },
+                    httpsAgent: this.agent,
+                });
 
                 // mockdata
-                const getResult = {
-                    data: {
-                        id: "cgt-2025******-****",
-                        model: "seedance-1-5-pro-251215",
-                        status: "succeeded",
-                        content: {
-                            video_url: "https://ark-content-generation-ap-southeast-1.tos-ap-southeast-1.volces.com/seedance-1-5-pro/02176976063449400000000000000000000ffffc0a8a8339a41f1.mp4?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260130%2Fap-southeast-1%2Ftos%2Frequest&X-Tos-Date=20260130T081213Z&X-Tos-Expires=86400&X-Tos-Signature=13ba5153558f1d940cae288ca656b3bd6ec11ff8961c4934788df877b48544d0&X-Tos-SignedHeaders=host"
-                        },
-                        usage: {
-                            completion_tokens: 108900,
-                            total_tokens: 108900
-                        },
-                        created_at: 1743414619,
-                        updated_at: 1743414673,
-                        seed: 10,
-                        resolution: "720p",
-                        ratio: "16:9",
-                        duration: 5,
-                        framespersecond: 24,
-                        service_tier: "default",
-                        execution_expires_after: 172800,
-                        generate_audio: true,
-                        draft: false
-                    }
-                }
-                const status = 'succeeded'
+                // const getResult = {
+                //     data: {
+                //         id: "cgt-2025******-****",
+                //         model: "seedance-1-5-pro-251215",
+                //         status: "succeeded",
+                //         content: {
+                //             video_url: "https://ark-content-generation-ap-southeast-1.tos-ap-southeast-1.volces.com/seedance-1-5-pro/02176976063449400000000000000000000ffffc0a8a8339a41f1.mp4?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260130%2Fap-southeast-1%2Ftos%2Frequest&X-Tos-Date=20260130T081213Z&X-Tos-Expires=86400&X-Tos-Signature=13ba5153558f1d940cae288ca656b3bd6ec11ff8961c4934788df877b48544d0&X-Tos-SignedHeaders=host"
+                //         },
+                //         usage: {
+                //             completion_tokens: 108900,
+                //             total_tokens: 108900
+                //         },
+                //         created_at: 1743414619,
+                //         updated_at: 1743414673,
+                //         seed: 10,
+                //         resolution: "720p",
+                //         ratio: "16:9",
+                //         duration: 5,
+                //         framespersecond: 24,
+                //         service_tier: "default",
+                //         execution_expires_after: 172800,
+                //         generate_audio: true,
+                //         draft: false
+                //     }
+                // }
+                // const status = 'succeeded'
+                const status = getResult.data.status;
                 if (status === "succeeded") {
                     console.log(getResult.data)
                     const { id, content, usage } = getResult.data as BytepluseResponse;
