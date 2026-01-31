@@ -21,7 +21,7 @@ export class UploadImageService {
     userId: string,
     index: number,
     projectId: string,
-    generateType: 'image' | 'vdo',
+    generateType: 'image' | 'video',
     file: Express.Multer.File,
     uid: string,
   ) {
@@ -83,7 +83,7 @@ export class UploadImageService {
     userId: string,
     index: number,
     projectId: string,
-    generateType: 'image' | 'vdo',
+    generateType: 'image' | 'video',
     file: Express.Multer.File,
     uid: string,
   ) {

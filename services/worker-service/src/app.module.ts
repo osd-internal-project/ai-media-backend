@@ -14,7 +14,7 @@ import { RequestLoggerMiddleware } from './middleware/request-logger.middleware'
     BullModule.forRoot({
       connection: {
         host: process.env.REDIS_HOST || 'localhost',
-        port: 6379,
+        port: Number(process.env.REDIS_PORT) || 6379,
       },
     }),
     GenerateModule,

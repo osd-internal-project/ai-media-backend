@@ -10,7 +10,10 @@ import {
     QUEUE_NAME_IMAGE,
     UsersRepository,
     ByteplusePayloadImage,
-    RequestImageGenerateDto
+    RequestImageGenerateDto,
+    RequestVideoGenerateDto,
+    QUEUE_NAME_VDO,
+    ByteplusePayloadVideo
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -51,6 +54,7 @@ export class GenerateService {
         private minioconfig: ConfigType<typeof minioConfigs>,
         @InjectRedis() private readonly redis: Redis,
         @InjectQueue(QUEUE_NAME_IMAGE) private imageQueue: Queue,
+        @InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue,
     ) { }
 
     /**
@@ -101,10 +105,12 @@ export class GenerateService {
             }
 
             // 4. Prepare Payload
-            const { basePayload, axiosConfig } = await this.prepareGenerationPayload(
+            const { basePayload, axiosConfig } = await this.prepareGenerationPayloadImage(
                 body,
                 modelDetail,
                 getConfigApi,
+                user.userId,
+                taskId,
             );
 
             // 5. Call External API
@@ -145,7 +151,7 @@ export class GenerateService {
                 {
                     taskId,
                     clientId,
-                    body: { ...body, taskId },
+                    body: { ...body },
                     userId: user.userId,
                     dataImage: res.data.data,
                     usage: res.data.usage,
@@ -212,6 +218,180 @@ export class GenerateService {
             };
         } catch (error) {
             console.error('Error creating generation task:', error);
+            this.handleGenerationError(error, body.userId);
+        }
+    }
+
+    /**
+     * สร้าง Generation Task สำหรับ Video และส่งเข้า Queue
+     */
+    async createVideoGenerationTask(body: RequestVideoGenerateDto, clientId: string) {
+        let taskId = body.taskId;
+
+        try {
+            // 1. Validate User & Project
+            const { user, projectMember } = await this.validateUserAndProject(
+                body.userId,
+                body.projectId,
+            );
+
+            if (!projectMember) {
+                return { status: 400, data: 'Team member not found' };
+            }
+
+            if (user) {
+                await this.logAudit(user.userId, 'CREATE', body, taskId);
+            }
+
+            // TODO: Implement Quota Check for Video if needed
+            const modelDetail = await this.modeltypeRepo.findOne({
+                where: { modelType: body.model, type: 'video' },
+            });
+
+            const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+                where: { id: 1 },
+            });
+
+            if (!modelDetail) {
+                return { status: 400, data: 'Model not found' };
+            }
+
+            // 4. Prepare Payload
+            const { basePayload, axiosConfig } = await this.prepareGenerationPayloadVideo(
+                body,
+                getConfigApi,
+            );
+
+            console.log('basePayload', basePayload)
+
+            // 5. Call External API
+            // const res = await this.executeGenerationRequestVideo(
+            //     getConfigApi.apiCreateTaskVdo,
+            //     basePayload,
+            //     axiosConfig,
+            // );
+
+            const res = {
+                data: {
+                    id: 'task-1234567890',
+                },
+            };
+            taskId = res.data.id;
+            await this.galleryRepo.create({
+                data: {
+                    taskId,
+                    projectId: body.projectId,
+                    userId: user.userId,
+                    prompt: body.prompt,
+                    imageUrl: "",
+                    typeGenerate: 'video',
+                    genneratedStatus: 'PENDING',
+                    status: false,
+                    generateConfig: this.buildGenerateConfig({
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        prompt: body.prompt,
+                        duration: +body.duration,
+                        modelName: body.model,
+                        imageCount: 0,
+                        resolution: body.size,
+                        draft: body.draft,
+                        generateAudio: body.generateAudio,
+                        watermark: body.watermark,
+                    }),
+                },
+            });
+            await this.logrepo.create({
+                data: {
+                    taskId,
+                    projectId: body.projectId,
+                    userId: user.userId,
+                    prompt: body.prompt,
+                    typeGenerate: 'video',
+                    status: 'pending',
+                    tokenUsed: 0,
+                    ImageUsed: 0,
+                    generateAudio: body.generateAudio,
+                    referenceImages: body.image.length > 0
+                        ? body.image
+                        : [],
+                    resolution: body.size,
+                    ratio: body.ratio,
+                    generateConfig: this.buildGenerateConfig({
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        prompt: body.prompt,
+                        duration: +body.duration,
+                        modelName: body.model,
+                        imageCount: 0,
+                        resolution: body.size,
+                        draft: body.draft,
+                        generateAudio: body.generateAudio,
+                        watermark: body.watermark,
+                    }),
+                },
+            });
+
+            // 7. สร้าง Job ใน Queue
+            const job = await this.videoQueue.add(
+                QUEUE_NAME_VDO,
+                {
+                    taskId,
+                    clientId,
+                    body: { ...body },
+                    userId: user.userId,
+                    videoTaskId: res.data.id,
+                },
+                {
+                    jobId: taskId,
+                    attempts: 3,
+                    backoff: {
+                        type: 'exponential',
+                        delay: 2000,
+                    },
+                    removeOnComplete: 100,
+                    removeOnFail: 50,
+                },
+            );
+
+            // 8. บันทึก task metadata ใน Redis
+            await this.redis.set(
+                `task:${taskId}`,
+                JSON.stringify({
+                    taskId,
+                    jobId: job.id,
+                    clientId,
+                    userId: user.userId,
+                    projectId: body.projectId,
+                    status: 'queued',
+                    type: 'video',
+                    videoTaskId: res.data.id,
+                    createdAt: new Date().toISOString(),
+                }),
+                'EX',
+                24 * 60 * 60,
+            );
+
+            console.log(`✅ Video Task created: ${taskId}, Job ID: ${job.id}`);
+
+            return {
+                status: 200,
+                data: {
+                    taskId,
+                    projectId: body.projectId,
+                    userId: user.userId,
+                    prompt: body.prompt,
+                    typeGenerate: 'video',
+                    genneratedStatus: 'PENDING',
+                    status: true,
+                    videoTaskId: res.data.id,
+                    message: 'Video generation queued',
+                },
+            };
+        } catch (error) {
+            console.error('Error creating video generation task:', error);
             this.handleGenerationError(error, body.userId);
         }
     }
@@ -383,10 +563,12 @@ export class GenerateService {
         }
     }
 
-    private async prepareGenerationPayload(
+    private async prepareGenerationPayloadImage(
         body: RequestImageGenerateDto,
         modelDetail: any,
-        configApi: any
+        configApi: any,
+        userId: string,
+        taskId: string,
     ) {
         const axiosConfig: AxiosRequestConfig = {
             headers: {
@@ -421,25 +603,58 @@ export class GenerateService {
             ...body.maxImages && { sequential_image_generation_options: { max_images: body.maxImages } },
         } as ByteplusePayloadImage;
         Logger.log(basePayload, 'basePayload');
+        return { basePayload, axiosConfig };
+    }
 
-        // if (imageUrls.length > 0) {
-        //     basePayload.image = imageUrls.length === 1 ? imageUrls[0] : imageUrls;
-        // }
-        // if (body.width && body.height) {
-        //     basePayload.size = `${body.width}x${body.height}`;
-        // }
+    private async prepareGenerationPayloadVideo(
+        body: RequestVideoGenerateDto,
+        configApi: any,
+    ) {
+        const axiosConfig: AxiosRequestConfig = {
+            headers: {
+                'Content-Type': configApi.configType,
+                Authorization: `${configApi.authorization}`,
+            },
+            httpsAgent: this.agent,
+        };
 
-        // if (body.images && body.images > 1) {
-        //     basePayload.sequential_image_generation = 'auto';
-        //     basePayload.sequential_image_generation_options = {
-        //         max_images: body.images,
-        //     };
-        // }
-
+        const basePayload = {
+            model: body.model,
+            content: [
+                {
+                    type: "text",
+                    text: body.prompt
+                },
+                ...(body.image[0] ? [{
+                    type: "image_url",
+                    image_url: {
+                        url: await this.minioClientSerives.getPresignedUrl(this.minioconfig.minioBucketUpload, body.image[0])
+                    },
+                    role: "first_frame"
+                }] : []),
+                ...(body.image[1] ? [{
+                    type: "image_url",
+                    image_url: {
+                        url: await this.minioClientSerives.getPresignedUrl(this.minioconfig.minioBucketUpload, body.image[1])
+                    },
+                    role: "last_frame"
+                }] : []),
+                //
+            ],
+            draft: body.draft,
+            generate_audio: body.generateAudio,
+            ratio: body.ratio,
+            duration: body.duration,
+            watermark: body.watermark,
+        } as ByteplusePayloadVideo;
         return { basePayload, axiosConfig };
     }
 
     private async executeGenerationRequest(url: string, payload: any, config: AxiosRequestConfig) {
+        return await axios.post(url, payload, config);
+    }
+
+    private async executeGenerationRequestVideo(url: string, payload: any, config: AxiosRequestConfig) {
         return await axios.post(url, payload, config);
     }
 
@@ -469,6 +684,8 @@ export class GenerateService {
         imageCount: number,
         resolution: string,
         generateAudio: boolean,
+        draft?: boolean,
+        watermark?: boolean,
     }) {
         return {
             ...(body?.width && { width: body?.width }),
@@ -480,6 +697,8 @@ export class GenerateService {
             ...(body?.duration && { duration: body?.duration }),
             content: body?.prompt,
             ...(body?.generateAudio && { generateAudio: body?.generateAudio }),
+            ...(body?.draft && { draft: body?.draft }),
+            ...(body?.watermark && { watermark: body?.watermark }),
         };
     }
 

@@ -14,3 +14,32 @@ export class ByteplusePayloadImage {
     ratio: string;
     image_generate_type: string;
 }
+
+export class ByteplusePayloadVideo {
+    model: string;
+    content: [
+        {
+            type: "text",
+            text: string
+        },
+        {
+            type: "image_url",
+            image_url: {
+                url: string
+            },
+            role: "first_frame"
+        },
+        {
+            type: "image_url",
+            image_url: {
+                url: string
+            },
+            role: "last_frame"
+        }
+    ];
+    draft: boolean;
+    generate_audio: boolean;
+    ratio: string;
+    duration: string;
+    watermark: boolean;
+}

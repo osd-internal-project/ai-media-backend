@@ -46,7 +46,7 @@ export class GenerateImageService implements OnModuleInit {
     private eventEmitter: EventEmitter2,
     private readonly errorLogRepo: ErrorLogRepository,
     private readonly auditLogRepo: AuditLogRepository,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     // Check if there are any pending tasks on startup to set the flag correctly
@@ -54,7 +54,7 @@ export class GenerateImageService implements OnModuleInit {
       where: {
         genneratedStatus: 'PROCESSING',
         taskId: { not: null },
-        typeGenerate: 'vdo',
+        typeGenerate: 'video',
       },
       take: 1,
     });
@@ -88,7 +88,7 @@ export class GenerateImageService implements OnModuleInit {
       Logger.error(`Team member not found`);
       return { status: 400, data: 'Token token limit exceeded' };
     }
-    if (createGenerateImageDto.type === 'vdo') {
+    if (createGenerateImageDto.type === 'video') {
       const totalVDOGenerate = await this.logrepo.findMany({
         where: {
           userId: user.userId,
@@ -221,7 +221,7 @@ export class GenerateImageService implements OnModuleInit {
 
     // 4. Send Request (Async execution to avoid blocking if needed, but here we wait for initial response)
     try {
-      if (createGenerateImageDto.type === 'vdo') {
+      if (createGenerateImageDto.type === 'video') {
         Logger.debug('SEND GENERATE VIDEO :', galleryItem.id);
         const taskId = await this.handleVdoRequest(
           createGenerateImageDto,
@@ -267,21 +267,21 @@ export class GenerateImageService implements OnModuleInit {
 
   private async getModelType(dto: CreateGenerateImageDto) {
     const description =
-      dto.type === 'vdo'
+      dto.type === 'video'
         ? dto.image
           ? 'image-to-video'
           : 'text-to-video'
         : dto.image
-        ? 'image-to-image'
-        : 'text-to-image';
+          ? 'image-to-image'
+          : 'text-to-image';
 
     return dto.modelName
       ? await this.modeltypeRepo.findOne({
-          where: { modelType: dto.modelName, type: dto.type },
-        } as Prisma.MasterModelTypeFindFirstArgs)
+        where: { modelType: dto.modelName, type: dto.type },
+      } as Prisma.MasterModelTypeFindFirstArgs)
       : await this.modeltypeRepo.findOne({
-          where: { type: dto.type, description: description },
-        } as Prisma.MasterModelTypeFindFirstArgs);
+        where: { type: dto.type, description: description },
+      } as Prisma.MasterModelTypeFindFirstArgs);
   }
 
   private async handleVdoRequest(
@@ -617,7 +617,7 @@ export class GenerateImageService implements OnModuleInit {
       where: {
         genneratedStatus: 'PROCESSING',
         taskId: { not: null },
-        typeGenerate: 'vdo',
+        typeGenerate: 'video',
       },
     });
 

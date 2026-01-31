@@ -44,8 +44,8 @@ export class ImageProcessor extends WorkerHost {
 
         // สร้าง Redis Publisher สำหรับส่ง events ไปยัง Core Service
         this.redisPublisher = new Redis({
-            host: 'localhost',
-            port: 6379,
+            host: process.env.REDIS_HOST || 'localhost',
+            port: Number(process.env.REDIS_PORT) || 6379,
         });
     }
 

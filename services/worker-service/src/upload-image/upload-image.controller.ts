@@ -18,7 +18,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 @Controller('upload')
 export class UploadImageController {
-  constructor(private readonly uploadImageService: UploadImageService) {}
+  constructor(private readonly uploadImageService: UploadImageService) { }
 
   @Post()
   @UseInterceptors(FileInterceptor('file'))
@@ -27,7 +27,7 @@ export class UploadImageController {
     @Body(`userId`) userId: string,
     @Body(`index`) index: number,
     @Body(`projectId`) projectId: string,
-    @Body(`generateType`) generateType: 'image' | 'vdo',
+    @Body(`generateType`) generateType: 'image' | 'video',
     @Body(`uid`) uid: string,
   ) {
     return this.uploadImageService.uploadImage(
@@ -46,7 +46,7 @@ export class UploadImageController {
     @Body(`userId`) userId: string,
     @Body(`index`) index: number,
     @Body(`projectId`) projectId: string,
-    @Body(`generateType`) generateType: 'image' | 'vdo',
+    @Body(`generateType`) generateType: 'image' | 'video',
     @Body(`uid`) uid: string,
   ) {
     return this.uploadImageService.uploadImage(

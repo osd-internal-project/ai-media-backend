@@ -14,7 +14,7 @@ import { UpdateLogDto } from './dto/update-log.dto';
 
 @Controller('logs')
 export class LogsController {
-  constructor(private readonly logsService: LogsService) {}
+  constructor(private readonly logsService: LogsService) { }
 
   @Get('find-image/:projectId')
   findProjectImageByPage(
@@ -32,12 +32,12 @@ export class LogsController {
     return this.logsService.findProjectImageByFristId(projectId, fristId);
   }
   @Get('find-vdo/:projectId')
-  findProjectViedoByPage(
+  findProjectVideoByPage(
     @Param('projectId') projectId: string,
     @Query('skip') skip?: number,
     @Query('take') take?: number,
   ) {
-    return this.logsService.findProjectViedoByPage(projectId, +skip, +take);
+    return this.logsService.findProjectVideoByPage(projectId, +skip, +take);
   }
   @Get('find-vdo/:projectId/frist')
   findProjectViedoByFristId(

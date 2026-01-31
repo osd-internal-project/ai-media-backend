@@ -55,8 +55,8 @@ import { WebsocketModule } from './websocket/websocket.module';
     GenerateModule,
     BullModule.forRoot({
       connection: {
-        host: 'localhost',
-        port: 6379,
+        host: redisConfigs().redisHost,
+        port: redisConfigs().redisPort,
         password: redisConfigs().redisPassword,
       },
     }),

@@ -1,4 +1,3 @@
-// src/websocket/websocket.gateway.ts
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -12,9 +11,8 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
 import { WebsocketService } from './websocket.service';
-import { ConfigService } from '@nestjs/config';
 import { GenerateService } from 'src/generate/generate.service';
-import { CreateGenerateDto, LogRepository, RequestImageGenerateDto } from '@ai-media/share';
+import { RequestImageGenerateDto, RequestVideoGenerateDto } from '@ai-media/share';
 import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { redisConfigs } from '../configs';
@@ -95,6 +93,12 @@ export class WebsocketGatewayService
       'worker:image-complete',
       'worker:error',
       'worker:complete',
+      'worker:video-started',
+      'worker:video-progress',
+      'worker:video-url-success',
+      'worker:video-upload-success',
+      'worker:video-complete',
+      'worker:video-error',
     );
 
     // รับ messages จาก Worker
@@ -102,10 +106,7 @@ export class WebsocketGatewayService
       try {
         const data = JSON.parse(message);
         const { clientId, event, payload } = data;
-        // this.logger.log(`📨 Received from worker [${channel}]:`, data);
-
         this.logger.log(`📨 Received from worker [${channel}]:`, event);
-
         // ส่ง event ไปยัง client ที่เกี่ยวข้อง
         if (clientId) {
           this.server.to(clientId).emit(event, payload);
@@ -146,8 +147,7 @@ export class WebsocketGatewayService
   ) {
     try {
       this.logger.log('🎨 Generate request from client: ', client.id);
-
-      // // เรียก service เพื่อสร้าง task
+      // เรียก service เพื่อสร้าง task
       this.server.to(client.id).emit('task:started', {
         taskId: data.taskId,
         message: 'Task started',
@@ -155,7 +155,7 @@ export class WebsocketGatewayService
       });
       const result = await this.generateService.createGenerationTask(
         data,
-        client.id, // ส่ง clientId ไปด้วย
+        client.id,
       );
       this.logger.log('🎨 Generate result from data: ', result);
       if (result.status !== 200) {
@@ -166,7 +166,7 @@ export class WebsocketGatewayService
         // [NEW] Return error acknowledgement
         return { success: false, message: result.data };
       }
-      // // [NEW] Explicitly check if data is a string to satisfy TypeScript
+      //[NEW] Explicitly check if data is a string to satisfy TypeScript
       if (typeof result.data === 'string') {
         client.emit('generate:error', {
           taskId: data.taskId,
@@ -176,7 +176,7 @@ export class WebsocketGatewayService
         return { success: false, message: 'Invalid response from generation service' };
       }
 
-      // // บันทึก task ที่เกี่ยวข้องกับ client
+      // บันทึก task ที่เกี่ยวข้องกับ client
       await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
 
       client.emit('task:created', { ...result });
@@ -195,22 +195,81 @@ export class WebsocketGatewayService
     }
   }
 
+  @SubscribeMessage('generate:video')
+  async handleGenerateVideo(
+    @MessageBody() data: RequestVideoGenerateDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      console.log(`data`, data)
+      this.logger.log('🎥 Generate Video request from client: ', client.id);
+
+      this.server.to(client.id).emit('video-task:created', {
+        taskId: data.taskId,
+        message: 'Video Task started',
+        timestamp: new Date().toISOString(),
+      });
+
+      const result = await this.generateService.createVideoGenerationTask(
+        data,
+        client.id,
+      );
+
+      this.logger.log('🎥 Generate Video result: ', result);
+
+      if (result.status !== 200) {
+        client.emit('video-generate:error', {
+          taskId: data.taskId,
+          message: result.data,
+        });
+        return { success: false, message: result.data };
+      }
+
+      if (typeof result.data === 'string') {
+        client.emit('video-generate:error', {
+          taskId: data.taskId,
+          message: 'Invalid response from generation service',
+        });
+        return { success: false, message: 'Invalid response from generation service' };
+      }
+
+      await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
+
+      client.emit('task-video:started', { ...result, oldTaskId: data.taskId });
+
+      return { success: true, data: result };
+
+    } catch (error) {
+      this.logger.error('Generate video error:', error);
+      client.emit('video-generate:error', {
+        taskId: data.taskId,
+        message: error.message || 'Internal server error',
+      });
+      return { success: false, message: error.message || 'Internal server error' };
+    }
+  }
+
   @SubscribeMessage('chat:get-history')
   async handleGetHistory(
     @MessageBody() data: {
       projectId: string,
       skip: number,
-      take: number
+      take: number,
+      type: 'image' | 'video'
     },
     @ConnectedSocket() client: Socket,
   ) {
     const projectId = data.projectId;
     try {
-      const conversation = await this.logsService.findProjectImageByPage(
+      const conversation = data.type === 'image' ? await this.logsService.findProjectImageByPage(
         projectId,
         data.skip,
         data.take,
-      );
+      ) : await this.logsService.findProjectVideoByPage(
+        projectId,
+        data.skip,
+        data.take,
+      )
 
       client.emit('chat:history', {
         success: true,

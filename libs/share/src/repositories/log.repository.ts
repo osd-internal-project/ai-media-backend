@@ -45,6 +45,10 @@ export class LogRepository {
     const prisma = option?.prisma ?? this.prisma;
     return prisma.log.update(data);
   }
+  async updateMany(data: Prisma.LogUpdateManyArgs, option?: { prisma?: TQueryClient }) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.log.updateMany(data);
+  }
   async delete(
     condition: Prisma.LogDeleteArgs,
     option?: { prisma?: TQueryClient },

@@ -9,7 +9,7 @@ export class DashboardService {
   constructor(
     private readonly logRepo: LogRepository,
     private readonly userRepo: UsersRepository,
-  ) {}
+  ) { }
   async findSummaryDashboard(token: string, query: any) {
     const { projectId, createdAt } = query || {};
 
@@ -69,7 +69,7 @@ export class DashboardService {
       quota = priceImage + priceToken;
     }
     const totalTokenUsed = sumBy(
-      dataLogs.filter((log) => log.typeGenerate === 'vdo'),
+      dataLogs.filter((log) => log.typeGenerate === 'video'),
       'tokenUsed',
     );
     const totalImageUsed = sumBy(
@@ -108,7 +108,7 @@ export class DashboardService {
     ]);
     const totalImageUsedDateNow = sumBy(dataLogsDateNow, 'ImageUsed');
     const totalTokenUsedDateNow = sumBy(
-      dataLogsDateNow.filter((log) => log.typeGenerate === 'vdo'),
+      dataLogsDateNow.filter((log) => log.typeGenerate === 'video'),
       'tokenUsed',
     );
     const totalPriceUsedImageDateNow =
@@ -119,7 +119,7 @@ export class DashboardService {
       totalPriceUsedImageDateNow + totalPriceUsedVdoDateNow;
     const totalImageUsedDateLast = sumBy(dataLogsDateLast, 'ImageUsed');
     const totalTokenUsedDateLast = sumBy(
-      dataLogsDateLast.filter((log) => log.typeGenerate === 'vdo'),
+      dataLogsDateLast.filter((log) => log.typeGenerate === 'video'),
       'tokenUsed',
     );
     const totalPriceUsedImageDateLast =
@@ -195,7 +195,7 @@ export class DashboardService {
             totalImageUsed: 0,
             totalTokenUsed: 0,
             unitPrice:
-              product === 'image' ? 0.03 : product === 'vdo' ? 0.0025 : null,
+              product === 'image' ? 0.03 : product === 'video' ? 0.0025 : null,
           };
         }
 
@@ -204,7 +204,7 @@ export class DashboardService {
         if (product === 'image') {
           group.totalImageUsed += log.ImageUsed ?? 0;
         }
-        if (product === 'vdo') {
+        if (product === 'video') {
           group.totalTokenUsed += log.tokenUsed ?? 0;
         }
         return owners;
@@ -264,14 +264,14 @@ export class DashboardService {
             totalImageUsed: 0,
             totalTokenUsed: 0,
             unitPrice:
-              product === 'image' ? 0.03 : product === 'vdo' ? 0.0025 : null,
+              product === 'image' ? 0.03 : product === 'video' ? 0.0025 : null,
           };
         }
         const group = products[product];
         if (product === 'image') {
           group.totalImageUsed += log.ImageUsed ?? 0;
         }
-        if (product === 'vdo') {
+        if (product === 'video') {
           group.totalTokenUsed += log.tokenUsed ?? 0;
         }
         return products;
