@@ -19,7 +19,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 @Controller('upload')
 export class UploadImageController {
-  constructor(private readonly uploadImageService: UploadImageService) { }
+  constructor(private readonly uploadImageService: UploadImageService) {}
 
   @Post()
   @UseInterceptors(FileInterceptor('file'))
@@ -66,7 +66,7 @@ export class UploadImageController {
     @UploadedFile() file: Express.Multer.File,
     @Body(`userId`) userId: string,
     @Body(`index`) index: number,
-    @Body(`projectId`) projectId: string,
+    @Body(`promptGuideId`) promptGuideId: string,
     @Body(`generateType`) generateType: 'image' | 'video',
     @Body(`uid`) uid: string,
   ) {
