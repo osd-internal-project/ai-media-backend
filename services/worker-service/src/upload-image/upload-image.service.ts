@@ -55,7 +55,7 @@ export class UploadImageService {
         `${uid}${ext}`,
       ),
       imagePath: `${uid}${ext}`,
-      status: 'waiting',//waiting,processing,done
+      status: 'waiting', //waiting,processing,done
     };
   }
   async deleteImage(uid: string) {
@@ -78,12 +78,62 @@ export class UploadImageService {
       appConfigs().minioBucketUpload,
     );
   }
-
-  async uploadPromptGuideImage(
+  async uploadImageFromPrompt(
     userId: string,
     index: number,
     projectId: string,
     generateType: 'image' | 'video',
+    uid: string,
+    refUid: string,
+  ) {
+    const image = await this.promptGuideImageRepository.findOne({
+      where: { uid: refUid },
+    });
+    const bucketname = appConfigs().minioBucketUpload;
+
+    if (image) {
+      const ext = path.extname(image.imageName);
+      const newImagePath = `${uid}${ext}`;
+      const newFileName = `${uid}${ext}`;
+
+      // Copy file in Minio
+      await this.minioClientSerives.copyFile(
+        bucketname,
+        image.imagePath, // Source path (bucket/filename)
+        newFileName, // Dest filename
+      );
+      const newImage = await this.refImageRepository.create({
+        data: {
+          uid: uid,
+          userId: userId,
+          projectId: projectId,
+          index: index,
+          imageName: image.imageName,
+          imagePath: newImagePath, // Use new image path logic
+          imageType: image.imageType,
+          imageSize: image.imageSize,
+          generateType: generateType,
+          status: 'waiting',
+        },
+      });
+      Logger.debug(newImage);
+      return {
+        uid: uid,
+        name: image.imageName,
+        url: await this.minioClientSerives.getPresignedUrl(
+          bucketname,
+          `${uid}${ext}`,
+        ),
+        imagePath: `${uid}${ext}`,
+        status: 'waiting', //waiting,processing,done
+      };
+    }
+  }
+  async uploadPromptGuideImage(
+    userId: string,
+    index: number,
+    promptGuideId: string,
+    generateType: 'image' | 'vdo',
     file: Express.Multer.File,
     uid: string,
   ) {
@@ -95,11 +145,12 @@ export class UploadImageService {
       bucketname,
       `${uid}${ext}`,
     );
-    await this.promptGuideImageRepository.create({
+    const uploadedImage = await this.promptGuideImageRepository.create({
       data: {
         uid: uid,
         userId: userId,
         index: index,
+        promptGuideId: +promptGuideId,
         imageName: file.originalname,
         imagePath: `${bucketname}/${uid}${ext}`,
         imageType: file.mimetype,
@@ -108,6 +159,7 @@ export class UploadImageService {
         status: 'waiting',
       },
     });
+    Logger.debug(uploadedImage);
     return {
       uid: uid,
       name: file.originalname,
@@ -138,6 +190,10 @@ export class UploadImageService {
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleCron() {
+    await this.deleteWaitingRefImage();
+    await this.deleteWaitingPromptGuideImage();
+  }
+  async deleteWaitingRefImage() {
     const files = await this.refImageRepository.findMany({
       where: {
         status: 'waiting',
@@ -154,6 +210,29 @@ export class UploadImageService {
         appConfigs().minioBucketUpload,
       );
       await this.refImageRepository.deleteMany({
+        where: {
+          uid: file.uid,
+        },
+      });
+    }
+  }
+  async deleteWaitingPromptGuideImage() {
+    const files = await this.promptGuideImageRepository.findMany({
+      where: {
+        status: 'waiting',
+        createdAt: {
+          lt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      },
+    });
+    Logger.log(`Found ${files.length} files to delete`);
+    for (const file of files) {
+      const ext = path.extname(file.imagePath);
+      await this.minioClientSerives.deleteFile(
+        `${file.uid}${ext}`,
+        appConfigs().minioBucketUpload,
+      );
+      await this.promptGuideImageRepository.deleteMany({
         where: {
           uid: file.uid,
         },

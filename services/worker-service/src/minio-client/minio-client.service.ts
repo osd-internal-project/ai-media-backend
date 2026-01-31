@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { MinioService } from 'nestjs-minio-client';
 import * as ffmpeg from 'fluent-ffmpeg';
 import * as fs from 'fs';
@@ -15,7 +20,10 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
 @Injectable()
 export class MinioClientService {
-  constructor(private readonly minio: MinioService, @InjectRedis() private readonly redis: Redis) { }
+  constructor(
+    private readonly minio: MinioService,
+    @InjectRedis() private readonly redis: Redis,
+  ) {}
   private get minioClient() {
     return this.minio.client;
   }
@@ -31,6 +39,19 @@ export class MinioClientService {
   }
   async deleteFile(objetName: string, baseBucket: string) {
     return await this.minioClient.removeObject(baseBucket, objetName);
+  }
+
+  async copyFile(bucket: string, sourcePath: string, destPath: string) {
+    let validSourcePath = sourcePath;
+    if (!validSourcePath.startsWith('/')) {
+      validSourcePath = '/' + validSourcePath;
+    }
+    return await this.minioClient.copyObject(
+      bucket,
+      destPath,
+      validSourcePath,
+      null,
+    );
   }
 
   public async downloadFile(bucket: string, fileName: string) {
@@ -57,11 +78,14 @@ export class MinioClientService {
       // console.log('Cache HIT via Redis');
       return cachedUrl;
     } else {
-
       // console.log('Cache MISS - Generating new URL');
-      const storagePath = appConfigs().storagePath
+      const storagePath = appConfigs().storagePath;
       const storageUrl = new URL(storagePath);
-      const url = await this.minioClient.presignedGetObject(bucket, filename, 24 * 60 * 60,);
+      const url = await this.minioClient.presignedGetObject(
+        bucket,
+        filename,
+        24 * 60 * 60,
+      );
       const urlObj = new URL(url);
       urlObj.protocol = storageUrl.protocol;
       urlObj.hostname = storageUrl.hostname;

@@ -9,8 +9,9 @@ import {
   UploadedFiles,
   UploadedFile,
   UseInterceptors,
+  Logger,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { UploadImageService } from './upload-image.service';
 import { MinioClientService } from '../minio-client/minio-client.service';
 import * as path from 'path';
@@ -39,6 +40,26 @@ export class UploadImageController {
       uid,
     );
   }
+  @Post('from-prompt')
+  @UseInterceptors(AnyFilesInterceptor())
+  async uploadImageFromPrompt(
+    @Body(`userId`) userId: string,
+    @Body(`index`) index: number,
+    @Body(`projectId`) projectId: string,
+    @Body(`generateType`) generateType: 'image' | 'vdo',
+    @Body(`uid`) uid: string,
+    @Body(`refUid`) refUid: string,
+    @Body() body: any,
+  ) {
+    return this.uploadImageService.uploadImageFromPrompt(
+      userId,
+      Number(index),
+      projectId,
+      generateType,
+      uid,
+      refUid,
+    );
+  }
   @Post('prompt-guide-image')
   @UseInterceptors(FileInterceptor('file'))
   async uploadPromptGuideImage(
@@ -49,10 +70,10 @@ export class UploadImageController {
     @Body(`generateType`) generateType: 'image' | 'video',
     @Body(`uid`) uid: string,
   ) {
-    return this.uploadImageService.uploadImage(
+    return this.uploadImageService.uploadPromptGuideImage(
       userId,
       Number(index),
-      projectId,
+      promptGuideId,
       generateType,
       file,
       uid,
@@ -66,6 +87,6 @@ export class UploadImageController {
 
   @Delete('prompt-guide-image/delete/:uid')
   async deletePromptGuideImage(@Param(`uid`) uid: string) {
-    return this.uploadImageService.deleteImage(uid);
+    return this.uploadImageService.deletePromptGuideImage(uid);
   }
 }
