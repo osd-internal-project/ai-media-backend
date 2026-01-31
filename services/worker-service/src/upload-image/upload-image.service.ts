@@ -133,7 +133,7 @@ export class UploadImageService {
     userId: string,
     index: number,
     promptGuideId: string,
-    generateType: 'image' | 'vdo',
+    generateType: 'image' | 'video',
     file: Express.Multer.File,
     uid: string,
   ) {

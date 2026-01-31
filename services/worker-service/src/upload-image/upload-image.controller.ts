@@ -46,7 +46,7 @@ export class UploadImageController {
     @Body(`userId`) userId: string,
     @Body(`index`) index: number,
     @Body(`projectId`) projectId: string,
-    @Body(`generateType`) generateType: 'image' | 'vdo',
+    @Body(`generateType`) generateType: 'image' | 'video',
     @Body(`uid`) uid: string,
     @Body(`refUid`) refUid: string,
     @Body() body: any,
