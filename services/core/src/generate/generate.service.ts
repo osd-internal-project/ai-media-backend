@@ -315,7 +315,7 @@ export class GenerateService {
                     ImageUsed: 0,
                     generateAudio: body.generateAudio,
                     referenceImages: body.image.length > 0
-                        ? body.image
+                        ? body.image.filter((item) => item !== null)
                         : [],
                     resolution: body.size,
                     ratio: body.ratio,

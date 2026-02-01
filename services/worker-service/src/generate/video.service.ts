@@ -201,8 +201,14 @@ export class VideoProcessor extends WorkerHost {
                     );
                     await this.publishToCore(clientId, 'worker:video-upload-success', {
                         taskId,
-                        videoUrl: result.file,
-                        thumbnailUrl: result.thumbnail,
+                        videoUrl: await this.minioClientService.getPresignedUrl(
+                            process.env.MINIO_BUCKET_VDO,
+                            result.file,
+                        ),
+                        thumbnailUrl: await this.minioClientService.getPresignedUrl(
+                            process.env.MINIO_BUCKET_VDO,
+                            result.thumbnail,
+                        ),
                         timestamp: new Date().toISOString(),
                     });
 
