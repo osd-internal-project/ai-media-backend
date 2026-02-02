@@ -38,4 +38,8 @@ export class AuthService {
     });
     return !!user;
   }
+
+  async validateToken(token: string) {
+    return this.keycloakService.validateToken(token);
+  }
 }

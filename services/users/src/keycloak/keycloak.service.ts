@@ -32,6 +32,46 @@ export class KeycloakService {
     return data.access_token;
   }
 
+  async validateToken(token: string): Promise<boolean> {
+    try {
+      const config = configs().keycloak;
+      const params = new URLSearchParams();
+      params.append('client_id', config.clientId);
+      params.append('client_secret', config.clientSecret);
+      params.append('token', token);
+      console;
+      const { data } = await axios.post(
+        `${config.url}/realms/${config.realm}/protocol/openid-connect/token/introspect`,
+        params,
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+      );
+
+      const isActive = data.active === true;
+
+      // if (isActive) {
+      //   Logger.log('Token validation successful', {
+      //     active: data.active,
+      //     exp: data.exp ? new Date(data.exp * 1000).toISOString() : 'N/A',
+      //     iat: data.iat ? new Date(data.iat * 1000).toISOString() : 'N/A',
+      //     session_state: data.session_state || 'N/A',
+      //   });
+      // } else {
+      //   Logger.warn(
+      //     'Token validation failed - SSO session expired or invalid',
+      //     {
+      //       active: data.active,
+      //       exp: data.exp ? new Date(data.exp * 1000).toISOString() : 'N/A',
+      //     },
+      //   );
+      // }
+
+      return isActive;
+    } catch (error) {
+      Logger.error('Error validating token with Keycloak', error.message);
+      return false;
+    }
+  }
+
   async createUser(userDto: any): Promise<string> {
     try {
       const config = configs().keycloak;
@@ -87,7 +127,8 @@ export class KeycloakService {
       return users[0].id;
     } catch (error) {
       Logger.error(
-        `Error creating user in Keycloak: ${error?.response?.data.error_description || error.message
+        `Error creating user in Keycloak: ${
+          error?.response?.data.error_description || error.message
         }`,
       );
 

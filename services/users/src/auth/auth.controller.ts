@@ -15,4 +15,10 @@ export class AuthController {
     const exists = await this.authService.checkUserExists(body.email);
     return { exists };
   }
+
+  @Post('validate')
+  async validate(@Body() body: { token: string }) {
+    const isValid = await this.authService.validateToken(body.token);
+    return { valid: isValid };
+  }
 }
