@@ -43,7 +43,7 @@ model users {
   createdAt            DateTime             @default(now()) @map("created_at")
   updatedAt            DateTime             @updatedAt @map("updated_at")
   agreement            Boolean              @default(false)
-  role                 String?              @db.VarChar(50)
+  role                 String?              @default("USER") @db.VarChar(50)
   groups               UserGroup[]
   projectMembers       ProjectMember[]
   galleries            Gallery[]
