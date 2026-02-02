@@ -16,7 +16,7 @@ export class PromptGuideService {
     private readonly promptguideRepo: PromptGuideRepository,
     private readonly promptGuideImageRepo: PromptGuideImageRepository,
     private readonly minioClientService: MinioClientService,
-  ) {}
+  ) { }
   create(createPromptGuideDto: Prisma.PromptGuideCreateInput) {
     const data = {
       ...createPromptGuideDto,
@@ -92,7 +92,6 @@ export class PromptGuideService {
           ? promptGuide.promptGuideImages
           : [];
         const images = [];
-        // Logger.log(ImageUids);
 
         await Promise.all(
           ImageUids.map(async (uid: string) => {
@@ -105,7 +104,6 @@ export class PromptGuideService {
                 index: 'asc',
               },
             });
-            // Logger.log(image);
             const ext = path.extname(image.imagePath);
             const url = await this.minioClientService.getPresignedUrl(
               bucketname,
@@ -121,14 +119,12 @@ export class PromptGuideService {
             });
           }),
         );
-        Logger.log(images);
         return {
           ...promptGuide,
           images: images.sort((a, b) => a.index - b.index),
         };
       }),
     );
-    // Logger.log(templates);
     return templates;
   }
 
