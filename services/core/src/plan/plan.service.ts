@@ -66,28 +66,36 @@ export class PlanService {
   async findAllFormatted() {
     const plans = await this.findAll();
     return plans.map((plan: any) => {
-      const monthlyPrice = plan.prices?.find((p: any) => p.period === 'monthly')?.price;
-      const annuallyPrice = plan.prices?.find((p: any) => p.period === 'annually')?.price;
-      
-      const featuresByCategory = plan.features?.reduce((acc: any, pf: any) => {
-        const category = pf.category || 'General';
-        if (!acc[category]) {
-          acc[category] = [];
-        }
-        acc[category].push({
-          icon: pf.feature.icon || '✓',
-          text: pf.value,
-          isHighlight: pf.isHighlight,
-          orderIndex: pf.orderIndex,
-        });
-        return acc;
-      }, {}) || {};
+      const monthlyPrice = plan.prices?.find(
+        (p: any) => p.period === 'monthly',
+      )?.price;
+      const annuallyPrice = plan.prices?.find(
+        (p: any) => p.period === 'annually',
+      )?.price;
 
-      Object.keys(featuresByCategory).forEach(category => {
-        featuresByCategory[category].sort((a: any, b: any) => a.orderIndex - b.orderIndex);
+      const featuresByCategory =
+        plan.features?.reduce((acc: any, pf: any) => {
+          const category = pf.category || 'General';
+          if (!acc[category]) {
+            acc[category] = [];
+          }
+          acc[category].push({
+            icon: pf.feature.icon || '✓',
+            text: pf.value,
+            isHighlight: pf.isHighlight,
+            orderIndex: pf.orderIndex,
+          });
+          return acc;
+        }, {}) || {};
+
+      Object.keys(featuresByCategory).forEach((category) => {
+        featuresByCategory[category].sort(
+          (a: any, b: any) => a.orderIndex - b.orderIndex,
+        );
       });
-      
+
       return {
+        id: plan.id,
         name: plan.name,
         description: plan.description,
         badge: plan.badge,
@@ -97,12 +105,13 @@ export class PlanService {
           monthly: monthlyPrice ? Number(monthlyPrice) : 0,
           annually: annuallyPrice ? Number(annuallyPrice) : 0,
         },
-        features: plan.features?.map((pf: any) => ({
-          icon: pf.feature.icon || '✓',
-          text: pf.value,
-          isHighlight: pf.isHighlight,
-          category: pf.category || 'General',
-        })) || [],
+        features:
+          plan.features?.map((pf: any) => ({
+            icon: pf.feature.icon || '✓',
+            text: pf.value,
+            isHighlight: pf.isHighlight,
+            category: pf.category || 'General',
+          })) || [],
         featuresByCategory,
       };
     });

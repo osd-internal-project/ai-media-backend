@@ -16,7 +16,7 @@ import { Prisma } from '@prisma/client';
 
 @Controller('organization')
 export class OrganizationController {
-  constructor(private readonly organizationService: OrganizationService) { }
+  constructor(private readonly organizationService: OrganizationService) {}
 
   @Post()
   create(@Body() createOrganizationDto: Prisma.OrganizationCreateInput) {
@@ -27,7 +27,12 @@ export class OrganizationController {
   createOwner(@Body() createOrganizationDto: Prisma.OrganizationCreateInput) {
     return this.organizationService.createOwner(createOrganizationDto);
   }
-
+  @Post('system-admin')
+  createBySystemAdmin(
+    @Body() createOrganizationDto: Prisma.OrganizationCreateInput,
+  ) {
+    return this.organizationService.createBySystemAdmin(createOrganizationDto);
+  }
   @Post('invitation')
   createInvitation(@Body() createInvitationDto: CreateInvitationDto) {
     return this.organizationService.createInvitation(createInvitationDto);
@@ -44,8 +49,8 @@ export class OrganizationController {
   }
 
   @Get()
-  findAll() {
-    return this.organizationService.findAll();
+  findAll(@Query() search: { searchText?: string; type?: string }) {
+    return this.organizationService.findAll(search);
   }
 
   @Get('user/:id')

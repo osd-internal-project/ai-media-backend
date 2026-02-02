@@ -34,7 +34,7 @@ export class OrganizationService {
     private readonly keycloakService: KeycloakService,
     private readonly httpService: HttpService,
     private readonly planRepo: PlanRepository,
-  ) { }
+  ) {}
 
   create(createOrganizationDto: Prisma.OrganizationCreateInput) {
     return this.organizationRepo.create({
@@ -52,14 +52,23 @@ export class OrganizationService {
           organizationId: data.organizationId,
           userId: createOrganizationDto.createdById,
           role: 'OWNER',
-          maxImages: 1000000, //fix token
-          maxToken: 1000000, //fix token
+          maxImages: 0, //fix token
+          maxToken: 0, //fix token
         },
       });
     }
     return data;
   }
+  async createBySystemAdmin(
+    createOrganizationDto: Prisma.OrganizationCreateInput,
+  ) {
+    console.log(createOrganizationDto);
+    const data = await this.organizationRepo.create({
+      data: createOrganizationDto,
+    });
 
+    return data;
+  }
   async createInvitation(dto: CreateInvitationDto) {
     // 1. Check if user already exists in Organization (via OrganizationMember check if we had userId, but here we only have email)
     // We strictly follow requirements: Check if email exists in OrganizationMember.
@@ -144,7 +153,8 @@ export class OrganizationService {
 
     // Mock Email Dispatch (Legacy)
     console.log(
-      `[Email Service] Sending invitation to ${dto.email} with link: ${configs().frontendUrl
+      `[Email Service] Sending invitation to ${dto.email} with link: ${
+        configs().frontendUrl
       }/accept-invite?token=${token}`,
     );
 
@@ -222,7 +232,7 @@ export class OrganizationService {
         firstName: dto.fullname,
         lastName: dto.fullname,
       });
-      console.log(`token`, token)
+      console.log(`token`, token);
       if (!token) {
         Logger.error('Failed to create user in Keycloak');
         throw new InternalServerErrorException(
@@ -247,8 +257,10 @@ export class OrganizationService {
         where: { isDefault: true },
       });
       const freePlanDetails = freePlan.detailJson as any;
-      const maxDefaultImage = parseInt(freePlanDetails?.packageImageAmount) || 0;
-      const maxDefaultToken = parseInt(freePlanDetails?.packageTokenAmount) || 0;
+      const maxDefaultImage =
+        parseInt(freePlanDetails?.packageImageAmount) || 0;
+      const maxDefaultToken =
+        parseInt(freePlanDetails?.packageTokenAmount) || 0;
 
       const personalOrg = await this.organizationRepo.create({
         data: {
@@ -324,8 +336,14 @@ export class OrganizationService {
     };
   }
 
-  findAll() {
-    return this.organizationRepo.findMany({});
+  findAll(search: { searchText?: string; type?: string }) {
+    return this.organizationRepo.findMany({
+      where: {
+        ...(search.type && { type: search.type }),
+        ...(search.searchText && { name: { contains: search.searchText } }),
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   findManyByUserId(userId: string, search: { type: string }) {
