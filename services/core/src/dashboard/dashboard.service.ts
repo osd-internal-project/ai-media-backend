@@ -20,7 +20,7 @@ export class DashboardService {
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly orgMemberRepo: OrganizationMemberRepository,
     private readonly projectRepo: ProjectRepository,
-  ) {}
+  ) { }
   async summaryProject(organizationId: string, query: any) {
     const { projectId, createdAt } = query || {};
     const projects = (await this.projectRepo.findMany({
@@ -156,17 +156,15 @@ left join
 	from
 		log
 	left join project on
-		log."projectId" = project.id where log.status='success' and project.organization_id = '${organizationId}' ${
-      projectId ? `and log."projectId" = '${projectId}'` : ''
-    } ${
-      createdAt
+		log."projectId" = project.id where log.status='success' and project.organization_id = '${organizationId}' ${projectId ? `and log."projectId" = '${projectId}'` : ''
+      } ${createdAt
         ? `and log."createdAt" between '${dayjs(createdAt)
-            .startOf('month')
-            .toISOString()}' and '${dayjs(createdAt)
+          .startOf('month')
+          .toISOString()}' and '${dayjs(createdAt)
             .endOf('month')
             .toISOString()}'`
         : ''
-    } group by log."userId" ) lg on
+      } group by log."userId" ) lg on
 	om.user_id = lg.user_id order by fullname`;
     // console.log(sql);
     const result = await this.prismaService.$queryRawUnsafe(sql);
@@ -233,7 +231,7 @@ left join
       quota = priceImage + priceToken;
     }
     const totalTokenUsed = sumBy(
-      dataLogs.filter((log) => log.typeGenerate === 'vdo'),
+      dataLogs.filter((log) => log.typeGenerate === 'video'),
       'tokenUsed',
     );
     const totalImageUsed = sumBy(
@@ -272,7 +270,7 @@ left join
     ]);
     const totalImageUsedDateNow = sumBy(dataLogsDateNow, 'ImageUsed');
     const totalTokenUsedDateNow = sumBy(
-      dataLogsDateNow.filter((log) => log.typeGenerate === 'vdo'),
+      dataLogsDateNow.filter((log) => log.typeGenerate === 'video'),
       'tokenUsed',
     );
     const totalPriceUsedImageDateNow =
@@ -283,7 +281,7 @@ left join
       totalPriceUsedImageDateNow + totalPriceUsedVdoDateNow;
     const totalImageUsedDateLast = sumBy(dataLogsDateLast, 'ImageUsed');
     const totalTokenUsedDateLast = sumBy(
-      dataLogsDateLast.filter((log) => log.typeGenerate === 'vdo'),
+      dataLogsDateLast.filter((log) => log.typeGenerate === 'video'),
       'tokenUsed',
     );
     const totalPriceUsedImageDateLast =
@@ -359,7 +357,7 @@ left join
             totalImageUsed: 0,
             totalTokenUsed: 0,
             unitPrice:
-              product === 'image' ? 0.03 : product === 'vdo' ? 0.0025 : null,
+              product === 'image' ? 0.03 : product === 'video' ? 0.0025 : null,
           };
         }
 
@@ -368,7 +366,7 @@ left join
         if (product === 'image') {
           group.totalImageUsed += log.ImageUsed ?? 0;
         }
-        if (product === 'vdo') {
+        if (product === 'video') {
           group.totalTokenUsed += log.tokenUsed ?? 0;
         }
         return owners;
@@ -428,14 +426,14 @@ left join
             totalImageUsed: 0,
             totalTokenUsed: 0,
             unitPrice:
-              product === 'image' ? 0.03 : product === 'vdo' ? 0.0025 : null,
+              product === 'image' ? 0.03 : product === 'video' ? 0.0025 : null,
           };
         }
         const group = products[product];
         if (product === 'image') {
           group.totalImageUsed += log.ImageUsed ?? 0;
         }
-        if (product === 'vdo') {
+        if (product === 'video') {
           group.totalTokenUsed += log.tokenUsed ?? 0;
         }
         return products;

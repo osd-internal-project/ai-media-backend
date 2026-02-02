@@ -245,8 +245,29 @@ model PromptGuide {
   promptGuideType   PromptGuideType? @relation(fields: [promptGuideTypeId], references: [id])
   promptGuideTypeId Int?             @map("prompt_guide_type_id")
   organizationId    String?          @map("organization_id") @db.VarChar(50)
+  generateType      String           @default("image") @map("generate_type") @db.VarChar(10) // image/video
+  promptGuideImages String[]         @default([]) @map("prompt_guide_images")
 
   @@map("prompt_guide")
+}
+
+model PromptGuideImage {
+  id            Int      @id @default(autoincrement())
+  uid           String   @unique @db.VarChar(50)
+  userId        String   @map("user_id") @db.VarChar(50)
+  index         Int      @default(0)
+  imageName     String   @map("image_name") @db.VarChar(200)
+  imagePath     String   @map("image_path") @db.VarChar(200)
+  imageType     String   @map("image_type") @db.VarChar(50)
+  imageSize     Int      @default(0) @map("image_size")
+  generateType  String   @map("generate_type") @db.VarChar(50)
+  status        String   @default("waiting") @db.VarChar(50)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  // promptGuide   PromptGuide? @relation(fields: [promptGuideId], references: [id])
+  promptGuideId Int?     @map("prompt_guide_id") @db.Integer()
+
+  @@map("prompt_guide_images")
 }
 
 model PromptGuideType {
@@ -257,6 +278,7 @@ model PromptGuideType {
   updatedAt      DateTime      @default(now()) @map("updated_at")
   organizationId String?       @map("organization_id") @db.VarChar(50)
   promptGuide    PromptGuide[]
+  generateType   String        @default("image") @map("generate_type") @db.VarChar(10) // image/video
 
   @@map("prompt_guide_type")
 }
@@ -463,4 +485,22 @@ model Register {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("registers")
+}
+
+model RefImage {
+  id           Int      @id @default(autoincrement())
+  uid          String   @unique @db.VarChar(50)
+  userId       String   @map("user_id") @db.VarChar(50)
+  index        Int      @default(0)
+  projectId    String   @map("project_id") @db.VarChar(100)
+  imageName    String   @map("image_name") @db.VarChar(200)
+  imagePath    String   @map("image_path") @db.VarChar(200)
+  imageType    String   @map("image_type") @db.VarChar(50)
+  imageSize    Int      @default(0) @map("image_size")
+  generateType String   @map("generate_type") @db.VarChar(50)
+  status       String   @default("waiting") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("ref_images")
 }

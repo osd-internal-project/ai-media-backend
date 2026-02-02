@@ -209,7 +209,7 @@ export class OmnihumenTaskService {
               userId: task.userId,
               imageUrl: newObjectName,
               prompt: task.prompt,
-              typeGenerate: 'vdo',
+              typeGenerate: 'video',
             },
           });
         } catch (uploadError) {

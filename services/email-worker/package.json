@@ -66,7 +66,7 @@
     "dev1": "cross-env NODE_ENV=local DATABASE_URL=postgresql://postgres:1010@localhost:5432/dev ts-node-dev --respawn --exit-child --transpile-only -r tsconfig-paths/register ./src/main.ts",
     "dev": "cross-env NODE_ENV=local ts-node-dev --respawn --exit-child --transpile-only -r tsconfig-paths/register ./src/main.ts ",
     "docker:build": "cd ../.. && docker build -t 'd-debt/email-worker' -f services/email-worker/Dockerfile .",
-    "docker:buildx": "cd ../.. && docker build --no-cache --platform linux/amd64 -t 'ai-cave-email-worker:v1.0.0' -f services/email-worker/Dockerfile .",
+    "docker:buildx": "cd ../.. && docker build --no-cache --platform linux/amd64 -t 'ai-cave-email-worker:v1.0.1' -f services/email-worker/Dockerfile .",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "generate": "prisma generate",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",

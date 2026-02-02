@@ -1,0 +1,92 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UploadedFiles,
+  UploadedFile,
+  UseInterceptors,
+  Logger,
+} from '@nestjs/common';
+import { FileInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
+import { UploadImageService } from './upload-image.service';
+import { MinioClientService } from '../minio-client/minio-client.service';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+
+@Controller('upload')
+export class UploadImageController {
+  constructor(private readonly uploadImageService: UploadImageService) {}
+
+  @Post()
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Body(`userId`) userId: string,
+    @Body(`index`) index: number,
+    @Body(`projectId`) projectId: string,
+    @Body(`generateType`) generateType: 'image' | 'video',
+    @Body(`uid`) uid: string,
+  ) {
+    return this.uploadImageService.uploadImage(
+      userId,
+      Number(index),
+      projectId,
+      generateType,
+      file,
+      uid,
+    );
+  }
+  @Post('from-prompt')
+  @UseInterceptors(AnyFilesInterceptor())
+  async uploadImageFromPrompt(
+    @Body(`userId`) userId: string,
+    @Body(`index`) index: number,
+    @Body(`projectId`) projectId: string,
+    @Body(`generateType`) generateType: 'image' | 'video',
+    @Body(`uid`) uid: string,
+    @Body(`refUid`) refUid: string,
+    @Body() body: any,
+  ) {
+    return this.uploadImageService.uploadImageFromPrompt(
+      userId,
+      Number(index),
+      projectId,
+      generateType,
+      uid,
+      refUid,
+    );
+  }
+  @Post('prompt-guide-image')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadPromptGuideImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Body(`userId`) userId: string,
+    @Body(`index`) index: number,
+    @Body(`promptGuideId`) promptGuideId: string,
+    @Body(`generateType`) generateType: 'image' | 'video',
+    @Body(`uid`) uid: string,
+  ) {
+    return this.uploadImageService.uploadPromptGuideImage(
+      userId,
+      Number(index),
+      promptGuideId,
+      generateType,
+      file,
+      uid,
+    );
+  }
+
+  @Delete('delete/:uid')
+  async deleteImage(@Param(`uid`) uid: string) {
+    return this.uploadImageService.deleteImage(uid);
+  }
+
+  @Delete('prompt-guide-image/delete/:uid')
+  async deletePromptGuideImage(@Param(`uid`) uid: string) {
+    return this.uploadImageService.deletePromptGuideImage(uid);
+  }
+}

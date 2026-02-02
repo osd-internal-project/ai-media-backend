@@ -1,5 +1,5 @@
 export class CreateGenerateImageDto {
-  type: 'image' | 'vdo';
+  type: 'image' | 'video';
   text: string;
   resolution: string;
   duration: string;

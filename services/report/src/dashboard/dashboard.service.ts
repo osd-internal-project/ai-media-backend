@@ -10,7 +10,7 @@ export class DashboardService {
   constructor(
     private readonly logRepo: LogRepository,
     private readonly userRepo: UsersRepository,
-  ) {}
+  ) { }
   create(createDashboardDto: CreateDashboardDto) {
     return 'This action adds a new dashboard';
   }
@@ -47,14 +47,14 @@ export class DashboardService {
             totalImageUsed: 0,
             totalTokenUsed: 0,
             unitPrice:
-              product === 'image' ? 0.03 : product === 'vdo' ? 0.0025 : null,
+              product === 'image' ? 0.03 : product === 'video' ? 0.0025 : null,
           };
         }
         const group = products[product];
         if (product === 'image') {
           group.totalImageUsed += log.ImageUsed ?? 0;
         }
-        if (product === 'vdo') {
+        if (product === 'video') {
           group.totalTokenUsed += log.tokenUsed ?? 0;
         }
         return products;

@@ -23,12 +23,13 @@ export class LogsService {
     private readonly minioService: MinioClientService,
     private readonly auditLogRepo: AuditLogRepository,
     private readonly errorLogRepo: ErrorLogRepository,
-  ) {}
+  ) { }
   async findProjectImageByPage(
     projectId: string,
     skip?: number,
     take?: number,
   ) {
+
     const taskIds = await this.galleryRepo.findMany({
       where: {
         projectId: projectId,
@@ -83,19 +84,19 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo'
-              ? this.minioconfig.minioBucketVdo
-              : this.minioconfig.minioBucket,
-            item.imageUrl,
-          )
+          item.typeGenerate === 'video'
+            ? this.minioconfig.minioBucketVdo
+            : this.minioconfig.minioBucket,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo'
-              ? this.minioconfig.minioBucketVdo
-              : this.minioconfig.minioBucket,
-            item.thumbnailUrl,
-          )
+          item.typeGenerate === 'video'
+            ? this.minioconfig.minioBucketVdo
+            : this.minioconfig.minioBucket,
+          item.thumbnailUrl,
+        )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -114,7 +115,6 @@ export class LogsService {
             );
             referenceImageUrls.push(url);
           } else {
-            console.log(`Reference image not found: ${filename}`);
             const placeholder =
               'data:image/svg+xml;base64,' +
               Buffer.from(
@@ -225,19 +225,19 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo'
-              ? this.minioconfig.minioBucketVdo
-              : this.minioconfig.minioBucket,
-            item.imageUrl,
-          )
+          item.typeGenerate === 'video'
+            ? this.minioconfig.minioBucketVdo
+            : this.minioconfig.minioBucket,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            item.typeGenerate === 'vdo'
-              ? this.minioconfig.minioBucketVdo
-              : this.minioconfig.minioBucket,
-            item.thumbnailUrl,
-          )
+          item.typeGenerate === 'video'
+            ? this.minioconfig.minioBucketVdo
+            : this.minioconfig.minioBucket,
+          item.thumbnailUrl,
+        )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -256,7 +256,6 @@ export class LogsService {
             );
             referenceImageUrls.push(url);
           } else {
-            console.log(`Reference image not found: ${filename}`);
             const placeholder =
               'data:image/svg+xml;base64,' +
               Buffer.from(
@@ -296,7 +295,7 @@ export class LogsService {
 
     return result;
   }
-  async findProjectViedoByPage(
+  async findProjectVideoByPage(
     projectId: string,
     skip?: number,
     take?: number,
@@ -305,13 +304,12 @@ export class LogsService {
       where: {
         projectId: projectId,
         taskId: { not: null },
-        typeGenerate: 'vdo',
+        typeGenerate: 'video',
       },
       include: { users: true },
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
-
     const targetTaskIds = data.map((t) => t.taskId);
 
     if (targetTaskIds.length === 0) {
@@ -321,7 +319,7 @@ export class LogsService {
     // const data = await this.galleryRepo.findMany({
     //   where: {
     //     taskId: { in: targetTaskIds },
-    //     typeGenerate: 'vdo',
+    //     typeGenerate: 'video',
     //   },
     //   include: { users: true },
     //   orderBy: { createdAt: 'desc' },
@@ -330,7 +328,7 @@ export class LogsService {
     const logData = await this.logrepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
-        typeGenerate: 'vdo',
+        typeGenerate: 'video',
       },
       select: {
         taskId: true,
@@ -365,15 +363,15 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            this.minioconfig.minioBucketVdo,
-            item.imageUrl,
-          )
+          this.minioconfig.minioBucketVdo,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            this.minioconfig.minioBucketVdo,
-            item.thumbnailUrl,
-          )
+          this.minioconfig.minioBucketVdo,
+          item.thumbnailUrl,
+        )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -392,7 +390,6 @@ export class LogsService {
             );
             referenceImageUrls.push(url);
           } else {
-            console.log(`Reference image not found: ${filename}`);
             const placeholder =
               'data:image/svg+xml;base64,' +
               Buffer.from(
@@ -413,7 +410,6 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
-
           imageUrls: [
             {
               imageUrl: url,
@@ -452,7 +448,7 @@ export class LogsService {
       where: {
         projectId: projectId,
         taskId: { not: null },
-        typeGenerate: 'vdo',
+        typeGenerate: 'video',
         createdAt: { gte: cerrentTask.createdAt },
       },
       include: { users: true },
@@ -468,7 +464,7 @@ export class LogsService {
     // const data = await this.galleryRepo.findMany({
     //   where: {
     //     taskId: { in: targetTaskIds },
-    //     typeGenerate: 'vdo',
+    //     typeGenerate: 'video',
     //   },
     //   include: { users: true },
     //   orderBy: { createdAt: 'desc' },
@@ -477,7 +473,7 @@ export class LogsService {
     const logData = await this.logrepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
-        typeGenerate: 'vdo',
+        typeGenerate: 'video',
       },
       select: {
         taskId: true,
@@ -512,15 +508,15 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.minioService.getPresignedUrl(
-            this.minioconfig.minioBucketVdo,
-            item.imageUrl,
-          )
+          this.minioconfig.minioBucketVdo,
+          item.imageUrl,
+        )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.minioService.getPresignedUrl(
-            this.minioconfig.minioBucketVdo,
-            item.thumbnailUrl,
-          )
+          this.minioconfig.minioBucketVdo,
+          item.thumbnailUrl,
+        )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -539,7 +535,6 @@ export class LogsService {
             );
             referenceImageUrls.push(url);
           } else {
-            console.log(`Reference image not found: ${filename}`);
             const placeholder =
               'data:image/svg+xml;base64,' +
               Buffer.from(
@@ -607,7 +602,7 @@ export class LogsService {
           userId: data.userId,
           imageUrl: item.video_url,
           prompt: data.prompt,
-          typeGenerate: 'vdo',
+          typeGenerate: 'video',
         }));
 
         await this.galleryRepo.createMany({

@@ -21,9 +21,11 @@ import { OmnihumenModule } from './omnihumen/omnihumen.module';
 import { OmnihumenTaskModule } from './omnihumen-task/omnihumen-task.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AiModelModule } from './ai-model/ai-model.module';
-import { appConfigs, minioConfigs, byteplusConfigs } from './configs';
-import { RedisModule } from './redis/redis.module';
+import { appConfigs, minioConfigs, byteplusConfigs, redisConfigs } from './configs';
 import { PlanModule } from './plan/plan.module';
+import { GenerateModule } from './generate/generate.module';
+import { BullModule } from '@nestjs/bullmq';
+import { WebsocketModule } from './websocket/websocket.module';
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { PlanModule } from './plan/plan.module';
       load: [appConfigs, minioConfigs, byteplusConfigs],
     }),
     ScheduleModule.forRoot(),
+    WebsocketModule,
     PrismaModule,
     GenerateImageModule,
     HttpModule,
@@ -47,9 +50,16 @@ import { PlanModule } from './plan/plan.module';
     OmnihumenModule,
     OmnihumenTaskModule,
     AiModelModule,
-    RedisModule,
     PlanModule,
     EventEmitterModule.forRoot({ global: true }),
+    GenerateModule,
+    BullModule.forRoot({
+      connection: {
+        host: redisConfigs().redisHost,
+        port: redisConfigs().redisPort,
+        password: redisConfigs().redisPassword,
+      },
+    }),
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

@@ -5,14 +5,12 @@ import { MasterdataModelTypeRepository } from '@ai-media/share';
 export class AiModelService {
   constructor(
     private readonly masterModelTypeRepository: MasterdataModelTypeRepository,
-  ) {}
+  ) { }
 
   async findAll(type?: string) {
     try {
-      const whereCondition = type ? { type } : {};
-      
       const models = await this.masterModelTypeRepository.findAll({
-        where: whereCondition,
+        where: { type: type, modelDetails: { path: ['status'], equals: 'Activated' } },
         orderBy: { id: 'asc' }
       });
 

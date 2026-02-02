@@ -22,7 +22,9 @@ import {
   AuditLogRepository,
   PlanRepository,
   RegisterRepository,
-  RequestChangePasswordRepository
+  RequestChangePasswordRepository,
+  RefImageRepository,
+  PromptGuideImageRepository,
 } from 'src/repositories';
 
 const services = [
@@ -48,11 +50,13 @@ const services = [
   AuditLogRepository,
   PlanRepository,
   RegisterRepository,
-  RequestChangePasswordRepository
+  RequestChangePasswordRepository,
+  RefImageRepository,
+  PromptGuideImageRepository,
 ];
 
 @Module({
   providers: [...services],
   exports: [...services],
 })
-export class PrismaModule { }
+export class PrismaModule {}
