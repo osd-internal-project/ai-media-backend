@@ -126,28 +126,28 @@ export class GenerateService {
             );
 
             // 5. Call External API
-            // const res = await this.executeGenerationRequest(
-            //     getConfigApi.apiCreateImage,
-            //     basePayload,
-            //     axiosConfig,
-            // );
+            const res = await this.executeGenerationRequest(
+                getConfigApi.apiCreateImage,
+                basePayload,
+                axiosConfig,
+            );
 
             // data test
-            const res = {
-                data: {
-                    data: [
-                        {
-                            url: 'https://www.aicave.ai/public/api/v1/s3/ai-media-image/80ecc909-bb73-4873-89d2-9605fc801be7/decae022-3b8a-4d4f-a2f1-4410d81b7cb1.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260202%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260202T155105Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=f6c44142b217fba0cbfe277ae6988538ca76e2dd41f1835822f31da7d3378bfe',
-                            size: '2048x2048'
-                        }
-                    ],
-                    usage: {
-                        generated_images: 1,
-                        output_tokens: 16280,
-                        total_tokens: 16280
-                    }
-                }
-            }
+            // const res = {
+            //     data: {
+            //         data: [
+            //             {
+            //                 url: 'https://www.aicave.ai/public/api/v1/s3/ai-media-image/80ecc909-bb73-4873-89d2-9605fc801be7/decae022-3b8a-4d4f-a2f1-4410d81b7cb1.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260202%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260202T155105Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=f6c44142b217fba0cbfe277ae6988538ca76e2dd41f1835822f31da7d3378bfe',
+            //                 size: '2048x2048'
+            //             }
+            //         ],
+            //         usage: {
+            //             generated_images: 1,
+            //             output_tokens: 16280,
+            //             total_tokens: 16280
+            //         }
+            //     }
+            // }
 
             // 6. อัพเดท cache
             await this.redis.set(
