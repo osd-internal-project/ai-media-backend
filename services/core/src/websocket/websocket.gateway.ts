@@ -18,6 +18,8 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import { redisConfigs } from '../configs';
 import { LogsService } from 'src/logs/logs.service';
 
+import { JoinRoomDto, LeaveRoomDto, SendMessageDto } from './dto/chat.dto';
+
 @WebSocketGateway({
   path: '/websockets',
   cors: { origin: '*', credentials: true },
@@ -78,11 +80,11 @@ export class WebsocketGatewayService
 
     await this.redis.sadd('ws:active-clients', client.id);
 
-    client.emit('connected', {
-      clientId: client.id,
-      message: 'Connected to WebSocket server',
-      timestamp: new Date().toISOString(),
-    });
+    // client.emit('connected', {
+    //   clientId: client.id,
+    //   message: 'Connected to WebSocket server',
+    //   timestamp: new Date().toISOString(),
+    // });
   }
 
   async onModuleInit() {
@@ -107,12 +109,24 @@ export class WebsocketGatewayService
         const data = JSON.parse(message);
         const { clientId, event, payload } = data;
         this.logger.log(`📨 Received from worker [${channel}]:`, event);
-        // ส่ง event ไปยัง client ที่เกี่ยวข้อง
-        if (clientId) {
-          this.server.to(clientId).emit(event, payload);
+        // this.logger.debug(`📨 Received from worker [${channel}]:`, payload);
+
+        // Check format for room broadcast
+        if (payload && payload.projectId && payload.type) {
+          const roomName = `${payload.projectId}:${payload.type}`;
+          this.server.to(roomName).emit(event, payload);
+          // Also emit to specific client if needed/redundant but safe
+          // if (clientId) {
+          //   this.server.to(clientId).emit(event, payload);
+          // }
         } else {
-          // Broadcast ถ้าไม่มี clientId
-          this.server.emit(event, payload);
+          // Fallback: ส่ง event ไปยัง client ที่เกี่ยวข้องแบบเดิม
+          if (clientId) {
+            this.server.to(clientId).emit(event, payload);
+          } else {
+            // Broadcast ถ้าไม่มี clientId และไม่มี room info
+            this.server.emit(event, payload);
+          }
         }
       } catch (error) {
         this.logger.error('Error processing worker message:', error);
@@ -147,16 +161,22 @@ export class WebsocketGatewayService
   ) {
     try {
       this.logger.log('🎨 Generate request from client: ', client.id);
+
+      const { projectId } = data;
+      const roomName = `${projectId}:image`;
+
       // เรียก service เพื่อสร้าง task
-      this.server.to(client.id).emit('task:started', {
-        taskId: data.taskId,
-        message: 'Task started',
-        timestamp: new Date().toISOString(),
-      });
+      // Broadcast to room
       const result = await this.generateService.createGenerationTask(
         data,
         client.id,
       );
+      this.server.to(roomName).emit('task:started', {
+        taskId: data.taskId,
+        message: 'Task started',
+        timestamp: new Date().toISOString(),
+        data: result.data
+      });
       this.logger.log('🎨 Generate result from data: ', result);
       if (result.status !== 200) {
         client.emit('generate:error', {
@@ -179,7 +199,8 @@ export class WebsocketGatewayService
       // บันทึก task ที่เกี่ยวข้องกับ client
       await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
 
-      client.emit('task:created', { ...result });
+      // Broadcast to room
+      this.server.to(roomName).emit('task:created', { ...result });
 
       // [NEW] Return success acknowledgement
       return { success: true, data: result };
@@ -201,19 +222,23 @@ export class WebsocketGatewayService
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      console.log(`data`, data)
       this.logger.log('🎥 Generate Video request from client: ', client.id);
 
-      this.server.to(client.id).emit('video-task:created', {
-        taskId: data.taskId,
-        message: 'Video Task started',
-        timestamp: new Date().toISOString(),
-      });
+      const { projectId } = data;
+      const roomName = `${projectId}:video`;
 
       const result = await this.generateService.createVideoGenerationTask(
         data,
         client.id,
       );
+
+      // Broadcast to room
+      this.server.to(roomName).emit('video-task:created', {
+        taskId: data.taskId,
+        message: 'Video Task started',
+        timestamp: new Date().toISOString(),
+        data: result.data
+      });
 
       this.logger.log('🎥 Generate Video result: ', result);
 
@@ -235,7 +260,8 @@ export class WebsocketGatewayService
 
       await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
 
-      client.emit('task-video:started', { ...result, oldTaskId: data.taskId });
+      // Broadcast to room
+      this.server.to(roomName).emit('task-video:started', { ...result, oldTaskId: data.taskId });
 
       return { success: true, data: result };
 
@@ -259,6 +285,7 @@ export class WebsocketGatewayService
     },
     @ConnectedSocket() client: Socket,
   ) {
+    console.log('chat:get-history', data);
     const projectId = data.projectId;
     try {
       const conversation = data.type === 'image' ? await this.logsService.findProjectImageByPage(
@@ -309,6 +336,70 @@ export class WebsocketGatewayService
       client.emit('task:cancelled', result);
     } catch (error) {
       client.emit('error', { message: error.message });
+    }
+  }
+
+  // Group Chat Handlers
+
+  @SubscribeMessage('join-room')
+  async handleJoinRoom(
+    @MessageBody() data: JoinRoomDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const { projectId, type } = data;
+      const roomName = `${projectId}:${type}`;
+      await client.join(roomName);
+      this.logger.log(`Client ${client.id} joined room ${roomName}`);
+      client.emit('room:joined', { projectId, type, message: `Joined room ${roomName}` });
+    } catch (error) {
+      this.logger.error(`Error joining room: ${error.message}`);
+      client.emit('error', { message: 'Failed to join room' });
+    }
+  }
+
+  @SubscribeMessage('leave-room')
+  async handleLeaveRoom(
+    @MessageBody() data: LeaveRoomDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const { projectId, type } = data;
+      const roomName = `${projectId}:${type}`;
+      await client.leave(roomName);
+      this.logger.log(`Client ${client.id} left room ${roomName}`);
+      client.emit('room:left', { projectId, type, message: `Left room ${roomName}` });
+    } catch (error) {
+      this.logger.error(`Error leaving room: ${error.message}`);
+      client.emit('error', { message: 'Failed to leave room' });
+    }
+  }
+
+  @SubscribeMessage('send-message')
+  async handleSendMessage(
+    @MessageBody() data: SendMessageDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const { projectId, type, message, senderId, senderName, senderAvatar } = data;
+      const roomName = `${projectId}:${type}`;
+      const payload = {
+        id: new Date().getTime().toString(), // Helper ID for frontend key
+        projectId,
+        type,
+        message,
+        senderId: senderId || client.id,
+        senderName,
+        senderAvatar,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Broadcast to room (including sender)
+      this.server.to(roomName).emit('chat:message', payload);
+      this.logger.log(`Message sent to room ${roomName}: ${message}`);
+    } catch (error) {
+      this.logger.error(`Error sending message: ${error.message}`);
+      client.emit('error', { message: 'Failed to send message' });
     }
   }
 

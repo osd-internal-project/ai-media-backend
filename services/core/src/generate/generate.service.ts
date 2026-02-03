@@ -104,6 +104,17 @@ export class GenerateService {
                 return { status: 400, data: 'Model not found' };
             }
 
+            let imageUrls: string[] = [];
+            if (body.image && body.image.length > 0) {
+                imageUrls = await Promise.all(
+                    body.image.map((img) =>
+                        this.minioClientSerives.getPresignedUrl(
+                            this.minioconfig.minioBucketUpload,
+                            img,
+                        ),
+                    ),
+                );
+            }
             // 4. Prepare Payload
             const { basePayload, axiosConfig } = await this.prepareGenerationPayloadImage(
                 body,
@@ -111,31 +122,32 @@ export class GenerateService {
                 getConfigApi,
                 user.userId,
                 taskId,
+                imageUrls
             );
 
             // 5. Call External API
-            const res = await this.executeGenerationRequest(
-                getConfigApi.apiCreateImage,
-                basePayload,
-                axiosConfig,
-            );
+            // const res = await this.executeGenerationRequest(
+            //     getConfigApi.apiCreateImage,
+            //     basePayload,
+            //     axiosConfig,
+            // );
 
             // data test
-            // const res = {
-            //     data: {
-            //         data: [
-            //             {
-            //                 url: 'https://www.aicave.ai/public/api/v1/s3/ai-media-image-upload/rc-upload-1769501912336-3.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260127%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260127T085458Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=897ff133759fd3836dce03d3e9039b586cf030c2464635a9da5acff6fcf6bb73',
-            //                 size: '2048x2048'
-            //             }
-            //         ],
-            //         usage: {
-            //             generated_images: 1,
-            //             output_tokens: 16280,
-            //             total_tokens: 16280
-            //         }
-            //     }
-            // }
+            const res = {
+                data: {
+                    data: [
+                        {
+                            url: 'https://www.aicave.ai/public/api/v1/s3/ai-media-image/80ecc909-bb73-4873-89d2-9605fc801be7/decae022-3b8a-4d4f-a2f1-4410d81b7cb1.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260202%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260202T155105Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=f6c44142b217fba0cbfe277ae6988538ca76e2dd41f1835822f31da7d3378bfe',
+                            size: '2048x2048'
+                        }
+                    ],
+                    usage: {
+                        generated_images: 1,
+                        output_tokens: 16280,
+                        total_tokens: 16280
+                    }
+                }
+            }
 
             // 6. อัพเดท cache
             await this.redis.set(
@@ -214,6 +226,15 @@ export class GenerateService {
                         resolution: body.size,
                         generateAudio: false,
                     }),
+                    users: {
+                        fullname: user.fullname,
+                        userId: user.userId,
+                        username: user.username,
+                    },
+                    referenceImages: imageUrls,
+                    resolution: body.size,
+                    ratio: body.ratio,
+                    imageUrls: [],
                 },
             };
         } catch (error) {
@@ -274,7 +295,7 @@ export class GenerateService {
             // data mockup
             // const res = {
             //     data: {
-            //         id: 'task-1234567890',
+            //         id: uuidv4(),
             //     },
             // };
             taskId = res.data.id;
@@ -386,9 +407,35 @@ export class GenerateService {
                     prompt: body.prompt,
                     typeGenerate: 'video',
                     genneratedStatus: 'PENDING',
-                    status: true,
+                    createdAt: new Date().toISOString(),
+                    status: false,
                     videoTaskId: res.data.id,
                     message: 'Video generation queued',
+                    generateConfig: {
+                        ratio: body.ratio,
+                        width: body.width,
+                        height: body.height,
+                        content: body.prompt,
+                        duration: body.duration.toString(),
+                        modelName: body.model,
+                        imageCount: 0,
+                        resolution: body.size,
+                        draft: body.draft,
+                        generateAudio: body.generateAudio,
+                        watermark: body.watermark,
+                    },
+                    users: {
+                        fullname: user.fullname,
+                        userId: user.userId,
+                        username: user.username
+                    },
+                    referenceImages: [
+                        ...(body.image[0] ? [body.image[0]] : []),
+                        ...(body.image[1] ? [body.image[1]] : [])
+                    ],
+                    resolution: body.size,
+                    ratio: body.ratio,
+                    imageUrls: []
                 },
             };
         } catch (error) {
@@ -570,6 +617,7 @@ export class GenerateService {
         configApi: any,
         userId: string,
         taskId: string,
+        imageUrls?: string[]
     ) {
         const axiosConfig: AxiosRequestConfig = {
             headers: {
@@ -579,17 +627,17 @@ export class GenerateService {
             httpsAgent: this.agent,
         };
 
-        let imageUrls: string[] = [];
-        if (body.image && body.image.length > 0) {
-            imageUrls = await Promise.all(
-                body.image.map((img) =>
-                    this.minioClientSerives.getPresignedUrl(
-                        this.minioconfig.minioBucketUpload,
-                        img,
-                    ),
-                ),
-            );
-        }
+        // let imageUrls: string[] = [];
+        // if (body.image && body.image.length > 0) {
+        //     imageUrls = await Promise.all(
+        //         body.image.map((img) =>
+        //             this.minioClientSerives.getPresignedUrl(
+        //                 this.minioconfig.minioBucketUpload,
+        //                 img,
+        //             ),
+        //         ),
+        //     );
+        // }
         // prompt: `create ${body.images || 1} images ${body.text}`,
         const basePayload = {
             model: body.model,

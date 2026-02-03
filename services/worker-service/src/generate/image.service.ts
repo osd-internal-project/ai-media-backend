@@ -79,6 +79,8 @@ export class ImageProcessor extends WorkerHost {
                 taskId,
                 totalImages,
                 timestamp: new Date().toISOString(),
+                projectId: body.projectId,
+                type: 'image',
             });
 
             // อัพเดทสถานะใน Redis
@@ -102,6 +104,8 @@ export class ImageProcessor extends WorkerHost {
                     current: index + 1,
                     total: totalImages,
                     percentage: Math.round(30 + (index / totalImages) * 50),
+                    projectId: body.projectId,
+                    type: 'image',
                 });
 
                 // Download image
@@ -125,6 +129,8 @@ export class ImageProcessor extends WorkerHost {
                     current: index + 1,
                     total: totalImages,
                     percentage: Math.round(30 + ((index + 0.5) / totalImages) * 50),
+                    projectId: body.projectId,
+                    type: 'image',
                 });
 
                 // Upload to MinIO
@@ -178,6 +184,8 @@ export class ImageProcessor extends WorkerHost {
                     imageUrl: bytepluseUrl,
                     index: index + 1,
                     total: totalImages,
+                    projectId: body.projectId,
+                    type: 'image',
                 });
             }
 
@@ -225,6 +233,8 @@ export class ImageProcessor extends WorkerHost {
                 imageCount: uploadedImages.length,
                 images: uploadedImages,
                 timestamp: new Date().toISOString(),
+                projectId: body.projectId,
+                type: 'image',
                 data: {
                     projectId: body.projectId,
                     userId,
@@ -305,6 +315,8 @@ export class ImageProcessor extends WorkerHost {
                 taskId,
                 error: error.message,
                 timestamp: new Date().toISOString(),
+                projectId: body.projectId,
+                type: 'image',
             });
 
             // บันทึก error log

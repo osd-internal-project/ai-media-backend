@@ -103,6 +103,8 @@ export class VideoProcessor extends WorkerHost {
             await this.publishToCore(clientId, 'worker:video-started', {
                 taskId,
                 timestamp: new Date().toISOString(),
+                type: 'video',
+                projectId: body.projectId,
             });
 
             // อัพเดทสถานะใน Redis
@@ -120,6 +122,8 @@ export class VideoProcessor extends WorkerHost {
                 await this.publishToCore(clientId, 'worker:video-progress', {
                     taskId,
                     timestamp: new Date().toISOString(),
+                    type: 'video',
+                    projectId: body.projectId,
                 });
                 const url = `${getConfigApi.apiCreateTaskVdo}/${taskId}`;
                 const token = getConfigApi.authorization;
@@ -142,7 +146,7 @@ export class VideoProcessor extends WorkerHost {
                 //         model: "seedance-1-5-pro-251215",
                 //         status: "succeeded",
                 //         content: {
-                //             video_url: "https://ark-content-generation-ap-southeast-1.tos-ap-southeast-1.volces.com/seedance-1-5-pro/02176976063449400000000000000000000ffffc0a8a8339a41f1.mp4?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260130%2Fap-southeast-1%2Ftos%2Frequest&X-Tos-Date=20260130T081213Z&X-Tos-Expires=86400&X-Tos-Signature=13ba5153558f1d940cae288ca656b3bd6ec11ff8961c4934788df877b48544d0&X-Tos-SignedHeaders=host"
+                //             video_url: "https://www.aicave.ai/public/api/v1/s3/ai-media-image-vdo/cgt-20260202111751-ncbdf/1770002305718-f543977d-b0e8-456e-b3d1-22b48810efe0.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260203%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260203T032016Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=c08d0cda185e086ed197d71c6b76922e62f0b349fa7bf8b2b4cb9069a298e626"
                 //         },
                 //         usage: {
                 //             completion_tokens: 108900,
@@ -161,7 +165,6 @@ export class VideoProcessor extends WorkerHost {
                 //         draft: false
                 //     }
                 // }
-                // const status = 'succeeded'
                 const status = getResult.data.status;
                 if (status === "succeeded") {
                     console.log(getResult.data)
@@ -171,6 +174,8 @@ export class VideoProcessor extends WorkerHost {
                         taskId,
                         videoUrl: content.video_url,
                         timestamp: new Date().toISOString(),
+                        type: 'video',
+                        projectId: body.projectId,
                     });
                     const videoRes = await axios.get(content.video_url, {
                         responseType: 'arraybuffer',
@@ -210,6 +215,8 @@ export class VideoProcessor extends WorkerHost {
                             result.thumbnail,
                         ),
                         timestamp: new Date().toISOString(),
+                        type: 'video',
+                        projectId: body.projectId,
                     });
 
                     await this.galleryRepo.updateMany({
@@ -246,6 +253,8 @@ export class VideoProcessor extends WorkerHost {
                 taskId,
                 success: true,
                 timestamp: new Date().toISOString(),
+                type: 'video',
+                projectId: body.projectId,
             });
 
             this.logger.log(`🎉 Job ${taskId} completed!`);
@@ -289,6 +298,8 @@ export class VideoProcessor extends WorkerHost {
                 taskId,
                 error: error.message,
                 timestamp: new Date().toISOString(),
+                type: 'video',
+                projectId: body.projectId,
             });
 
             // บันทึก error log
