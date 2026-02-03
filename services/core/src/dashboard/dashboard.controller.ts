@@ -15,6 +15,10 @@ import { UpdateDashboardDto } from './dto/update-dashboard.dto';
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
+  @Get('summary-organization/:token')
+  summaryOrganization(@Param('token') token: string, @Query() query: any) {
+    return this.dashboardService.summaryOrganization(token, query);
+  }
   @Get('summary-project/:token')
   summaryProject(@Param('token') token: string, @Query() query: any) {
     return this.dashboardService.summaryProject(token, query);

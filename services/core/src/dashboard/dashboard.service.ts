@@ -20,7 +20,38 @@ export class DashboardService {
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly orgMemberRepo: OrganizationMemberRepository,
     private readonly projectRepo: ProjectRepository,
-  ) { }
+  ) {}
+  async summaryOrganization(organizationId: string, query: any) {
+    const { createdAt } = query || {};
+    const sql = ` select o.id as "organizationId", o.name as "organizationName",o.package_image_amount::int as "packageImageAmount"
+    ,o.package_token_amount::int as "packageTokenAmount", o.remain_image_amount::int as "remainImageAmount",o.remain_token_amount::int as "remainTokenAmount"
+    ,image_used::int as "imageUsed",token_used::int as "tokenUsed" from organization o 
+    left join  (select  p2.organization_id  as "organization_id" ,SUM(COALESCE(image_used,0)) as image_used, SUM(COALESCE(token_used,0)) as token_used from  project p2 
+    left join ( select
+        log."projectId",
+        SUM(CASE WHEN log."typeGenerate" = 'image' THEN log."ImageUsed" ELSE 0 END)::int as image_used,
+        SUM(CASE WHEN log."typeGenerate" = 'video' THEN log."tokenUsed" ELSE 0 END)::int as token_used
+    from
+        log where  log.status='success'  ${
+          createdAt
+            ? `and log."createdAt" between '${dayjs(createdAt)
+                .startOf('month')
+                .toISOString()}' and '${dayjs(createdAt)
+                .endOf('month')
+                .toISOString()}'`
+            : ''
+        } group by log."projectId" ) l on l."projectId" = p2.id  where ${
+      organizationId ? `p2.organization_id  = '${organizationId}'` : ''
+    } 
+        group by p2.organization_id ) cal on o.organization_id = cal.organization_id where ${
+          organizationId ? `o.organization_id  = '${organizationId}'` : ''
+        } `;
+    const result: any = await this.prismaService.$queryRawUnsafe(sql);
+    if (result && result.length > 0) {
+      return result[0];
+    }
+    return {};
+  }
   async summaryProject(organizationId: string, query: any) {
     const { projectId, createdAt } = query || {};
     const projects = (await this.projectRepo.findMany({
@@ -109,7 +140,7 @@ export class DashboardService {
             logs: memberLogs,
           },
           tokenUsed: memberLogs
-            .filter((log) => log.typeGenerate === 'vdo')
+            .filter((log) => log.typeGenerate === 'viedo')
             .reduce(
               (sum, log) => sum + (log.tokenUsed ? Number(log.tokenUsed) : 0),
               0,
@@ -156,15 +187,17 @@ left join
 	from
 		log
 	left join project on
-		log."projectId" = project.id where log.status='success' and project.organization_id = '${organizationId}' ${projectId ? `and log."projectId" = '${projectId}'` : ''
-      } ${createdAt
+		log."projectId" = project.id where log.status='success' and project.organization_id = '${organizationId}' ${
+      projectId ? `and log."projectId" = '${projectId}'` : ''
+    } ${
+      createdAt
         ? `and log."createdAt" between '${dayjs(createdAt)
-          .startOf('month')
-          .toISOString()}' and '${dayjs(createdAt)
+            .startOf('month')
+            .toISOString()}' and '${dayjs(createdAt)
             .endOf('month')
             .toISOString()}'`
         : ''
-      } group by log."userId" ) lg on
+    } group by log."userId" ) lg on
 	om.user_id = lg.user_id order by fullname`;
     // console.log(sql);
     const result = await this.prismaService.$queryRawUnsafe(sql);
