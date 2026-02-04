@@ -1,3 +1,4 @@
+import { UsersRepository } from '@ai-media/share';
 import {
   Injectable,
   Logger,
@@ -5,12 +6,16 @@ import {
   BadRequestException,
   ConflictException,
   HttpException,
+  ForbiddenException,
 } from '@nestjs/common';
 import axios from 'axios';
 import configs from 'src/configs';
 
 @Injectable()
 export class KeycloakService {
+  constructor(
+    private readonly usersRepo: UsersRepository,
+  ) { }
   private async getAdminToken(): Promise<string> {
     const config = configs().keycloak;
     const params = new URLSearchParams();
@@ -127,8 +132,7 @@ export class KeycloakService {
       return users[0].id;
     } catch (error) {
       Logger.error(
-        `Error creating user in Keycloak: ${
-          error?.response?.data.error_description || error.message
+        `Error creating user in Keycloak: ${error?.response?.data.error_description || error.message
         }`,
       );
 
@@ -253,12 +257,31 @@ export class KeycloakService {
     params.append('scope', 'openid');
 
     try {
+      const user = await this.usersRepo.findOne({
+        where: {
+          OR: [
+            { username: loginDto.username },
+            { email: loginDto.username },
+          ],
+        },
+        select: {
+          recentOrganizationId: true,
+          username: true,
+          email: true,
+          status: true,
+          userId: true,
+        }
+      });
+
+      if (!user) {
+        throw new ForbiddenException('Not User'); // Message as requested
+      }
       const { data } = await axios.post(
         `${config.url}/realms/${config.realm}/protocol/openid-connect/token`,
         params,
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
       );
-      return data;
+      return { ...data, ...user };
     } catch (error) {
       Logger.error(
         `Login failed for user ${loginDto.username}`,

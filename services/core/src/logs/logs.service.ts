@@ -30,6 +30,10 @@ export class LogsService {
     skip?: number,
     take?: number,
   ) {
+    console.log(`projectId`, projectId)
+    console.log(`organizationId`, organizationId)
+    console.log(`skip`, skip)
+    console.log(`take`, take)
 
     const taskIds = await this.galleryRepo.findMany({
       where: {
@@ -103,12 +107,12 @@ export class LogsService {
         for (const filename of referenceImageFilenames) {
           const fileStats = await this.tosService.headObject(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
+            filename,
           );
           if (fileStats) {
             const url = await this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
+              filename,
             );
             referenceImageUrls.push(url);
           } else {
