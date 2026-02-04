@@ -279,21 +279,24 @@ export class WebsocketGatewayService
   async handleGetHistory(
     @MessageBody() data: {
       projectId: string,
+      organizeId: string,
       skip: number,
       take: number,
       type: 'image' | 'video'
     },
     @ConnectedSocket() client: Socket,
   ) {
-    console.log('chat:get-history', data);
     const projectId = data.projectId;
+    const organizeId = data.organizeId;
     try {
       const conversation = data.type === 'image' ? await this.logsService.findProjectImageByPage(
         projectId,
+        organizeId,
         data.skip,
         data.take,
       ) : await this.logsService.findProjectVideoByPage(
         projectId,
+        organizeId,
         data.skip,
         data.take,
       )

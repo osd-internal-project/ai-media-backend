@@ -56,7 +56,7 @@ export class GenerateService {
   /**
    * สร้าง Generation Task และส่งเข้า Queue
    */
-  async createGenerationTask(body: RequestImageGenerateDto, clientId: string, organizeId: string) {
+  async createGenerationTask(body: RequestImageGenerateDto, clientId: string) {
     const taskId = body.taskId;
     const redisImageCacheKey = `image_used_${body.userId}`;
 
@@ -106,7 +106,7 @@ export class GenerateService {
           body.image.map((img) =>
             this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${organizeId}/${body.projectId}/uploads/${img}`,
+              `organize/${body.organizeId}/${body.projectId}/uploads/${img}`,
             ),
           ),
         );
@@ -251,7 +251,6 @@ export class GenerateService {
   async createVideoGenerationTask(
     body: RequestVideoGenerateDto,
     clientId: string,
-    organizeId: string,
   ) {
     let taskId = body.taskId;
 
@@ -285,7 +284,7 @@ export class GenerateService {
 
       // 4. Prepare Payload
       const { basePayload, axiosConfig } =
-        await this.prepareGenerationPayloadVideo(body, getConfigApi, organizeId);
+        await this.prepareGenerationPayloadVideo(body, getConfigApi, body.organizeId);
 
       console.log('basePayload', basePayload);
 
