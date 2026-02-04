@@ -1,7 +1,5 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import * as path from 'path';
-import { v4 as uuidv4 } from 'uuid';
-import { MinioClientService } from '../minio-client/minio-client.service';
 import { appConfigs, tosConfigs } from '../configs';
 import {
   PromptGuideImageRepository,
@@ -12,7 +10,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class UploadImageService {
-  constructor( 
+  constructor(
     private readonly refImageRepository: RefImageRepository,
     private readonly promptGuideImageRepository: PromptGuideImageRepository,
     private readonly tosService: TosService,
@@ -58,7 +56,7 @@ export class UploadImageService {
     };
   }
   async deleteImage(uid: string) {
-    const bucketName=tosConfigs().tosBucket;
+    const bucketName = tosConfigs().tosBucket;
     const file = await this.refImageRepository.findOne({
       where: {
         uid: uid,
@@ -96,7 +94,7 @@ export class UploadImageService {
       // Copy file in Minio
       await this.tosService.copyObject(
         bucketname,
-       oldImagePath, // Source path (bucket/filename)
+        oldImagePath, // Source path (bucket/filename)
         newImagePath, // Dest filename
       );
       const newImage = await this.refImageRepository.create({
@@ -114,21 +112,21 @@ export class UploadImageService {
         },
       });
       // Logger.debug(newImage);
-      if(newImage){
-      return {
-        uid: uid,
-        name: image.imageName,
-        url: await this.tosService.getPreSignedUrl(
-          bucketname,
-          newImagePath,
-        ),
-        imagePath: newImagePath,
-        status: 'waiting', //waiting,processing,done
-      };
-      }else{
+      if (newImage) {
+        return {
+          uid: uid,
+          name: image.imageName,
+          url: await this.tosService.getPreSignedUrl(
+            bucketname,
+            newImagePath,
+          ),
+          imagePath: newImagePath,
+          status: 'waiting', //waiting,processing,done
+        };
+      } else {
         throw new Error('Failed to get image');
       }
-      
+
     }
   }
   async uploadPromptGuideImage(
@@ -138,14 +136,14 @@ export class UploadImageService {
     generateType: 'image' | 'video',
     file: Express.Multer.File,
     uid: string,
-    organizationId:string
+    organizationId: string
   ) {
 
     const bucketname = tosConfigs().tosBucket;
     const ext = path.extname(file.originalname);
-        const imagePath = `organize/${organizationId}/prompt-guide/${uid}${ext}`;
+    const imagePath = `organize/${organizationId}/prompt-guide/${uid}${ext}`;
     await this.tosService.putObject(
-     bucketname,
+      bucketname,
       imagePath,
       file.buffer,
     );

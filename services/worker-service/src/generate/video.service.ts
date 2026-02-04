@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Logger, Injectable } from '@nestjs/common';
+import { Logger, Injectable, BadRequestException } from '@nestjs/common';
 import {
     GalleryRepository,
     LogRepository,
@@ -8,14 +8,23 @@ import {
     QUEUE_NAME_VDO,
     RefImageRepository,
     RequestVideoGenerateDto,
+    TosService,
 } from '@ai-media/share';
-import { MinioClientService } from 'src/minio-client/minio-client.service';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
 import { OnWorkerEvent } from '@nestjs/bullmq';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import * as https from 'https';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as ffmpeg from 'fluent-ffmpeg';
+import { tosConfigs } from 'src/configs';
+const ffmpegPath = require('ffmpeg-static');
+const ffprobePath = require('ffprobe-static');
+
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath.path);
 
 interface VideoProcessJob {
     taskId: string;
@@ -59,11 +68,11 @@ export class VideoProcessor extends WorkerHost {
 
     constructor(
         @InjectRedis() private readonly redis: Redis,
-        private readonly minioClientService: MinioClientService,
         private readonly galleryRepo: GalleryRepository,
         private readonly logrepo: LogRepository,
         private readonly refImageRepository: RefImageRepository,
         private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
+        private readonly tosService: TosService,
     ) {
         super();
         this.agent = new https.Agent({
@@ -198,21 +207,21 @@ export class VideoProcessor extends WorkerHost {
                         filename: '',
                         path: '',
                     };
-
-                    const result = await this.minioClientService.uploadVideoWithThumbnail(
-                        process.env.MINIO_BUCKET_VDO,
+                    const result = await this.uploadVideoWithThumbnail(
+                        body.organizeId,
+                        body.projectId,
                         mockFile,
                         taskId,
                     );
                     await this.publishToCore(clientId, 'worker:video-upload-success', {
                         taskId,
-                        videoUrl: await this.minioClientService.getPresignedUrl(
-                            process.env.MINIO_BUCKET_VDO,
-                            result.file,
+                        videoUrl: await this.tosService.getPreSignedUrl(
+                            tosConfigs().tosBucket,
+                            `organize/${body.organizeId}/${body.projectId}/generate-video/${result.file}`
                         ),
-                        thumbnailUrl: await this.minioClientService.getPresignedUrl(
-                            process.env.MINIO_BUCKET_VDO,
-                            result.thumbnail,
+                        thumbnailUrl: await this.tosService.getPreSignedUrl(
+                            tosConfigs().tosBucket,
+                            `organize/${body.organizeId}/${body.projectId}/generate-video/${result.thumbnail}`
                         ),
                         timestamp: new Date().toISOString(),
                         type: 'video',
@@ -379,6 +388,80 @@ export class VideoProcessor extends WorkerHost {
             content: body?.prompt,
             ...(body?.generateAudio && { generateAudio: body?.generateAudio }),
         };
+    }
+
+    private async uploadVideoWithThumbnail(
+        organizeId: string,
+        projectId: string,
+        file: Express.Multer.File,
+        id: string,
+    ) {
+        const videoFileName = `${Date.now()}-${file.originalname}`;
+        const thumbnailFileName = `thumb-${Date.now()}.png`;
+        const objectName = `${id}/${videoFileName}`;
+        const thumbnailObjectName = `${id}/${thumbnailFileName}`;
+
+        // Use os.tmpdir() for better compatibility
+        const os = require('os');
+        const tempDir = os.tmpdir();
+        const tempVideoPath = path.join(tempDir, videoFileName);
+        const tempThumbPath = path.join(tempDir, thumbnailFileName);
+
+        // 2. เขียนไฟล์วิดีโอลง Disk ชั่วคราวเพื่อให้ FFmpeg อ่าน
+        fs.writeFileSync(tempVideoPath, file.buffer);
+
+        try {
+            // 3. สร้าง Thumbnail ด้วย FFmpeg
+            await new Promise((resolve, reject) => {
+                ffmpeg(tempVideoPath)
+                    .screenshots({
+                        count: 1,
+                        folder: path.dirname(tempThumbPath),
+                        filename: path.basename(tempThumbPath),
+                        timemarks: ['20%'], // จับภาพที่ตำแหน่ง 20% ของวิดีโอ
+                        size: '320x?', // ปรับขนาด (กว้าง 320, สูง auto)
+                    })
+                    .on('end', resolve)
+                    .on('error', reject);
+            });
+
+            // 4. Upload Video ขึ้น MinIO (ใช้ putObject แทน fPutObject)
+
+            await this.tosService.putObject(
+                tosConfigs().tosBucket,
+                `organize/${organizeId}/${projectId}/video-generate/${objectName}`,
+                file.buffer,
+            );
+
+            // 5. Upload Thumbnail ขึ้น MinIO
+            // อ่านไฟล์ thumbnail ขึ้นมาเป็น buffer ก่อน
+            const thumbBuffer = fs.readFileSync(tempThumbPath);
+            await this.tosService.putObject(
+                tosConfigs().tosBucket,
+                `organize/${organizeId}/${projectId}/video-generate/${thumbnailObjectName}`,
+                thumbBuffer,
+            );
+
+            // 6. (Optional) สร้าง Presigned URL แบบ Public (ถ้า bucket เป็น public ไม่ต้องใช้ presigned ก็ได้ แต่ code เดิมใช้)
+            // const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
+            // const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
+
+            return {
+                file: objectName,
+                thumbnail: thumbnailObjectName,
+            };
+        } catch (error) {
+            console.error('Error in uploadVideoWithThumbnail:', error);
+            throw new BadRequestException('Error processing video: ' + error.message);
+        } finally {
+            // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
+            try {
+                if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
+                if (fs.existsSync(tempThumbPath)) fs.unlinkSync(tempThumbPath);
+            } catch (cleanupError) {
+                console.error('Error cleaning up temp files:', cleanupError);
+            }
+        }
     }
 
     async onModuleDestroy() {

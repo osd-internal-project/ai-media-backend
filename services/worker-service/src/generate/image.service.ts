@@ -7,8 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import * as https from 'https';
 import * as path from 'path';
-import { RequestImageGenerateDto, GalleryRepository, LogRepository, QUEUE_NAME_IMAGE, RefImageRepository } from '@ai-media/share';
-import { MinioClientService } from 'src/minio-client/minio-client.service';
+import { RequestImageGenerateDto, GalleryRepository, LogRepository, QUEUE_NAME_IMAGE, RefImageRepository, TosService } from '@ai-media/share';
+import { tosConfigs } from 'src/configs';
 
 interface ImageProcessJob {
     taskId: string;
@@ -32,10 +32,10 @@ export class ImageProcessor extends WorkerHost {
 
     constructor(
         @InjectRedis() private readonly redis: Redis,
-        private readonly minioClientService: MinioClientService,
         private readonly galleryRepo: GalleryRepository,
         private readonly logrepo: LogRepository,
         private readonly refImageRepository: RefImageRepository,
+        private readonly tosService: TosService,
     ) {
         super();
         this.agent = new https.Agent({
@@ -134,11 +134,12 @@ export class ImageProcessor extends WorkerHost {
                 });
 
                 // Upload to MinIO
-                await this.minioClientService.uploadFile(
+                const bucketname = tosConfigs().tosBucket;
+                const imagePath = `organize/${body.organizeId}/image-generate/${objectName}`;
+                await this.tosService.putObject(
+                    bucketname,
+                    imagePath,
                     buffer,
-                    buffer.length,
-                    process.env.MINIO_BUCKET || 'ai-media-image',
-                    objectName,
                 );
 
                 uploadedImages.push(objectName);

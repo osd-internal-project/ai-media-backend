@@ -13,13 +13,10 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { UploadImageService } from './upload-image.service';
-import { MinioClientService } from '../minio-client/minio-client.service';
-import * as path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 
 @Controller('upload')
 export class UploadImageController {
-  constructor(private readonly uploadImageService: UploadImageService) {}
+  constructor(private readonly uploadImageService: UploadImageService) { }
 
   @Post()
   @UseInterceptors(FileInterceptor('file'))

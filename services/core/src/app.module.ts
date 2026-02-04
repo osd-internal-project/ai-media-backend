@@ -4,7 +4,6 @@ import { ConfigModule } from '@nestjs/config';
 import { InventoryController } from './app.controller';
 import { InventoryService } from './app.service';
 import { RequestLoggerMiddleware } from './middleware/request-logger.middleware';
-import { PublicController } from './public/public.controller';
 import { PrismaModule } from '@ai-media/share';
 import { GenerateImageModule } from './generate-image/generate-image.module';
 import { HttpModule } from '@nestjs/axios';
@@ -14,7 +13,7 @@ import { GalleryModule } from './gallery/gallery.module';
 import { ProjectMemberModule } from './project-member/project-member.module';
 import { MasteradataConfigApiModule } from './masteradata-config-api/masteradata-config-api.module';
 import { DashboardModule } from './dashboard/dashboard.module';
-import { MinioClientModule } from './minio-client/minio-client.module';
+// import { MinioClientModule } from './minio-client/minio-client.module';
 import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
 import { PromptGuideTypeModule } from './prompt-guide-type/prompt-guide-type.module';
 import { OmnihumenModule } from './omnihumen/omnihumen.module';
@@ -44,7 +43,7 @@ import { WebsocketModule } from './websocket/websocket.module';
     ProjectMemberModule,
     MasteradataConfigApiModule,
     DashboardModule,
-    MinioClientModule,
+    // MinioClientModule,
     PromptGuideModule,
     PromptGuideTypeModule,
     OmnihumenModule,
@@ -61,7 +60,7 @@ import { WebsocketModule } from './websocket/websocket.module';
       },
     }),
   ],
-  controllers: [InventoryController, PublicController],
+  controllers: [InventoryController],
   providers: [InventoryService],
 })
 export class InventoryMainModule implements NestModule {
