@@ -4,13 +4,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { WebsocketGatewayService } from './websocket.gateway';
 import { WebsocketService } from './websocket.service';
 import { GenerateService } from 'src/generate/generate.service';
-import { PrismaModule, QUEUE_NAME_IMAGE, QUEUE_NAME_VDO } from '@ai-media/share';
+import { PrismaModule, QUEUE_NAME_IMAGE, QUEUE_NAME_VDO, TosModule } from '@ai-media/share';
 import { MinioClientModule } from 'src/minio-client/minio-client.module';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { LogsService } from 'src/logs/logs.service';
 
 @Module({
-  imports: [PrismaModule, MinioClientModule,
+  imports: [PrismaModule, MinioClientModule, TosModule,
     RedisModule.forRoot({
       type: 'single',
       url: process.env.REDIS_URL || 'redis://localhost:6379',

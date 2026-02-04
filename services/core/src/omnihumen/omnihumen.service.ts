@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
 import { CreateOmnihumanDto } from './dto/create-omnihuman.dto';
 import { UpdateOmnihumanDto } from './dto/update-omnihuman.dto';
 import { MinioClientService } from 'src/minio-client/minio-client.service';
-import { GenerateImageService } from 'src/generate-image/generate-image.service';
+// import { GenerateImageService } from 'src/generate-image/generate-image.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import { HttpService } from '@nestjs/axios';
@@ -30,7 +30,7 @@ export class OmnihumenService {
     private minioconfigs: ConfigType<typeof minioConfigs>,
     @Inject(byteplusConfigs.KEY)
     private byteplusconfigs: ConfigType<typeof byteplusConfigs>,
-    private readonly generateImageService: GenerateImageService,
+    // private readonly generateImageService: GenerateImageService,
     private readonly minioclientSerives: MinioClientService,
     private readonly httpService: HttpService,
     private readonly logrepo: LogRepository,
@@ -61,7 +61,8 @@ export class OmnihumenService {
             fileType: files.audio[0].mimetype,
             fileName: audioFileName,
           };
-          return this.generateImageService.createFileLogs(data);
+          return data
+          // return this.generateImageService.createFileLogs(data);
         });
       const imageExt = path.extname(files.image[0].originalname); // นามสกุลไฟล์
       const imageFileName = `${uuidv4()}${imageExt}`;
@@ -78,7 +79,8 @@ export class OmnihumenService {
             fileType: files.image[0].mimetype,
             fileName: imageFileName,
           };
-          return this.generateImageService.createFileLogs(data);
+          return data
+          // return this.generateImageService.createFileLogs(data);
         });
       Logger.debug(audio, image);
       if (!audio || !image) {

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { MasterdataModelTypeRepository, PrismaModule, TosModule } from '@ai-media/share';
+import { PrismaModule, TosModule } from '@ai-media/share';
 import { GenerateImageService } from './generate-image.service';
 import { GenerateImageController } from './generate-image.controller';
 
