@@ -12,8 +12,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class UploadImageService {
-  constructor(
-    private readonly minioClientSerives: MinioClientService,
+  constructor( 
     private readonly refImageRepository: RefImageRepository,
     private readonly promptGuideImageRepository: PromptGuideImageRepository,
     private readonly tosService: TosService,
@@ -26,14 +25,15 @@ export class UploadImageService {
     generateType: 'image' | 'video',
     file: Express.Multer.File,
     uid: string,
+    organizationId: string,
   ) {
-    const bucketname = appConfigs().minioBucketUpload;
+    const bucketname = tosConfigs().tosBucket;
     const ext = path.extname(file.originalname);
-    await this.minioClientSerives.uploadFile(
-      file.buffer,
-      file.buffer.length,
+    const imagePath = `organize/${organizationId}/${projectId}/${uid}${ext}`;
+    await this.tosService.putObject(
       bucketname,
-      `${uid}${ext}`,
+      imagePath,
+      file.buffer,
     );
     await this.refImageRepository.create({
       data: {
@@ -42,7 +42,7 @@ export class UploadImageService {
         projectId: projectId,
         index: index,
         imageName: file.originalname,
-        imagePath: `${bucketname}/${uid}${ext}`,
+        imagePath: imagePath,
         imageType: file.mimetype,
         imageSize: file.size,
         generateType: generateType,
@@ -52,15 +52,13 @@ export class UploadImageService {
     return {
       uid: uid,
       name: file.originalname,
-      url: await this.minioClientSerives.getPresignedUrl(
-        bucketname,
-        `${uid}${ext}`,
-      ),
-      imagePath: `${uid}${ext}`,
+      url: await this.tosService.getPreSignedUrl(bucketname, imagePath),
+      imagePath: imagePath,
       status: 'waiting', //waiting,processing,done
     };
   }
   async deleteImage(uid: string) {
+    const bucketName=tosConfigs().tosBucket;
     const file = await this.refImageRepository.findOne({
       where: {
         uid: uid,
@@ -69,16 +67,12 @@ export class UploadImageService {
     if (!file) {
       throw new ConflictException('File not found');
     }
-    const ext = path.extname(file.imagePath);
     await this.refImageRepository.deleteMany({
       where: {
         uid: uid,
       },
     });
-    await this.minioClientSerives.deleteFile(
-      `${uid}${ext}`,
-      appConfigs().minioBucketUpload,
-    );
+    await this.tosService.deleteObject(bucketName, file.imagePath);
   }
   async uploadImageFromPrompt(
     userId: string,
@@ -87,6 +81,7 @@ export class UploadImageService {
     generateType: 'image' | 'video',
     uid: string,
     refUid: string,
+    organizationId: string,
   ) {
     const image = await this.promptGuideImageRepository.findOne({
       where: { uid: refUid },
@@ -95,14 +90,14 @@ export class UploadImageService {
 
     if (image) {
       const ext = path.extname(image.imageName);
-      const newImagePath = `${uid}${ext}`;
-      const newFileName = `${uid}${ext}`;
+      const oldImagePath = `${image.imagePath}`;
+      const newImagePath = `organize/${organizationId}/${projectId}/${uid}${ext}`;
 
       // Copy file in Minio
-      await this.minioClientSerives.copyFile(
+      await this.tosService.copyObject(
         bucketname,
-        image.imagePath, // Source path (bucket/filename)
-        newFileName, // Dest filename
+       oldImagePath, // Source path (bucket/filename)
+        newImagePath, // Dest filename
       );
       const newImage = await this.refImageRepository.create({
         data: {
@@ -118,17 +113,22 @@ export class UploadImageService {
           status: 'waiting',
         },
       });
-      Logger.debug(newImage);
+      // Logger.debug(newImage);
+      if(newImage){
       return {
         uid: uid,
         name: image.imageName,
-        url: await this.minioClientSerives.getPresignedUrl(
+        url: await this.tosService.getPreSignedUrl(
           bucketname,
-          `${uid}${ext}`,
+          newImagePath,
         ),
-        imagePath: `${uid}${ext}`,
+        imagePath: newImagePath,
         status: 'waiting', //waiting,processing,done
       };
+      }else{
+        throw new Error('Failed to get image');
+      }
+      
     }
   }
   async uploadPromptGuideImage(
@@ -141,11 +141,11 @@ export class UploadImageService {
     organizationId:string
   ) {
 
-    const bucketname = appConfigs().minioBucketUpload;
+    const bucketname = tosConfigs().tosBucket;
     const ext = path.extname(file.originalname);
         const imagePath = `organize/${organizationId}/prompt-guide/${uid}${ext}`;
     await this.tosService.putObject(
-      'ai-cave-sit',
+     bucketname,
       imagePath,
       file.buffer,
     );
@@ -180,15 +180,15 @@ export class UploadImageService {
     if (!file) {
       throw new ConflictException('File not found');
     }
-    const ext = path.extname(file.imagePath);
+    const bucketname = tosConfigs().tosBucket;
     await this.promptGuideImageRepository.deleteMany({
       where: {
         uid: uid,
       },
     });
-    await this.minioClientSerives.deleteFile(
-      `${uid}${ext}`,
-      appConfigs().minioBucketUpload,
+    await this.tosService.deleteObject(
+      bucketname,
+      file.imagePath,
     );
   }
 
@@ -209,9 +209,9 @@ export class UploadImageService {
     Logger.log(`Found ${files.length} files to delete`);
     for (const file of files) {
       const ext = path.extname(file.imagePath);
-      await this.minioClientSerives.deleteFile(
-        `${file.uid}${ext}`,
-        appConfigs().minioBucketUpload,
+      await this.tosService.deleteObject(
+        tosConfigs().tosBucket,
+        file.imagePath,
       );
       await this.refImageRepository.deleteMany({
         where: {
