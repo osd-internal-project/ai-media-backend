@@ -149,14 +149,14 @@ export class TosService {
   async copyObject(
     bucketName: string,
     sourceObjectName: string,
-    newObjectName: string,
+    targetObjectName: string,
   ) {
     try {
       const { data } = await this.client.copyObject({
         bucket: bucketName,
-        key: sourceObjectName,
+        key: targetObjectName,
         srcBucket: bucketName,
-        srcKey: newObjectName,
+        srcKey: sourceObjectName,
       });
       return data;
     } catch (error) {

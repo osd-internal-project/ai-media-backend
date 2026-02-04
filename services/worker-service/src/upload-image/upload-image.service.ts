@@ -12,11 +12,11 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class UploadImageService {
-  constructor( 
+  constructor(
     private readonly refImageRepository: RefImageRepository,
     private readonly promptGuideImageRepository: PromptGuideImageRepository,
     private readonly tosService: TosService,
-  ) { }
+  ) {}
 
   async uploadImage(
     userId: string,
@@ -30,11 +30,7 @@ export class UploadImageService {
     const bucketname = tosConfigs().tosBucket;
     const ext = path.extname(file.originalname);
     const imagePath = `organize/${organizationId}/${projectId}/${uid}${ext}`;
-    await this.tosService.putObject(
-      bucketname,
-      imagePath,
-      file.buffer,
-    );
+    await this.tosService.putObject(bucketname, imagePath, file.buffer);
     await this.refImageRepository.create({
       data: {
         uid: uid,
@@ -58,7 +54,7 @@ export class UploadImageService {
     };
   }
   async deleteImage(uid: string) {
-    const bucketName=tosConfigs().tosBucket;
+    const bucketName = tosConfigs().tosBucket;
     const file = await this.refImageRepository.findOne({
       where: {
         uid: uid,
@@ -86,18 +82,20 @@ export class UploadImageService {
     const image = await this.promptGuideImageRepository.findOne({
       where: { uid: refUid },
     });
-    const bucketname = appConfigs().minioBucketUpload;
+    const bucketname = tosConfigs().tosBucket;
 
     if (image) {
       const ext = path.extname(image.imageName);
       const oldImagePath = `${image.imagePath}`;
       const newImagePath = `organize/${organizationId}/${projectId}/${uid}${ext}`;
-
+      console.log(bucketname);
+      console.log(oldImagePath);
+      console.log(newImagePath);
       // Copy file in Minio
       await this.tosService.copyObject(
         bucketname,
-       oldImagePath, // Source path (bucket/filename)
-        newImagePath, // Dest filename
+        oldImagePath, // Dest filename
+        newImagePath, // Source path (bucket/filename)
       );
       const newImage = await this.refImageRepository.create({
         data: {
@@ -114,21 +112,17 @@ export class UploadImageService {
         },
       });
       // Logger.debug(newImage);
-      if(newImage){
-      return {
-        uid: uid,
-        name: image.imageName,
-        url: await this.tosService.getPreSignedUrl(
-          bucketname,
-          newImagePath,
-        ),
-        imagePath: newImagePath,
-        status: 'waiting', //waiting,processing,done
-      };
-      }else{
+      if (newImage) {
+        return {
+          uid: uid,
+          name: image.imageName,
+          url: await this.tosService.getPreSignedUrl(bucketname, newImagePath),
+          imagePath: newImagePath,
+          status: 'waiting', //waiting,processing,done
+        };
+      } else {
         throw new Error('Failed to get image');
       }
-      
     }
   }
   async uploadPromptGuideImage(
@@ -138,17 +132,12 @@ export class UploadImageService {
     generateType: 'image' | 'video',
     file: Express.Multer.File,
     uid: string,
-    organizationId:string
+    organizationId: string,
   ) {
-
     const bucketname = tosConfigs().tosBucket;
     const ext = path.extname(file.originalname);
-        const imagePath = `organize/${organizationId}/prompt-guide/${uid}${ext}`;
-    await this.tosService.putObject(
-     bucketname,
-      imagePath,
-      file.buffer,
-    );
+    const imagePath = `organize/${organizationId}/prompt-guide/${uid}${ext}`;
+    await this.tosService.putObject(bucketname, imagePath, file.buffer);
     const uploadedImage = await this.promptGuideImageRepository.create({
       data: {
         uid: uid,
@@ -186,10 +175,7 @@ export class UploadImageService {
         uid: uid,
       },
     });
-    await this.tosService.deleteObject(
-      bucketname,
-      file.imagePath,
-    );
+    await this.tosService.deleteObject(bucketname, file.imagePath);
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
