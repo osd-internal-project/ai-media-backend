@@ -106,7 +106,7 @@ export class GenerateService {
           body.image.map((img) =>
             this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${body.organizationId}/${body.projectId}/uploads/${img}`,
+              img,
             ),
           ),
         );
@@ -710,7 +710,7 @@ export class GenerateService {
               image_url: {
                 url: await this.tosService.getPreSignedUrl(
                   tosConfigs().tosBucket,
-                  `organize/${organizationId}/${body.projectId}/uploads/${body.image[0]}`,
+                  body.image[0],
                 ),
               },
               role: 'first_frame',
@@ -724,7 +724,7 @@ export class GenerateService {
               image_url: {
                 url: await this.tosService.getPreSignedUrl(
                   tosConfigs().tosBucket,
-                  `organize/${organizationId}/${body.projectId}/uploads/${body.image[1]}`,
+                  body.image[1],
                 ),
               },
               role: 'last_frame',
