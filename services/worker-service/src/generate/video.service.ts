@@ -398,8 +398,8 @@ export class VideoProcessor extends WorkerHost {
     ) {
         const videoFileName = `${Date.now()}-${file.originalname}`;
         const thumbnailFileName = `thumb-${Date.now()}.png`;
-        const objectName = `${id}/${videoFileName}`;
-        const thumbnailObjectName = `${id}/${thumbnailFileName}`;
+        const objectName = `${videoFileName}`;
+        const thumbnailObjectName = `${thumbnailFileName}`;
 
         // Use os.tmpdir() for better compatibility
         const os = require('os');
