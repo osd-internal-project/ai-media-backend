@@ -5,11 +5,10 @@ import {
   UsersRepository,
   ErrorLogRepository,
   AuditLogRepository,
+  TosService,
 } from '@ai-media/share';
 import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
-import * as dayjs from 'dayjs';
-import { MinioClientService } from '../minio-client/minio-client.service';
-import { minioConfigs } from 'src/configs';
+import { minioConfigs, tosConfigs } from 'src/configs';
 import { ConfigType } from '@nestjs/config';
 
 @Injectable()
@@ -20,12 +19,14 @@ export class LogsService {
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly userRepo: UsersRepository,
-    private readonly minioService: MinioClientService,
     private readonly auditLogRepo: AuditLogRepository,
     private readonly errorLogRepo: ErrorLogRepository,
+    private readonly tosService: TosService,
+
   ) { }
   async findProjectImageByPage(
     projectId: string,
+    organizeId: string,
     skip?: number,
     take?: number,
   ) {
@@ -83,19 +84,15 @@ export class LogsService {
 
     for (const item of data) {
       const url = item.imageUrl
-        ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'video'
-            ? this.minioconfig.minioBucketVdo
-            : this.minioconfig.minioBucket,
-          item.imageUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
-        ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'video'
-            ? this.minioconfig.minioBucketVdo
-            : this.minioconfig.minioBucket,
-          item.thumbnailUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
 
@@ -104,14 +101,14 @@ export class LogsService {
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
-          const fileStats = await this.minioService.statFile(
-            this.minioconfig.minioBucketUpload,
-            filename,
+          const fileStats = await this.tosService.headObject(
+            tosConfigs().tosBucket,
+            `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
           );
           if (fileStats) {
-            const url = await this.minioService.getPresignedUrl(
-              this.minioconfig.minioBucketUpload,
-              filename,
+            const url = await this.tosService.getPreSignedUrl(
+              tosConfigs().tosBucket,
+              `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
             );
             referenceImageUrls.push(url);
           } else {
@@ -158,7 +155,7 @@ export class LogsService {
 
     return result;
   }
-  async findProjectImageByFristId(projectId: string, fristId: string) {
+  async findProjectImageByFristId(projectId: string, organizeId: string, fristId: string) {
     const cerrentTask = await this.galleryRepo.findOne({
       where: {
         id: fristId,
@@ -224,19 +221,15 @@ export class LogsService {
 
     for (const item of data) {
       const url = item.imageUrl
-        ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'video'
-            ? this.minioconfig.minioBucketVdo
-            : this.minioconfig.minioBucket,
-          item.imageUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
-        ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'video'
-            ? this.minioconfig.minioBucketVdo
-            : this.minioconfig.minioBucket,
-          item.thumbnailUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
 
@@ -245,14 +238,14 @@ export class LogsService {
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
-          const fileStats = await this.minioService.statFile(
-            this.minioconfig.minioBucketUpload,
-            filename,
+          const fileStats = await this.tosService.headObject(
+            tosConfigs().tosBucket,
+            `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
           );
           if (fileStats) {
-            const url = await this.minioService.getPresignedUrl(
-              this.minioconfig.minioBucketUpload,
-              filename,
+            const url = await this.tosService.getPreSignedUrl(
+              tosConfigs().tosBucket,
+              `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
             );
             referenceImageUrls.push(url);
           } else {
@@ -297,6 +290,7 @@ export class LogsService {
   }
   async findProjectVideoByPage(
     projectId: string,
+    organizeId: string,
     skip?: number,
     take?: number,
   ) {
@@ -362,15 +356,15 @@ export class LogsService {
     const newData = new Map();
     for (const item of data) {
       const url = item.imageUrl
-        ? await this.minioService.getPresignedUrl(
-          this.minioconfig.minioBucketVdo,
-          item.imageUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
-        ? await this.minioService.getPresignedUrl(
-          this.minioconfig.minioBucketVdo,
-          item.thumbnailUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
 
@@ -379,14 +373,14 @@ export class LogsService {
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
-          const fileStats = await this.minioService.statFile(
-            this.minioconfig.minioBucketUpload,
-            filename,
+          const fileStats = await this.tosService.headObject(
+            tosConfigs().tosBucket,
+            `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
           );
           if (fileStats) {
-            const url = await this.minioService.getPresignedUrl(
-              this.minioconfig.minioBucketUpload,
-              filename,
+            const url = await this.tosService.getPreSignedUrl(
+              tosConfigs().tosBucket,
+              `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
             );
             referenceImageUrls.push(url);
           } else {
@@ -435,7 +429,7 @@ export class LogsService {
 
     return result;
   }
-  async findProjectViedoByFristId(projectId: string, fristId: string) {
+  async findProjectViedoByFristId(projectId: string, organizeId: string, fristId: string) {
     const cerrentTask = await this.galleryRepo.findOne({
       where: {
         id: fristId,
@@ -507,15 +501,15 @@ export class LogsService {
     const newData = new Map();
     for (const item of data) {
       const url = item.imageUrl
-        ? await this.minioService.getPresignedUrl(
-          this.minioconfig.minioBucketVdo,
-          item.imageUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
-        ? await this.minioService.getPresignedUrl(
-          this.minioconfig.minioBucketVdo,
-          item.thumbnailUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
 
@@ -524,14 +518,14 @@ export class LogsService {
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
-          const fileStats = await this.minioService.statFile(
-            this.minioconfig.minioBucketUpload,
-            filename,
+          const fileStats = await this.tosService.headObject(
+            tosConfigs().tosBucket,
+            `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
           );
           if (fileStats) {
-            const url = await this.minioService.getPresignedUrl(
-              this.minioconfig.minioBucketUpload,
-              filename,
+            const url = await this.tosService.getPreSignedUrl(
+              tosConfigs().tosBucket,
+              `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
             );
             referenceImageUrls.push(url);
           } else {
