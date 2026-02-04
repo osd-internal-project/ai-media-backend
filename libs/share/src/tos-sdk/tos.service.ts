@@ -175,4 +175,16 @@ export class TosService {
       handleError(error);
     }
   }
+
+  async headObject(bucketName: string, objectName: string) {
+    try {
+      const { data } = await this.client.headObject({
+        bucket: bucketName,
+        key: objectName,
+      });
+      return data;
+    } catch (error) {
+      handleError(error);
+    }
+  }
 }

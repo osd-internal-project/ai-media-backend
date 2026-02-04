@@ -19,32 +19,36 @@ export class LogsController {
   @Get('find-image/:projectId')
   findProjectImageByPage(
     @Param('projectId') projectId: string,
+    @Query('organizeId') organizeId: string,
     @Query('skip') skip?: number,
     @Query('take') take?: number,
   ) {
-    return this.logsService.findProjectImageByPage(projectId, +skip, +take);
+    return this.logsService.findProjectImageByPage(projectId, organizeId, +skip, +take);
   }
   @Get('find-image/:projectId/frist')
   findProjectImageByFristId(
     @Param('projectId') projectId: string,
+    @Query('organizeId') organizeId: string,
     @Query('fristid') fristId: string,
   ) {
-    return this.logsService.findProjectImageByFristId(projectId, fristId);
+    return this.logsService.findProjectImageByFristId(projectId, organizeId, fristId);
   }
   @Get('find-vdo/:projectId')
   findProjectVideoByPage(
     @Param('projectId') projectId: string,
+    @Query('organizeId') organizeId: string,
     @Query('skip') skip?: number,
     @Query('take') take?: number,
   ) {
-    return this.logsService.findProjectVideoByPage(projectId, +skip, +take);
+    return this.logsService.findProjectVideoByPage(projectId, organizeId, +skip, +take);
   }
   @Get('find-vdo/:projectId/frist')
   findProjectViedoByFristId(
     @Param('projectId') projectId: string,
+    @Query('organizeId') organizeId: string,
     @Query('fristid') fristId: string,
   ) {
-    return this.logsService.findProjectViedoByFristId(projectId, fristId);
+    return this.logsService.findProjectViedoByFristId(projectId, organizeId, fristId);
   }
 
   @Get('generate-vdo-logs/:taskId')
