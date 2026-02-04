@@ -27,7 +27,7 @@ export class UploadImageService {
   ) {
     const bucketname = tosConfigs().tosBucket;
     const ext = path.extname(file.originalname);
-    const imagePath = `organize/${organizationId}/${projectId}/${uid}${ext}`;
+    const imagePath = `organize/${organizationId}/${projectId}/upload/${uid}${ext}`;
     await this.tosService.putObject(bucketname, imagePath, file.buffer);
     await this.refImageRepository.create({
       data: {
@@ -85,7 +85,7 @@ export class UploadImageService {
     if (image) {
       const ext = path.extname(image.imageName);
       const oldImagePath = `${image.imagePath}`;
-      const newImagePath = `organize/${organizationId}/${projectId}/${uid}${ext}`;
+      const newImagePath = `organize/${organizationId}/${projectId}/upload/${uid}${ext}`;
       console.log(bucketname);
       console.log(oldImagePath);
       console.log(newImagePath);
