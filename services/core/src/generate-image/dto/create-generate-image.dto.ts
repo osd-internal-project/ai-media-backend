@@ -14,5 +14,5 @@ export class CreateGenerateImageDto {
   modelName?: string; // Add optional model name
   generateAudio?: boolean;
   generateConfig?: any;
-  organizeId: string;
+  organizationId: string;
 }

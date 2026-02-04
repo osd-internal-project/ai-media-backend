@@ -106,7 +106,7 @@ export class GenerateService {
           body.image.map((img) =>
             this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${body.organizeId}/${body.projectId}/uploads/${img}`,
+              `organize/${body.organizationId}/${body.projectId}/uploads/${img}`,
             ),
           ),
         );
@@ -284,7 +284,7 @@ export class GenerateService {
 
       // 4. Prepare Payload
       const { basePayload, axiosConfig } =
-        await this.prepareGenerationPayloadVideo(body, getConfigApi, body.organizeId);
+        await this.prepareGenerationPayloadVideo(body, getConfigApi, body.organizationId);
 
       console.log('basePayload', basePayload);
 
@@ -686,7 +686,7 @@ export class GenerateService {
   private async prepareGenerationPayloadVideo(
     body: RequestVideoGenerateDto,
     configApi: any,
-    organizeId: string,
+    organizationId: string,
   ) {
     const axiosConfig: AxiosRequestConfig = {
       headers: {
@@ -710,7 +710,7 @@ export class GenerateService {
               image_url: {
                 url: await this.tosService.getPreSignedUrl(
                   tosConfigs().tosBucket,
-                  `organize/${organizeId}/${body.projectId}/uploads/${body.image[0]}`,
+                  `organize/${organizationId}/${body.projectId}/uploads/${body.image[0]}`,
                 ),
               },
               role: 'first_frame',
@@ -724,7 +724,7 @@ export class GenerateService {
               image_url: {
                 url: await this.tosService.getPreSignedUrl(
                   tosConfigs().tosBucket,
-                  `organize/${organizeId}/${body.projectId}/uploads/${body.image[1]}`,
+                  `organize/${organizationId}/${body.projectId}/uploads/${body.image[1]}`,
                 ),
               },
               role: 'last_frame',

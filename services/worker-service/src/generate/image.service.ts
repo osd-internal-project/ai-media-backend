@@ -118,7 +118,7 @@ export class ImageProcessor extends WorkerHost {
                 const buffer = Buffer.from(imgRes.data);
                 const uuidName = uuidv4();
                 const ext = 'jpg';
-                const objectName = `${uuidv4()}/${uuidName}.${ext}`;
+                const objectName = `${uuidName}.${ext}`;
 
                 this.logger.debug(`📦 Buffer size: ${buffer.length} bytes`);
 
@@ -135,7 +135,7 @@ export class ImageProcessor extends WorkerHost {
 
                 // Upload to MinIO
                 const bucketname = tosConfigs().tosBucket;
-                const imagePath = `organize/${body.organizeId}/image-generate/${objectName}`;
+                const imagePath = `organize/${body.organizationId}/${body.projectId}/image-generate/${objectName}`;
                 await this.tosService.putObject(
                     bucketname,
                     imagePath,

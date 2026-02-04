@@ -26,7 +26,7 @@ export class LogsService {
   ) { }
   async findProjectImageByPage(
     projectId: string,
-    organizeId: string,
+    organizationId: string,
     skip?: number,
     take?: number,
   ) {
@@ -86,13 +86,13 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
 
@@ -103,12 +103,12 @@ export class LogsService {
         for (const filename of referenceImageFilenames) {
           const fileStats = await this.tosService.headObject(
             tosConfigs().tosBucket,
-            `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
+            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
           );
           if (fileStats) {
             const url = await this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
+              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
             );
             referenceImageUrls.push(url);
           } else {
@@ -155,7 +155,7 @@ export class LogsService {
 
     return result;
   }
-  async findProjectImageByFristId(projectId: string, organizeId: string, fristId: string) {
+  async findProjectImageByFristId(projectId: string, organizationId: string, fristId: string) {
     const cerrentTask = await this.galleryRepo.findOne({
       where: {
         id: fristId,
@@ -223,13 +223,13 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
 
@@ -240,12 +240,12 @@ export class LogsService {
         for (const filename of referenceImageFilenames) {
           const fileStats = await this.tosService.headObject(
             tosConfigs().tosBucket,
-            `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
+            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
           );
           if (fileStats) {
             const url = await this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
+              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
             );
             referenceImageUrls.push(url);
           } else {
@@ -290,7 +290,7 @@ export class LogsService {
   }
   async findProjectVideoByPage(
     projectId: string,
-    organizeId: string,
+    organizationId: string,
     skip?: number,
     take?: number,
   ) {
@@ -358,13 +358,13 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
 
@@ -375,12 +375,12 @@ export class LogsService {
         for (const filename of referenceImageFilenames) {
           const fileStats = await this.tosService.headObject(
             tosConfigs().tosBucket,
-            `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
+            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
           );
           if (fileStats) {
             const url = await this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
+              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
             );
             referenceImageUrls.push(url);
           } else {
@@ -429,7 +429,7 @@ export class LogsService {
 
     return result;
   }
-  async findProjectViedoByFristId(projectId: string, organizeId: string, fristId: string) {
+  async findProjectViedoByFristId(projectId: string, organizationId: string, fristId: string) {
     const cerrentTask = await this.galleryRepo.findOne({
       where: {
         id: fristId,
@@ -503,13 +503,13 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
 
@@ -520,12 +520,12 @@ export class LogsService {
         for (const filename of referenceImageFilenames) {
           const fileStats = await this.tosService.headObject(
             tosConfigs().tosBucket,
-            `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
+            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
           );
           if (fileStats) {
             const url = await this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${organizeId}/${item.projectId}/uploads/${filename}`,
+              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
             );
             referenceImageUrls.push(url);
           } else {

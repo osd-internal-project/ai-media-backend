@@ -208,7 +208,7 @@ export class VideoProcessor extends WorkerHost {
                         path: '',
                     };
                     const result = await this.uploadVideoWithThumbnail(
-                        body.organizeId,
+                        body.organizationId,
                         body.projectId,
                         mockFile,
                         taskId,
@@ -217,11 +217,11 @@ export class VideoProcessor extends WorkerHost {
                         taskId,
                         videoUrl: await this.tosService.getPreSignedUrl(
                             tosConfigs().tosBucket,
-                            `organize/${body.organizeId}/${body.projectId}/generate-video/${result.file}`
+                            `organize/${body.organizationId}/${body.projectId}/generate-video/${result.file}`
                         ),
                         thumbnailUrl: await this.tosService.getPreSignedUrl(
                             tosConfigs().tosBucket,
-                            `organize/${body.organizeId}/${body.projectId}/generate-video/${result.thumbnail}`
+                            `organize/${body.organizationId}/${body.projectId}/generate-video/${result.thumbnail}`
                         ),
                         timestamp: new Date().toISOString(),
                         type: 'video',
@@ -391,15 +391,15 @@ export class VideoProcessor extends WorkerHost {
     }
 
     private async uploadVideoWithThumbnail(
-        organizeId: string,
+        organizationId: string,
         projectId: string,
         file: Express.Multer.File,
         id: string,
     ) {
         const videoFileName = `${Date.now()}-${file.originalname}`;
         const thumbnailFileName = `thumb-${Date.now()}.png`;
-        const objectName = `${id}/${videoFileName}`;
-        const thumbnailObjectName = `${id}/${thumbnailFileName}`;
+        const objectName = `${videoFileName}`;
+        const thumbnailObjectName = `${thumbnailFileName}`;
 
         // Use os.tmpdir() for better compatibility
         const os = require('os');
@@ -429,7 +429,7 @@ export class VideoProcessor extends WorkerHost {
 
             await this.tosService.putObject(
                 tosConfigs().tosBucket,
-                `organize/${organizeId}/${projectId}/video-generate/${objectName}`,
+                `organize/${organizationId}/${projectId}/video-generate/${objectName}`,
                 file.buffer,
             );
 
@@ -438,7 +438,7 @@ export class VideoProcessor extends WorkerHost {
             const thumbBuffer = fs.readFileSync(tempThumbPath);
             await this.tosService.putObject(
                 tosConfigs().tosBucket,
-                `organize/${organizeId}/${projectId}/video-generate/${thumbnailObjectName}`,
+                `organize/${organizationId}/${projectId}/video-generate/${thumbnailObjectName}`,
                 thumbBuffer,
             );
 
