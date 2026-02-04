@@ -69,6 +69,7 @@ export class UploadImageController {
     @Body(`promptGuideId`) promptGuideId: string,
     @Body(`generateType`) generateType: 'image' | 'video',
     @Body(`uid`) uid: string,
+    @Body(`orgnaizationId`) orgnaizationId: string,
   ) {
     return this.uploadImageService.uploadPromptGuideImage(
       userId,
@@ -76,7 +77,7 @@ export class UploadImageController {
       promptGuideId,
       generateType,
       file,
-      uid,
+      uid,orgnaizationId
     );
   }
 

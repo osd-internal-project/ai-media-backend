@@ -26,10 +26,10 @@ export class TeamUploadService {
 
   async putObject(bucketName: string, objectName: string, body: Buffer) {
     try {
-      console.log(bucketName, objectName, body);
+      console.log(bucketName,`orgnize/org1/${objectName}`, body);
       await this.client.putObject({
         bucket: bucketName,
-        key: objectName,
+        key: `/orgnize/org1/${objectName}`,
         body: body,
       });
       //   const { data } = await this.client.headObject({

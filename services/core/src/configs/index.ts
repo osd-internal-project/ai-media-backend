@@ -33,6 +33,14 @@ export const redisConfigs = registerAs('redis', () => ({
   redisPort: parseInt(process.env.REDIS_PORT || '6379', 10),
   redisPassword: process.env.REDIS_PASSWORD,
 }));
+
+export const tosConfigs = registerAs('tos', () => ({
+  tosBucket: process.env.TOS_BUCKET,
+  tosAccessKey: process.env.TOS_ACCESS_KEY,
+  tosSecretKey: process.env.TOS_SECRET_KEY,
+  tosRegion: process.env.TOS_REGION,
+  tosEndpoint: process.env.TOS_ENDPOINT,
+}));
 // pathDomain: process.env.PATH_DOMAIN,
 // pathDomainVDO: process.env.PATH_DOMAIN_VDO,
 // pathPublicDomain: process.env.PATH_PUBLIC_DOMAIN,

@@ -4,10 +4,11 @@ import { UpdatePromptGuideDto } from './dto/update-prompt-guide.dto';
 import {
   PromptGuideImageRepository,
   PromptGuideRepository,
+  TosService,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { MinioClientService } from '../minio-client/minio-client.service';
-import { minioConfigs } from '../configs';
+import { minioConfigs, tosConfigs } from '../configs';
 import * as path from 'path';
 
 @Injectable()
@@ -15,7 +16,7 @@ export class PromptGuideService {
   constructor(
     private readonly promptguideRepo: PromptGuideRepository,
     private readonly promptGuideImageRepo: PromptGuideImageRepository,
-    private readonly minioClientService: MinioClientService,
+    private readonly tosService: TosService,
   ) { }
   create(createPromptGuideDto: Prisma.PromptGuideCreateInput) {
     const data = {
@@ -104,10 +105,9 @@ export class PromptGuideService {
                 index: 'asc',
               },
             });
-            const ext = path.extname(image.imagePath);
-            const url = await this.minioClientService.getPresignedUrl(
-              bucketname,
-              `${image.uid}${ext}`,
+            const url = await this.tosService.getPreSignedUrl(
+              'ai-cave-sit',
+              image.imagePath,
             );
             images.push({
               uid: image.uid,
@@ -151,13 +151,11 @@ export class PromptGuideService {
       },
     });
 
-    const bucketname = minioConfigs().minioBucketUpload;
     const imagesWithUrls = await Promise.all(
       images.map(async (image) => {
-        const ext = path.extname(image.imagePath);
-        const url = await this.minioClientService.getPresignedUrl(
-          bucketname,
-          `${image.uid}${ext}`,
+        const url = await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          image.imagePath,
         );
         return {
           uid: image.uid,
