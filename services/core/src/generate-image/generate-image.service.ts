@@ -10,20 +10,27 @@ import {
   ErrorLogRepository,
   AuditLogRepository,
   ProjectMemberRepository,
+  TosService,
 } from '@ai-media/share';
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
 import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import axios from 'axios';
 import * as https from 'https';
 import { v4 as uuidv4 } from 'uuid';
-import { MinioClientService } from 'src/minio-client/minio-client.service';
 import { ConfigType } from '@nestjs/config';
-import { minioConfigs } from 'src/configs';
+import { minioConfigs, tosConfigs } from 'src/configs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Log } from 'src/logs/entities/log.entity';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as ffmpeg from 'fluent-ffmpeg';
+const ffmpegPath = require('ffmpeg-static');
+const ffprobePath = require('ffprobe-static');
 
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath.path);
 @Injectable()
 export class GenerateImageService implements OnModuleInit {
   private readonly logger = new Logger(GenerateImageService.name);
@@ -41,11 +48,11 @@ export class GenerateImageService implements OnModuleInit {
     private readonly projectMemberRepository: ProjectMemberRepository,
 
     private readonly userRepo: UsersRepository,
-    private readonly minioClientSerives: MinioClientService,
     private readonly organizationMemberRepo: OrganizationMemberRepository,
     private eventEmitter: EventEmitter2,
     private readonly errorLogRepo: ErrorLogRepository,
     private readonly auditLogRepo: AuditLogRepository,
+    private readonly tosService: TosService,
   ) { }
 
   async onModuleInit() {
@@ -230,6 +237,7 @@ export class GenerateImageService implements OnModuleInit {
           axiosConfig,
           user,
           galleryItem,
+          createGenerateImageDto.organizeId,
         );
         if (taskId) {
           galleryItem.taskId = taskId;
@@ -291,15 +299,16 @@ export class GenerateImageService implements OnModuleInit {
     axiosConfig,
     user,
     gallery,
+    organizeId,
   ) {
     // Prepare Payload
     let imageContents: any[] = [];
     Logger.debug('dto.image', dto.image);
     if (dto.image && Array.isArray(dto.image)) {
       for (const img of dto.image) {
-        const url = await this.minioClientSerives.getPresignedUrl(
-          this.minioconfig.minioBucketUpload,
-          img.fileName,
+        const url = await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${dto.projectId}/uploads/${img.fileName}`
         );
         imageContents.push({
           type: 'image_url',
@@ -308,22 +317,22 @@ export class GenerateImageService implements OnModuleInit {
         });
       }
       if (dto.image.length >= 2) {
-        const url1 = await this.minioClientSerives.getPresignedUrl(
-          this.minioconfig.minioBucketUpload,
-          dto.image[0].fileName,
+        const url1 = await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
         );
-        const url2 = await this.minioClientSerives.getPresignedUrl(
-          this.minioconfig.minioBucketUpload,
-          dto.image[1].fileName,
+        const url2 = await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${dto.projectId}/uploads/${dto.image[1].fileName}`
         );
         imageContents = [
           { type: 'image_url', image_url: { url: url1 }, role: 'first_frame' },
           { type: 'image_url', image_url: { url: url2 }, role: 'last_frame' },
         ];
       } else if (dto.image.length === 1) {
-        const url = await this.minioClientSerives.getPresignedUrl(
-          this.minioconfig.minioBucketUpload,
-          dto.image[0].fileName,
+        const url = await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
         );
         imageContents = [
           { type: 'image_url', image_url: { url }, role: 'first_frame' },
@@ -458,12 +467,12 @@ export class GenerateImageService implements OnModuleInit {
     let imageUrls = [];
     if (dto.image && dto.image.length > 0) {
       imageUrls = await Promise.all(
-        dto.image.map((img) =>
-          this.minioClientSerives.getPresignedUrl(
-            this.minioconfig.minioBucketUpload,
-            img.fileName,
-          ),
-        ),
+        dto.image.map(async (img) => {
+          return await this.tosService.getPreSignedUrl(
+            tosConfigs().tosBucket,
+            `organize/${dto.organizeId}/${dto.projectId}/uploads/${img.fileName}`
+          );
+        }),
       );
     }
     try {
@@ -514,11 +523,10 @@ export class GenerateImageService implements OnModuleInit {
             const ext = 'jpg';
             const objectName = `${uuidv4()}/${uuidName}.${ext}`;
             Logger.debug(buffer.length);
-            await this.minioClientSerives.uploadFile(
+            await this.tosService.putObject(
+              tosConfigs().tosBucket,
+              `organize/${dto.organizeId}/${dto.projectId}/image-generate/${objectName}`,
               buffer,
-              buffer.length,
-              this.minioconfig.minioBucket,
-              objectName,
             );
 
             if (index === 0) {
@@ -673,8 +681,9 @@ export class GenerateImageService implements OnModuleInit {
           path: '',
         };
 
-        const result = await this.minioClientSerives.uploadVideoWithThumbnail(
-          this.minioconfig.minioBucketVdo,
+        const result = await this.uploadVideoWithThumbnail(
+          task.organizeId,
+          task.projectId,
           mockFile,
           task.taskId,
         );
@@ -814,6 +823,79 @@ export class GenerateImageService implements OnModuleInit {
       });
     } catch (e) {
       Logger.error(`Failed to create error log: ${e}`);
+    }
+  }
+  private async uploadVideoWithThumbnail(
+    organizeId: string,
+    projectId: string,
+    file: Express.Multer.File,
+    id: string,
+  ) {
+    const videoFileName = `${Date.now()}-${file.originalname}`;
+    const thumbnailFileName = `thumb-${Date.now()}.png`;
+    const objectName = `${id}/${videoFileName}`;
+    const thumbnailObjectName = `${id}/${thumbnailFileName}`;
+
+    // Use os.tmpdir() for better compatibility
+    const os = require('os');
+    const tempDir = os.tmpdir();
+    const tempVideoPath = path.join(tempDir, videoFileName);
+    const tempThumbPath = path.join(tempDir, thumbnailFileName);
+
+    // 2. เขียนไฟล์วิดีโอลง Disk ชั่วคราวเพื่อให้ FFmpeg อ่าน
+    fs.writeFileSync(tempVideoPath, file.buffer);
+
+    try {
+      // 3. สร้าง Thumbnail ด้วย FFmpeg
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempVideoPath)
+          .screenshots({
+            count: 1,
+            folder: path.dirname(tempThumbPath),
+            filename: path.basename(tempThumbPath),
+            timemarks: ['20%'], // จับภาพที่ตำแหน่ง 20% ของวิดีโอ
+            size: '320x?', // ปรับขนาด (กว้าง 320, สูง auto)
+          })
+          .on('end', resolve)
+          .on('error', reject);
+      });
+
+      // 4. Upload Video ขึ้น MinIO (ใช้ putObject แทน fPutObject)
+
+      await this.tosService.putObject(
+        tosConfigs().tosBucket,
+        `organize/${organizeId}/${projectId}/video-generate/${objectName}`,
+        file.buffer,
+      );
+
+      // 5. Upload Thumbnail ขึ้น MinIO
+      // อ่านไฟล์ thumbnail ขึ้นมาเป็น buffer ก่อน
+      const thumbBuffer = fs.readFileSync(tempThumbPath);
+      await this.tosService.putObject(
+        tosConfigs().tosBucket,
+        `organize/${organizeId}/${projectId}/video-generate/${thumbnailObjectName}`,
+        thumbBuffer,
+      );
+
+      // 6. (Optional) สร้าง Presigned URL แบบ Public (ถ้า bucket เป็น public ไม่ต้องใช้ presigned ก็ได้ แต่ code เดิมใช้)
+      // const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
+      // const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
+
+      return {
+        file: objectName,
+        thumbnail: thumbnailObjectName,
+      };
+    } catch (error) {
+      console.error('Error in uploadVideoWithThumbnail:', error);
+      throw new BadRequestException('Error processing video: ' + error.message);
+    } finally {
+      // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
+      try {
+        if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
+        if (fs.existsSync(tempThumbPath)) fs.unlinkSync(tempThumbPath);
+      } catch (cleanupError) {
+        console.error('Error cleaning up temp files:', cleanupError);
+      }
     }
   }
 }

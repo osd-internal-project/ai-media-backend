@@ -21,13 +21,13 @@ import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Response } from 'express';
-import { MinioClientService } from 'src/minio-client/minio-client.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
-import { minioConfigs } from 'src/configs';
+import { minioConfigs, tosConfigs } from 'src/configs';
 import { ConfigType } from '@nestjs/config';
 import { Observable, fromEvent, interval, map, merge } from 'rxjs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { TosService } from '@ai-media/share';
 
 @Controller('generate-image')
 export class GenerateImageController {
@@ -35,9 +35,9 @@ export class GenerateImageController {
     @Inject(minioConfigs.KEY)
     private config: ConfigType<typeof minioConfigs>,
     private readonly GenerateImageService: GenerateImageService,
-    private readonly minioclientSerives: MinioClientService,
     private eventEmitter: EventEmitter2,
-  ) {}
+    private readonly tosService: TosService,
+  ) { }
 
   @Post()
   create(@Body('body') createGenerateImageDto: CreateGenerateImageDto) {
@@ -228,6 +228,8 @@ export class GenerateImageController {
   async uploadImage(
     @UploadedFiles() files: Express.Multer.File[],
     @Body('type') type,
+    @Body('organizeId') organizeId: string,
+    @Body('projectId') projectId: string,
   ) {
     if (type && files.length > 0) {
       const bucketname = this.config.minioBucketUpload;
@@ -235,11 +237,10 @@ export class GenerateImageController {
         files.map((file) => {
           const ext = path.extname(file.originalname); // นามสกุลไฟล์
           const fileName = `${uuidv4()}${ext}`;
-          this.minioclientSerives.uploadFile(
+          this.tosService.putObject(
+            tosConfigs().tosBucket,
+            `organize/${organizeId}/${projectId}/uploads/${fileName}`,
             file.buffer,
-            file.buffer.length,
-            bucketname,
-            fileName,
           );
           return {
             filePath: `${bucketname}/${fileName}`,
@@ -274,11 +275,11 @@ export class GenerateImageController {
     const keepAlive$ = interval(15000).pipe(
       map(
         () =>
-          ({
-            // comment ตาม SSE spec (ไม่ trigger onmessage)
-            data: null,
-            comment: 'keep-alive',
-          } as MessageEvent),
+        ({
+          // comment ตาม SSE spec (ไม่ trigger onmessage)
+          data: null,
+          comment: 'keep-alive',
+        } as MessageEvent),
       ),
     );
     return merge(data$, keepAlive$);
