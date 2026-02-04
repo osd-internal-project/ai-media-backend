@@ -94,11 +94,11 @@ export class UploadImageService {
       const newFileName = `${uid}${ext}`;
 
       // Copy file in Minio
-      await this.minioClientSerives.copyFile(
-        bucketname,
-        image.imagePath, // Source path (bucket/filename)
-        newFileName, // Dest filename
-      );
+      // await this.minioClientSerives.copyFile(
+      //   bucketname,
+      //   image.imagePath, // Source path (bucket/filename)
+      //   newFileName, // Dest filename
+      // );
       const newImage = await this.refImageRepository.create({
         data: {
           uid: uid,
