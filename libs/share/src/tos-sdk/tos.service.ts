@@ -137,4 +137,19 @@ export class TosService {
         }
     }
 
+    async getPreSignedUrl(bucketName: string, objectName: string) {
+        try {
+            const url = this.client.getPreSignedUrl({
+                method: 'GET',
+                bucket: bucketName,
+                key: objectName,
+            });
+            // console.log('PreSignedUrl:', url);
+            return url;
+        } catch (error) {
+            handleError(error);
+        }
+    }
+
+
 }
