@@ -90,15 +90,15 @@ export class UploadImageService {
 
     if (image) {
       const ext = path.extname(image.imageName);
-      const newImagePath = `${uid}${ext}`;
-      const newFileName = `${uid}${ext}`;
+      const oldImagePath = `${image.imagePath}`;
+      const newImagePath = `organize/${organizationId}/${projectId}/${uid}${ext}`;
 
       // Copy file in Minio
-      // await this.minioClientSerives.copyFile(
-      //   bucketname,
-      //   image.imagePath, // Source path (bucket/filename)
-      //   newFileName, // Dest filename
-      // );
+      await this.tosService.copyObject(
+        bucketname,
+       oldImagePath, // Source path (bucket/filename)
+        newImagePath, // Dest filename
+      );
       const newImage = await this.refImageRepository.create({
         data: {
           uid: uid,
@@ -113,17 +113,22 @@ export class UploadImageService {
           status: 'waiting',
         },
       });
-      Logger.debug(newImage);
+      // Logger.debug(newImage);
+      if(newImage){
       return {
         uid: uid,
         name: image.imageName,
-        // url: await this.minioClientSerives.getPresignedUrl(
-        //   bucketname,
-        //   `${uid}${ext}`,
-        // ),
-        imagePath: `${uid}${ext}`,
+        url: await this.tosService.getPreSignedUrl(
+          bucketname,
+          newImagePath,
+        ),
+        imagePath: newImagePath,
         status: 'waiting', //waiting,processing,done
       };
+      }else{
+        throw new Error('Failed to get image');
+      }
+      
     }
   }
   async uploadPromptGuideImage(
