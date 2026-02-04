@@ -17,4 +17,5 @@ export class RequestVideoGenerateDto {
     typeGenerate: string;
     generateAudio: boolean;
     draft: boolean;
+    organizeId?: string;
 }

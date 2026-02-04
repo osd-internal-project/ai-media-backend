@@ -1,15 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CreatePromptGuideDto } from './dto/create-prompt-guide.dto';
-import { UpdatePromptGuideDto } from './dto/update-prompt-guide.dto';
 import {
   PromptGuideImageRepository,
   PromptGuideRepository,
   TosService,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
-import { MinioClientService } from '../minio-client/minio-client.service';
 import { minioConfigs, tosConfigs } from '../configs';
-import * as path from 'path';
 
 @Injectable()
 export class PromptGuideService {
