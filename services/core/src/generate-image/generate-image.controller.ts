@@ -228,7 +228,7 @@ export class GenerateImageController {
   async uploadImage(
     @UploadedFiles() files: Express.Multer.File[],
     @Body('type') type,
-    @Body('organizeId') organizeId: string,
+    @Body('organizationId') organizationId: string,
     @Body('projectId') projectId: string,
   ) {
     if (type && files.length > 0) {
@@ -239,7 +239,7 @@ export class GenerateImageController {
           const fileName = `${uuidv4()}${ext}`;
           this.tosService.putObject(
             tosConfigs().tosBucket,
-            `organize/${organizeId}/${projectId}/uploads/${fileName}`,
+            `organize/${organizationId}/${projectId}/uploads/${fileName}`,
             file.buffer,
           );
           return {

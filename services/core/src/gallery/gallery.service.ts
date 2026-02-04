@@ -18,7 +18,7 @@ export class GalleryService {
     return this.galleryRepo.findAll({});
   }
 
-  async findMany(projectId: string, query: any, organizeId: string) {
+  async findMany(projectId: string, query: any, organizationId: string) {
     const page = +query.page || 1;
     const pageSize = +query.pageSize || 10;
     const data = await this.galleryRepo.findMany({
@@ -40,13 +40,13 @@ export class GalleryService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
+          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
       newData.set(item.id, {

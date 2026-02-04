@@ -15,7 +15,7 @@ export class CreateGenerateDto {
     modelName?: string; // Add optional model name
     generateAudio?: boolean;
     generateConfig?: any;
-    organizeId?: string;
+    organizationId?: string;
 }
 
 export const QUEUE_NAME_IMAGE = 'image-generate-queue';

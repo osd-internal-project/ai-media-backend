@@ -14,5 +14,5 @@ export class RequestImageGenerateDto {
     width: number;
     height: number;
     imageGenerateType: string;
-    organizeId?: string;
+    organizationId?: string;
 }

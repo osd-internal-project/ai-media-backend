@@ -237,7 +237,7 @@ export class GenerateImageService implements OnModuleInit {
           axiosConfig,
           user,
           galleryItem,
-          createGenerateImageDto.organizeId,
+          createGenerateImageDto.organizationId,
         );
         if (taskId) {
           galleryItem.taskId = taskId;
@@ -299,7 +299,7 @@ export class GenerateImageService implements OnModuleInit {
     axiosConfig,
     user,
     gallery,
-    organizeId,
+    organizationId,
   ) {
     // Prepare Payload
     let imageContents: any[] = [];
@@ -308,7 +308,7 @@ export class GenerateImageService implements OnModuleInit {
       for (const img of dto.image) {
         const url = await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${dto.projectId}/uploads/${img.fileName}`
+          `organize/${organizationId}/${dto.projectId}/uploads/${img.fileName}`
         );
         imageContents.push({
           type: 'image_url',
@@ -319,11 +319,11 @@ export class GenerateImageService implements OnModuleInit {
       if (dto.image.length >= 2) {
         const url1 = await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
+          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
         );
         const url2 = await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${dto.projectId}/uploads/${dto.image[1].fileName}`
+          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[1].fileName}`
         );
         imageContents = [
           { type: 'image_url', image_url: { url: url1 }, role: 'first_frame' },
@@ -332,7 +332,7 @@ export class GenerateImageService implements OnModuleInit {
       } else if (dto.image.length === 1) {
         const url = await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizeId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
+          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
         );
         imageContents = [
           { type: 'image_url', image_url: { url }, role: 'first_frame' },
@@ -470,7 +470,7 @@ export class GenerateImageService implements OnModuleInit {
         dto.image.map(async (img) => {
           return await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${dto.organizeId}/${dto.projectId}/uploads/${img.fileName}`
+            `organize/${dto.organizationId}/${dto.projectId}/uploads/${img.fileName}`
           );
         }),
       );
@@ -525,7 +525,7 @@ export class GenerateImageService implements OnModuleInit {
             Logger.debug(buffer.length);
             await this.tosService.putObject(
               tosConfigs().tosBucket,
-              `organize/${dto.organizeId}/${dto.projectId}/image-generate/${objectName}`,
+              `organize/${dto.organizationId}/${dto.projectId}/image-generate/${objectName}`,
               buffer,
             );
 
@@ -682,7 +682,7 @@ export class GenerateImageService implements OnModuleInit {
         };
 
         const result = await this.uploadVideoWithThumbnail(
-          task.organizeId,
+          task.organizationId,
           task.projectId,
           mockFile,
           task.taskId,
@@ -826,7 +826,7 @@ export class GenerateImageService implements OnModuleInit {
     }
   }
   private async uploadVideoWithThumbnail(
-    organizeId: string,
+    organizationId: string,
     projectId: string,
     file: Express.Multer.File,
     id: string,
@@ -864,7 +864,7 @@ export class GenerateImageService implements OnModuleInit {
 
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizeId}/${projectId}/video-generate/${objectName}`,
+        `organize/${organizationId}/${projectId}/video-generate/${objectName}`,
         file.buffer,
       );
 
@@ -873,7 +873,7 @@ export class GenerateImageService implements OnModuleInit {
       const thumbBuffer = fs.readFileSync(tempThumbPath);
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizeId}/${projectId}/video-generate/${thumbnailObjectName}`,
+        `organize/${organizationId}/${projectId}/video-generate/${thumbnailObjectName}`,
         thumbBuffer,
       );
 
