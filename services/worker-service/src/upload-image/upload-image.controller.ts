@@ -30,6 +30,7 @@ export class UploadImageController {
     @Body(`projectId`) projectId: string,
     @Body(`generateType`) generateType: 'image' | 'video',
     @Body(`uid`) uid: string,
+    @Body(`organizationId`) organizationId: string,
   ) {
     return this.uploadImageService.uploadImage(
       userId,
@@ -38,6 +39,7 @@ export class UploadImageController {
       generateType,
       file,
       uid,
+      organizationId,
     );
   }
   @Post('from-prompt')
@@ -49,6 +51,8 @@ export class UploadImageController {
     @Body(`generateType`) generateType: 'image' | 'video',
     @Body(`uid`) uid: string,
     @Body(`refUid`) refUid: string,
+    @Body(`organizationId`) organizationId: string,
+
     @Body() body: any,
   ) {
     return this.uploadImageService.uploadImageFromPrompt(
@@ -58,6 +62,7 @@ export class UploadImageController {
       generateType,
       uid,
       refUid,
+      organizationId,
     );
   }
   @Post('prompt-guide-image')
@@ -69,7 +74,7 @@ export class UploadImageController {
     @Body(`promptGuideId`) promptGuideId: string,
     @Body(`generateType`) generateType: 'image' | 'video',
     @Body(`uid`) uid: string,
-    @Body(`orgnaizationId`) orgnaizationId: string,
+    @Body(`organizationId`) organizationId: string,
   ) {
     return this.uploadImageService.uploadPromptGuideImage(
       userId,
@@ -77,7 +82,8 @@ export class UploadImageController {
       promptGuideId,
       generateType,
       file,
-      uid,orgnaizationId
+      uid,
+      organizationId,
     );
   }
 
