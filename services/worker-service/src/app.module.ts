@@ -7,7 +7,6 @@ import { QUEUE_NAME_IMAGE } from '@ai-media/share';
 import { MinioClientModule } from './minio-client/minio-client.module';
 import { UploadImageModule } from './upload-image/upload-image.module';
 import { RequestLoggerMiddleware } from './middleware/request-logger.middleware';
-import { TeamUploadModule } from './team-upload/team-upload.module';
 
 @Module({
   imports: [
@@ -20,8 +19,7 @@ import { TeamUploadModule } from './team-upload/team-upload.module';
     }),
     GenerateModule,
     MinioClientModule,
-    UploadImageModule,
-    TeamUploadModule,
+    UploadImageModule, 
   ],
   controllers: [],
 })
