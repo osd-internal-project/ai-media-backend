@@ -14,6 +14,7 @@ import {
   RequestVideoGenerateDto,
   QUEUE_NAME_VDO,
   ByteplusePayloadVideo,
+  TosService,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -26,15 +27,12 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { ConfigType } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import axios, { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
 import * as https from 'https';
 import Redis from 'ioredis';
-import { minioConfigs } from 'src/configs';
-import { MinioClientService } from 'src/minio-client/minio-client.service';
-import { v4 as uuidv4 } from 'uuid';
+import { tosConfigs } from 'src/configs';
 
 @Injectable()
 export class GenerateService {
@@ -49,18 +47,16 @@ export class GenerateService {
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
-    private readonly minioClientSerives: MinioClientService,
-    @Inject(minioConfigs.KEY)
-    private minioconfig: ConfigType<typeof minioConfigs>,
     @InjectRedis() private readonly redis: Redis,
     @InjectQueue(QUEUE_NAME_IMAGE) private imageQueue: Queue,
     @InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue,
-  ) {}
+    private readonly tosService: TosService,
+  ) { }
 
   /**
    * สร้าง Generation Task และส่งเข้า Queue
    */
-  async createGenerationTask(body: RequestImageGenerateDto, clientId: string) {
+  async createGenerationTask(body: RequestImageGenerateDto, clientId: string, organizeId: string) {
     const taskId = body.taskId;
     const redisImageCacheKey = `image_used_${body.userId}`;
 
@@ -108,9 +104,9 @@ export class GenerateService {
       if (body.image && body.image.length > 0) {
         imageUrls = await Promise.all(
           body.image.map((img) =>
-            this.minioClientSerives.getPresignedUrl(
-              this.minioconfig.minioBucketUpload,
-              img,
+            this.tosService.getPreSignedUrl(
+              tosConfigs().tosBucket,
+              `organize/${organizeId}/${body.projectId}/uploads/${img}`,
             ),
           ),
         );
@@ -255,6 +251,7 @@ export class GenerateService {
   async createVideoGenerationTask(
     body: RequestVideoGenerateDto,
     clientId: string,
+    organizeId: string,
   ) {
     let taskId = body.taskId;
 
@@ -288,7 +285,7 @@ export class GenerateService {
 
       // 4. Prepare Payload
       const { basePayload, axiosConfig } =
-        await this.prepareGenerationPayloadVideo(body, getConfigApi);
+        await this.prepareGenerationPayloadVideo(body, getConfigApi, organizeId);
 
       console.log('basePayload', basePayload);
 
@@ -624,8 +621,7 @@ export class GenerateService {
     currentImageUsed = currentImageUsed + maxImage;
     if (currentImageUsed > maxImageInPlan) {
       Logger.error(
-        `Image used ${
-          currentImageUsed + maxImage
+        `Image used ${currentImageUsed + maxImage
         } exceed max image ${maxImageInPlan}`,
       );
       return {
@@ -691,6 +687,7 @@ export class GenerateService {
   private async prepareGenerationPayloadVideo(
     body: RequestVideoGenerateDto,
     configApi: any,
+    organizeId: string,
   ) {
     const axiosConfig: AxiosRequestConfig = {
       headers: {
@@ -709,33 +706,32 @@ export class GenerateService {
         },
         ...(body.image[0]
           ? [
-              {
-                type: 'image_url',
-                image_url: {
-                  url: await this.minioClientSerives.getPresignedUrl(
-                    this.minioconfig.minioBucketUpload,
-                    body.image[0],
-                  ),
-                },
-                role: 'first_frame',
+            {
+              type: 'image_url',
+              image_url: {
+                url: await this.tosService.getPreSignedUrl(
+                  tosConfigs().tosBucket,
+                  `organize/${organizeId}/${body.projectId}/uploads/${body.image[0]}`,
+                ),
               },
-            ]
+              role: 'first_frame',
+            },
+          ]
           : []),
         ...(body.image[1]
           ? [
-              {
-                type: 'image_url',
-                image_url: {
-                  url: await this.minioClientSerives.getPresignedUrl(
-                    this.minioconfig.minioBucketUpload,
-                    body.image[1],
-                  ),
-                },
-                role: 'last_frame',
+            {
+              type: 'image_url',
+              image_url: {
+                url: await this.tosService.getPreSignedUrl(
+                  tosConfigs().tosBucket,
+                  `organize/${organizeId}/${body.projectId}/uploads/${body.image[1]}`,
+                ),
               },
-            ]
+              role: 'last_frame',
+            },
+          ]
           : []),
-        //
       ],
       draft: body.draft,
       generate_audio: body.generateAudio,
@@ -764,8 +760,7 @@ export class GenerateService {
 
   private handleGenerationError(error: any, userId: string) {
     Logger.error(
-      `Error generate image: ${
-        error?.response?.data?.error_description || error.message
+      `Error generate image: ${error?.response?.data?.error_description || error.message
       }`,
       error?.response?.data ? JSON.stringify(error.response.data) : error.stack,
     );
