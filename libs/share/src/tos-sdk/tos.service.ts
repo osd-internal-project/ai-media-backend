@@ -151,5 +151,16 @@ export class TosService {
         }
     }
 
+    async deleteObject(bucketName: string, objectName: string) {
+        try {
+            const { data } = await this.client.deleteObject({
+                bucket: bucketName,
+                key: objectName,
+            });
+            return data;
+        } catch (error) {
+            handleError(error);
+        }
+    }
 
 }
