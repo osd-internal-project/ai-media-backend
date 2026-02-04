@@ -5,7 +5,7 @@ import {
   TosService,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
-import { minioConfigs, tosConfigs } from '../configs';
+import { tosConfigs } from '../configs';
 
 @Injectable()
 export class PromptGuideService {
@@ -13,7 +13,7 @@ export class PromptGuideService {
     private readonly promptguideRepo: PromptGuideRepository,
     private readonly promptGuideImageRepo: PromptGuideImageRepository,
     private readonly tosService: TosService,
-  ) { }
+  ) {}
   create(createPromptGuideDto: Prisma.PromptGuideCreateInput) {
     const data = {
       ...createPromptGuideDto,
@@ -76,7 +76,7 @@ export class PromptGuideService {
     });
   }
   async findWithImageByTypes(promptGuideTypeId: number) {
-    const bucketname = minioConfigs().minioBucketUpload;
+    const bucketname = tosConfigs().tosBucket;
 
     const promptGuides = await this.promptguideRepo.findMany({
       where: {
@@ -101,18 +101,20 @@ export class PromptGuideService {
                 index: 'asc',
               },
             });
+            if(image){
             const url = await this.tosService.getPreSignedUrl(
-              'ai-cave-sit',
-              image.imagePath,
+              bucketname,
+              image?.imagePath || '',
             );
             images.push({
-              uid: image.uid,
-              name: image.imageName,
+              uid: image?.uid,
+              name: image?.imageName,
               url: url,
-              imagePath: image.imagePath,
-              status: image.status,
-              index: image.index,
+              imagePath: image?.imagePath,
+              status: image?.status,
+              index: image?.index,
             });
+          }
           }),
         );
         return {
