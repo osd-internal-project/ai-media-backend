@@ -13,21 +13,19 @@ import { Prisma } from '@prisma/client';
 
 @Controller('gallery')
 export class GalleryController {
-  constructor(private readonly galleryService: GalleryService) {}
+  constructor(private readonly galleryService: GalleryService) { }
 
   @Post()
   create(@Body('body') createGalleryDto: Prisma.GalleryCreateInput) {
     return this.galleryService.create(createGalleryDto);
   }
-
   @Get()
   findAll() {
     return this.galleryService.findAll();
   }
-
   @Get(':projectId')
-  findOne(@Param('projectId') projectId: string, @Query() query: any) {
-    return this.galleryService.findMany(projectId, query);
+  findOne(@Param('projectId') projectId: string, @Query() query: any, @Param('organizeId') organizeId: string) {
+    return this.galleryService.findMany(projectId, query, organizeId);
   }
   @Get('activity/:projectId')
   findByActivity(@Param('projectId') projectId: string, @Query() query: any) {
