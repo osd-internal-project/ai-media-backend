@@ -1,12 +1,10 @@
 import { MiddlewareConsumer, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { MailerModule } from '@nestjs-modules/mailer';
 import { BullModule } from '@nestjs/bullmq';
 import { GenerateModule } from './generate/generate.module';
-import { QUEUE_NAME_IMAGE } from '@ai-media/share';
-import { MinioClientModule } from './minio-client/minio-client.module';
 import { UploadImageModule } from './upload-image/upload-image.module';
 import { RequestLoggerMiddleware } from './middleware/request-logger.middleware';
+import { TosModule } from '@ai-media/share';
 
 @Module({
   imports: [
@@ -18,8 +16,8 @@ import { RequestLoggerMiddleware } from './middleware/request-logger.middleware'
       },
     }),
     GenerateModule,
-    MinioClientModule,
-    UploadImageModule, 
+    UploadImageModule,
+    TosModule,
   ],
   controllers: [],
 })

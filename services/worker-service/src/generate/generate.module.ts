@@ -6,16 +6,23 @@ import { VideoProcessor } from './video.service';
 import {
     QUEUE_NAME_IMAGE,
     QUEUE_NAME_VDO,
+    TosModule,
 } from '@ai-media/share';
-import { MinioClientModule } from 'src/minio-client/minio-client.module';
 import { PrismaModule } from '@ai-media/share';
+import { RedisModule } from '@nestjs-modules/ioredis';
 
 @Module({
     imports: [
-        PrismaModule,
-        MinioClientModule,
+        PrismaModule, TosModule,
+        RedisModule.forRoot({
+            type: 'single',
+            url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`,
+        }),
         BullModule.registerQueue({
             name: QUEUE_NAME_IMAGE,
+        }),
+        BullModule.registerQueue({
+            name: QUEUE_NAME_VDO,
         }),
     ],
     controllers: [],
