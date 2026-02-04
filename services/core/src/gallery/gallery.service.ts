@@ -1,16 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { GalleryRepository } from '@ai-media/share';
+import { GalleryRepository, TosService } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
-import { MinioClientService } from 'src/minio-client/minio-client.service';
-import { ConfigType } from '@nestjs/config';
-import { minioConfigs } from 'src/configs';
+import { tosConfigs } from 'src/configs';
+
 @Injectable()
 export class GalleryService {
   constructor(
-    @Inject(minioConfigs.KEY)
-    private minioconfigs: ConfigType<typeof minioConfigs>,
     private readonly galleryRepo: GalleryRepository,
-    private readonly minioService: MinioClientService,
+    private readonly tosService: TosService,
   ) { }
 
   create(createGalleryDto: Prisma.GalleryCreateInput) {
@@ -21,7 +18,7 @@ export class GalleryService {
     return this.galleryRepo.findAll({});
   }
 
-  async findMany(projectId: string, query: any) {
+  async findMany(projectId: string, query: any, organizeId: string) {
     const page = +query.page || 1;
     const pageSize = +query.pageSize || 10;
     const data = await this.galleryRepo.findMany({
@@ -41,19 +38,15 @@ export class GalleryService {
     const newData = new Map();
     for (const item of data) {
       const url = item.imageUrl
-        ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'video'
-            ? this.minioconfigs.minioBucketVdo
-            : this.minioconfigs.minioBucket,
-          item.imageUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
         )
         : '';
       const thumbnailUrl = item.thumbnailUrl
-        ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'video'
-            ? this.minioconfigs.minioBucketVdo
-            : this.minioconfigs.minioBucket,
-          item.thumbnailUrl,
+        ? await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizeId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
         )
         : '';
       newData.set(item.id, {
@@ -64,6 +57,7 @@ export class GalleryService {
     }
     return { data: Array.from(newData.values()), total };
   }
+
   async findByActivity(projectId: string, query: any) {
     const page = +query.page || 1;
     const pageSize = +query.pageSize || 10;
