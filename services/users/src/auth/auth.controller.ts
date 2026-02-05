@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Headers, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
@@ -17,8 +17,17 @@ export class AuthController {
   }
 
   @Post('validate')
-  async validate(@Body() body: { token: string }) {
-    const isValid = await this.authService.validateToken(body.token);
+  // async validate(@Body() body: { token: string }) {
+    // const isValid = await this.authService.validateToken(body.token);
+  async validate(@Headers('authorization') authHeader: string) {
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header missing');
+    }
+    const [type, token] = authHeader.split(' ');
+    if (type !== 'Bearer' || !token) {
+      throw new UnauthorizedException('Invalid token format');
+    }
+    const isValid = await this.authService.validateToken(token);
     return { valid: isValid };
   }
 }

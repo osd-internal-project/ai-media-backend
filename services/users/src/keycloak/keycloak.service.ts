@@ -44,7 +44,6 @@ export class KeycloakService {
       params.append('client_id', config.clientId);
       params.append('client_secret', config.clientSecret);
       params.append('token', token);
-      console;
       const { data } = await axios.post(
         `${config.url}/realms/${config.realm}/protocol/openid-connect/token/introspect`,
         params,
