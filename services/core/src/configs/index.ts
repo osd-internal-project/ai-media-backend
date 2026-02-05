@@ -33,3 +33,10 @@ export const tosConfigs = registerAs('tos', () => ({
 // pathDomainVDO: process.env.PATH_DOMAIN_VDO,
 // pathPublicDomain: process.env.PATH_PUBLIC_DOMAIN,
 // pathPublicIp: process.env.PATH_PUBLIC_IP,
+
+export default {
+  app: appConfigs,
+  byteplus: byteplusConfigs,
+  redis: redisConfigs,
+  tos: tosConfigs,
+};
