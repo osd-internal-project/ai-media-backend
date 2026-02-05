@@ -4,7 +4,7 @@
   "version": "1.0.1",
   "author": "",
   "dependencies": {
-    "@nestjs/bullmq": "^11.0.4",
+    "@nestjs/bullmq": "^10.2.3",
     "@nestjs/common": "^9.1.6",
     "@nestjs/config": "^2.1.0",
     "@nestjs/core": "^9.1.2",
