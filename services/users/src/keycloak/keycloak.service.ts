@@ -270,6 +270,7 @@ export class KeycloakService {
           email: true,
           status: true,
           userId: true,
+          role: true,
         }
       });
 
