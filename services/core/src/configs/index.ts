@@ -29,9 +29,3 @@ export const tosConfigs = registerAs('tos', () => ({
   tosRegion: process.env.TOS_REGION,
   tosEndpoint: process.env.TOS_ENDPOINT,
 }));
-export default {
-  app: appConfigs,
-  byteplus: byteplusConfigs,
-  redis: redisConfigs,
-  tos: tosConfigs,
-};

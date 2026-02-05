@@ -81,8 +81,8 @@ export class VideoProcessor extends WorkerHost {
 
     // สร้าง Redis Publisher สำหรับส่ง events ไปยัง Core Service
     this.redisPublisher = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: Number(process.env.REDIS_PORT) || 6379,
+      host: process.env.REDIS_HOST,
+      port: Number(process.env.REDIS_PORT),
     });
   }
 
@@ -101,8 +101,8 @@ export class VideoProcessor extends WorkerHost {
     this.logger.error(`❌ Job ${job.id} failed: ${error.message}`);
   }
 
-  async process(job: Job<VideoProcessJob>): Promise<any> {
-    const { taskId, clientId, body, userId } = job.data;
+  async process(job: any, token?: string): Promise<any> {
+    const { taskId, clientId, body, userId } = job.data as VideoProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
@@ -215,7 +215,7 @@ export class VideoProcessor extends WorkerHost {
           );
           console.log('returngenerate');
 
-         
+
           await this.publishToCore(clientId, 'worker:video-upload-success', {
             taskId,
             videoUrl: await this.tosService.getPreSignedUrl(
@@ -255,7 +255,7 @@ export class VideoProcessor extends WorkerHost {
           await sleep(10_000);
         }
       }
-   
+
       // 4. อัพเดทสถานะเป็น completed
       await this.updateTaskStatus(taskId, {
         status: 'completed',

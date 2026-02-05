@@ -44,8 +44,8 @@ export class ImageProcessor extends WorkerHost {
 
         // สร้าง Redis Publisher สำหรับส่ง events ไปยัง Core Service
         this.redisPublisher = new Redis({
-            host: process.env.REDIS_HOST || 'localhost',
-            port: Number(process.env.REDIS_PORT) || 6379,
+            host: process.env.REDIS_HOST,
+            port: Number(process.env.REDIS_PORT),
         });
     }
 
@@ -64,8 +64,8 @@ export class ImageProcessor extends WorkerHost {
         this.logger.error(`❌ Job ${job.id} failed: ${error.message}`);
     }
 
-    async process(job: Job<ImageProcessJob>): Promise<any> {
-        const { taskId, clientId, body, userId, dataImage, usage } = job.data;
+    async process(job: any): Promise<any> {
+        const { taskId, clientId, body, userId, dataImage, usage } = job.data as ImageProcessJob;
 
         this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
 
