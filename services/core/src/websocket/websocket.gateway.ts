@@ -49,8 +49,8 @@ export class WebsocketGatewayService
     });
 
     this.redisSubscriber = new Redis({
-      host: redisConf.redisHost || 'localhost',
-      port: redisConf.redisPort || 6379,
+      host: redisConf.redisHost,
+      port: redisConf.redisPort,
       password: redisConf.redisPassword,
       retryStrategy: (times) => {
         return Math.min(times * 50, 2000);

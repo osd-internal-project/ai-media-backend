@@ -16,7 +16,7 @@ import { RedisModule } from '@nestjs-modules/ioredis';
         PrismaModule, TosModule,
         RedisModule.forRoot({
             type: 'single',
-            url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}`,
+            url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
         }),
         BullModule.registerQueue({
             name: QUEUE_NAME_IMAGE,

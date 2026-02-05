@@ -5,8 +5,8 @@ export const appConfigs = registerAs('app', () => ({
   port: process.env.PORT || 5000,
   RABBITMQ_URL: process.env.RABBITMQ_URL || 'amqp://user:password@localhost:5672',
   storagePath: process.env.STORAGE_PATH,
-  redisHost: process.env.REDIS_HOST || 'localhost',
-  redisPort: parseInt(process.env.REDIS_PORT || '6379', 10),
+  redisHost: process.env.REDIS_HOST,
+  redisPort: parseInt(process.env.REDIS_PORT, 10),
   redisPassword: process.env.REDIS_PASSWORD,
 }));
 export const tosConfigs = registerAs('tos', () => ({
