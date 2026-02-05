@@ -8,14 +8,11 @@ import {
   TosService,
 } from '@ai-media/share';
 import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
-import { minioConfigs, tosConfigs } from 'src/configs';
-import { ConfigType } from '@nestjs/config';
+import { tosConfigs } from 'src/configs';
 
 @Injectable()
 export class LogsService {
   constructor(
-    @Inject(minioConfigs.KEY)
-    private minioconfig: ConfigType<typeof minioConfigs>,
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly userRepo: UsersRepository,

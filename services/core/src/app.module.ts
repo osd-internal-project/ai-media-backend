@@ -17,7 +17,7 @@ import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
 import { PromptGuideTypeModule } from './prompt-guide-type/prompt-guide-type.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AiModelModule } from './ai-model/ai-model.module';
-import { appConfigs, minioConfigs, byteplusConfigs, redisConfigs } from './configs';
+import { appConfigs, byteplusConfigs, redisConfigs } from './configs';
 import { PlanModule } from './plan/plan.module';
 import { GenerateModule } from './generate/generate.module';
 import { BullModule } from '@nestjs/bullmq';
@@ -27,7 +27,7 @@ import { WebsocketModule } from './websocket/websocket.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfigs, minioConfigs, byteplusConfigs],
+      load: [appConfigs, byteplusConfigs],
     }),
     ScheduleModule.forRoot(),
     WebsocketModule,

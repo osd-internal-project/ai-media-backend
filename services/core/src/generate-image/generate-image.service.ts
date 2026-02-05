@@ -19,7 +19,7 @@ import axios from 'axios';
 import * as https from 'https';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigType } from '@nestjs/config';
-import { minioConfigs, tosConfigs } from 'src/configs';
+import { tosConfigs } from 'src/configs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Log } from 'src/logs/entities/log.entity';
@@ -38,8 +38,6 @@ export class GenerateImageService implements OnModuleInit {
   private hasPendingTasks = false;
 
   constructor(
-    @Inject(minioConfigs.KEY)
-    private minioconfig: ConfigType<typeof minioConfigs>,
     private readonly generateimagerepo: GenerateImageRepository,
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,

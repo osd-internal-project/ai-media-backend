@@ -23,7 +23,7 @@ import { memoryStorage } from 'multer';
 import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
-import { minioConfigs, tosConfigs } from 'src/configs';
+import { tosConfigs } from 'src/configs';
 import { ConfigType } from '@nestjs/config';
 import { Observable, fromEvent, interval, map, merge } from 'rxjs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -32,8 +32,6 @@ import { TosService } from '@ai-media/share';
 @Controller('generate-image')
 export class GenerateImageController {
   constructor(
-    @Inject(minioConfigs.KEY)
-    private config: ConfigType<typeof minioConfigs>,
     private readonly GenerateImageService: GenerateImageService,
     private eventEmitter: EventEmitter2,
     private readonly tosService: TosService,
@@ -232,7 +230,6 @@ export class GenerateImageController {
     @Body('projectId') projectId: string,
   ) {
     if (type && files.length > 0) {
-      const bucketname = this.config.minioBucketUpload;
       const savedFiles = await Promise.all(
         files.map((file) => {
           const ext = path.extname(file.originalname); // นามสกุลไฟล์
@@ -243,7 +240,7 @@ export class GenerateImageController {
             file.buffer,
           );
           return {
-            filePath: `${bucketname}/${fileName}`,
+            filePath: `${tosConfigs().tosBucket}/${fileName}`,
             fileType: file.mimetype,
             fileName: fileName,
           };
