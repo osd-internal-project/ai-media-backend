@@ -18,7 +18,8 @@ export class GalleryService {
     return this.galleryRepo.findAll({});
   }
 
-  async findMany(projectId: string, query: any, organizationId: string) {
+  async findMany(projectId: string, query: any) {
+    const organizationId = query.organizationId
     const page = +query.page || 1;
     const pageSize = +query.pageSize || 10;
     const data = await this.galleryRepo.findMany({

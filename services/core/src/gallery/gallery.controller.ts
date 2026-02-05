@@ -24,8 +24,8 @@ export class GalleryController {
     return this.galleryService.findAll();
   }
   @Get(':projectId')
-  findOne(@Param('projectId') projectId: string, @Query() query: any, @Param('organizationId') organizationId: string) {
-    return this.galleryService.findMany(projectId, query, organizationId);
+  findOne(@Param('projectId') projectId: string, @Query() query: any) {
+    return this.galleryService.findMany(projectId, query);
   }
   @Get('activity/:projectId')
   findByActivity(@Param('projectId') projectId: string, @Query() query: any) {
