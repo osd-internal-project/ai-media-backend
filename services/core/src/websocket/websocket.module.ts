@@ -11,7 +11,7 @@ import { LogsService } from 'src/logs/logs.service';
   imports: [PrismaModule, TosModule,
     RedisModule.forRoot({
       type: 'single',
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
     }),
     BullModule.registerQueue({
       name: QUEUE_NAME_IMAGE,

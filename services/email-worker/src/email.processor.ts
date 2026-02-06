@@ -1,19 +1,23 @@
-import { Controller, Logger } from '@nestjs/common';
-import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
+import { Logger } from '@nestjs/common';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
 import { MailerService } from '@nestjs-modules/mailer';
-import { SendEmailDto, SEND_EMAIL_EVENT } from '@ai-media/share';
+import { SendEmailDto, SEND_EMAIL_EVENT, EMAIL_QUEUE } from '@ai-media/share';
 
-@Controller()
-export class EmailProcessor {
+@Processor(EMAIL_QUEUE)
+export class EmailProcessor extends WorkerHost {
     private readonly logger = new Logger(EmailProcessor.name);
 
-    constructor(private readonly mailerService: MailerService) { }
+    constructor(private readonly mailerService: MailerService) {
+        super();
+    }
 
-    @EventPattern(SEND_EMAIL_EVENT)
-    async handleSendEmail(@Payload() data: SendEmailDto, @Ctx() context: RmqContext) {
-        const channel = context.getChannelRef();
-        const originalMsg = context.getMessage();
-
+    async process(job: Job<SendEmailDto>) {
+        if (job.name !== SEND_EMAIL_EVENT) {
+            this.logger.warn(`Unknown job name: ${job.name}`);
+            return;
+        }
+        const data = job.data;
         this.logger.log(`📨 Processing job for: ${data.to}`);
 
         try {
@@ -25,12 +29,11 @@ export class EmailProcessor {
             });
 
             this.logger.log(`✅ Sent to ${data.to}`);
-            channel.ack(originalMsg); // งานเสร็จสมบูรณ์
+            return { success: true };
 
         } catch (error) {
             this.logger.error(`❌ Error: ${error.message}`);
-            // Ack ทิ้งเพื่อป้องกัน Loop (Production ควรใช้ DLQ)
-            channel.ack(originalMsg);
+            throw error; // BullMQ will handle retries
         }
     }
 }

@@ -1,24 +1,26 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { ClientsModule, Transport } from '@nestjs/microservices';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
-import { EMAIL_SERVICE, EMAIL_QUEUE } from '@ai-media/share'; // Import จาก Libs
+import { EMAIL_QUEUE } from '@ai-media/share'; // Import จาก Libs
 import { appConfigs } from './configs';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ClientsModule.register([
-      {
-        name: EMAIL_SERVICE,
-        transport: Transport.RMQ,
-        options: {
-          urls: [appConfigs().RABBITMQ_URL],
-          queue: EMAIL_QUEUE,
-          queueOptions: { durable: true },
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        connection: {
+          host: appConfigs().REDIS_HOST,
+          port: appConfigs().REDIS_PORT,
         },
-      },
-    ]),
+      }),
+      inject: [ConfigService],
+    }),
+    BullModule.registerQueue({
+      name: EMAIL_QUEUE,
+    }),
   ],
   controllers: [AppController],
 })

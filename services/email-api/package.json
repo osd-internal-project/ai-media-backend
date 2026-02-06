@@ -10,8 +10,6 @@
     "@nestjs/core": "^9.1.2",
     "@nestjs/microservices": "^9.0.0",
     "@nestjs/platform-express": "^9.4.2",
-    "amqp-connection-manager": "^5.0.0",
-    "amqplib": "^0.10.9",
     "reflect-metadata": "^0.1.13"
   },
   "devDependencies": {
