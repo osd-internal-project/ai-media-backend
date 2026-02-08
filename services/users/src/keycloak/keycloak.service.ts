@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import axios from 'axios';
 import configs from 'src/configs';
+import * as https from 'https';
 
 @Injectable()
 export class KeycloakService {
@@ -28,10 +29,16 @@ export class KeycloakService {
       params.append('grant_type', 'client_credentials');
     }
     // Logger.debug(`params ${params}`);
+    const httpsAgent = new https.Agent({
+      rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+    });
     const { data } = await axios.post(
       `${config.url}/realms/${config.realm}/protocol/openid-connect/token`,
       params,
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        httpsAgent,
+      },
     );
     // Logger.debug(data);
     return data.access_token;
@@ -44,10 +51,16 @@ export class KeycloakService {
       params.append('client_id', config.clientId);
       params.append('client_secret', config.clientSecret);
       params.append('token', token);
+      const httpsAgent = new https.Agent({
+        rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+      });
       const { data } = await axios.post(
         `${config.url}/realms/${config.realm}/protocol/openid-connect/token/introspect`,
         params,
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          httpsAgent,
+        },
       );
 
       const isActive = data.active === true;
@@ -113,6 +126,9 @@ export class KeycloakService {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
+          httpsAgent: new https.Agent({
+            rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+          }),
         },
       );
 
@@ -121,6 +137,9 @@ export class KeycloakService {
         `${config.url}/admin/realms/${config.realm}/users?username=${userDto.username}`,
         {
           headers: { Authorization: `Bearer ${token}` },
+          httpsAgent: new https.Agent({
+            rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+          }),
         },
       );
 
@@ -165,10 +184,16 @@ export class KeycloakService {
         axios.get(`${config.url}/admin/realms/${config.realm}/users`, {
           params: { username, exact: true },
           headers: { Authorization: `Bearer ${token}` },
+          httpsAgent: new https.Agent({
+            rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+          }),
         }),
         axios.get(`${config.url}/admin/realms/${config.realm}/users`, {
           params: { email, exact: true },
           headers: { Authorization: `Bearer ${token}` },
+          httpsAgent: new https.Agent({
+            rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+          }),
         }),
       ]);
 
@@ -228,6 +253,9 @@ export class KeycloakService {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+        }),
       },
     );
   }
@@ -242,6 +270,9 @@ export class KeycloakService {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+        }),
       },
     );
   }
@@ -279,7 +310,12 @@ export class KeycloakService {
       const { data } = await axios.post(
         `${config.url}/realms/${config.realm}/protocol/openid-connect/token`,
         params,
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          httpsAgent: new https.Agent({
+            rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+          }),
+        },
       );
       return { ...data, ...user };
     } catch (error) {
@@ -303,6 +339,9 @@ export class KeycloakService {
       `${config.url}/admin/realms/${config.realm}`,
       {
         headers: { Authorization: `Bearer ${token}` },
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+        }),
       },
     );
     return data.passwordPolicy;
