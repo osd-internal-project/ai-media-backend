@@ -4,6 +4,7 @@ import {
   UsersRepository,
   ProjectMemberRepository,
   OrganizationMemberRepository,
+  OrganizationRepository,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 
@@ -63,6 +64,7 @@ export class ProjectService {
     private readonly usersRepo: UsersRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly organizationMemberRepo: OrganizationMemberRepository,
+    private readonly organizationRepo: OrganizationRepository,
   ) {}
 
   private async getUserOrganizationRole(
@@ -169,13 +171,12 @@ export class ProjectService {
       user.userId,
       organizationId,
     );
-    const isSuperAdmin = organizationRole === 'SUPER_ADMIN';
+    const isSuperAdmin = user?.role === 'SUPER_ADMIN';
     const isOwner = organizationRole === 'OWNER';
     const isAdmin = organizationRole === 'ADMIN';
 
     const isShowAll = isOwner || isAdmin || isSuperAdmin;
-
-    return this.projectRepo.findMany({
+    const data = await this.projectRepo.findMany({
       where: {
         organizationId,
         ...(!isSuperAdmin && { status: { not: 'deleted' } }),
@@ -194,7 +195,9 @@ export class ProjectService {
         createdAt: 'desc',
       },
     });
+    return data;
   }
+
   update(id: string, updateProjectDto: any) {
     return this.projectRepo.update({
       where: { id },
@@ -225,6 +228,37 @@ export class ProjectService {
             : undefined,
       },
     });
+  }
+  async deleteProject(id: string) {
+    const project = await this.projectRepo.findOne({ where: { id } });
+    if (project) {
+      await this.projectRepo.update({
+        where: { id },
+        data: {
+          status: 'deleted',
+          accessImageAmount: 0,
+          accessTokenAmount: 0,
+          remainImageAmount: 0,
+          remainTokenAmount: 0,
+        },
+      });
+      await this.projectMemberRepo.updateMany({
+        where: { projectId: project.id },
+        data: {
+          maxImages: 0,
+          maxToken: 0,
+        },
+      });
+      this.organizationRepo.update({
+        where: { organizationId: project.organizationId },
+        data: {
+          remainImageAmount: { increment: project.accessImageAmount },
+          remainTokenAmount: { increment: project.accessTokenAmount },
+        },
+      });
+    } else {
+      throw new Error('Project not found');
+    }
   }
 
   remove(id: string) {
