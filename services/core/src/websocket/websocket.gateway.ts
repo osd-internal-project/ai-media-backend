@@ -39,7 +39,6 @@ export class WebsocketGatewayService
     private readonly workerService: WebsocketService,
     private readonly generateService: GenerateService,
     private readonly logsService: LogsService,
-
   ) {
     // สร้าง Redis Subscriber แยกสำหรับรับ events จาก Worker
     const redisConf = redisConfigs();
