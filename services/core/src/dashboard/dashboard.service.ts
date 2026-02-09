@@ -58,6 +58,19 @@ export class DashboardService {
       where: {
         organizationId: organizationId,
         ...(projectId && { id: projectId }),
+        logs: {
+          some: {
+            status: 'success',
+            ...(projectId && { projectId: projectId }),
+            ...(createdAt && {
+              createdAt: {
+                gte: dayjs(createdAt).startOf('month').toDate(),
+                lte: dayjs(createdAt).endOf('month').toDate(),
+              },
+            }),
+            // typeGenerate: { in: ['vdo'] },
+          },
+        },
       },
       select: {
         id: true,
