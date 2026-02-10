@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "aicave-email-worker-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "aicave-email-worker-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aicave-email-worker-service.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ .Values.appName }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.service.containerPort }}
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: {{ .Values.env.nodeEnv | quote }}
+        - name: PORT
+          value: {{ .Values.env.port | quote }}
+        - name: REDIS_HOST
+          value: {{ .Values.env.redisHost | quote }}
+        - name: REDIS_PORT
+          value: {{ .Values.env.redisPort | quote }}
+        - name: SMTP_HOST
+          value: {{ .Values.env.smtpHost | quote }}
+        - name: SMTP_PORT
+          value: {{ .Values.env.smtpPort | quote }}
+        - name: SMTP_USER
+          value: {{ .Values.env.smtpUser | quote }}
+        - name: SMTP_PASSWORD
+          value: {{ .Values.env.smtpPassword | quote }}
+        - name: SMTP_FROM
+          value: {{ .Values.env.smtpFrom | quote }}
+        - name: SMTP_SERVICE
+          value: {{ .Values.env.smtpService | quote }}
+        resources:
+          requests:
+            memory: {{ .Values.resources.requests.memory | quote }}
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.resources.limits.memory | quote }}
+            cpu: {{ .Values.resources.limits.cpu | quote }}

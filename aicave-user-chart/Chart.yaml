@@ -1,0 +1,6 @@
+apiVersion: v2
+name: aicave-user-service
+description: A Helm chart for AICave User Service Backend Application
+type: application
+version: 1.0.0
+appVersion: "v1.0.4"

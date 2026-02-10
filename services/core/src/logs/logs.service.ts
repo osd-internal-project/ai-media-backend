@@ -19,18 +19,17 @@ export class LogsService {
     private readonly auditLogRepo: AuditLogRepository,
     private readonly errorLogRepo: ErrorLogRepository,
     private readonly tosService: TosService,
-
-  ) { }
+  ) {}
   async findProjectImageByPage(
     projectId: string,
     organizationId: string,
     skip?: number,
     take?: number,
   ) {
-    console.log(`projectId`, projectId)
-    console.log(`organizationId`, organizationId)
-    console.log(`skip`, skip)
-    console.log(`take`, take)
+    console.log(`projectId`, projectId);
+    console.log(`organizationId`, organizationId);
+    console.log(`skip`, skip);
+    console.log(`take`, take);
 
     const taskIds = await this.galleryRepo.findMany({
       where: {
@@ -86,15 +85,23 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.imageUrl}`,
+          )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.thumbnailUrl}`,
+          )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -138,6 +145,7 @@ export class LogsService {
               thumbnailUrl: thumbnailUrl,
               id: item.id,
               status: item.status,
+              fileName: item.imageUrl,
             },
           ],
         });
@@ -149,6 +157,7 @@ export class LogsService {
           thumbnailUrl: thumbnailUrl,
           id: item.id,
           status: item.status,
+          fileName: item.imageUrl,
         });
       }
     }
@@ -156,7 +165,11 @@ export class LogsService {
 
     return result;
   }
-  async findProjectImageByFristId(projectId: string, organizationId: string, fristId: string) {
+  async findProjectImageByFristId(
+    projectId: string,
+    organizationId: string,
+    fristId: string,
+  ) {
     const cerrentTask = await this.galleryRepo.findOne({
       where: {
         id: fristId,
@@ -223,15 +236,23 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.imageUrl}`,
+          )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.thumbnailUrl}`,
+          )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -273,6 +294,9 @@ export class LogsService {
             {
               imageUrl: url,
               thumbnailUrl: thumbnailUrl,
+              id: item.id,
+              status: item.status,
+              fileName: item.imageUrl,
             },
           ],
         });
@@ -282,6 +306,9 @@ export class LogsService {
         map.get(item.taskId).imageUrls.push({
           imageUrl: url,
           thumbnailUrl: thumbnailUrl,
+          id: item.id,
+          status: item.status,
+          fileName: item.imageUrl,
         });
       }
     }
@@ -358,15 +385,23 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.imageUrl}`,
+          )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.thumbnailUrl}`,
+          )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -411,6 +446,7 @@ export class LogsService {
               thumbnailUrl: thumbnailUrl,
               id: item.id,
               status: item.status,
+              fileName: item.imageUrl,
             },
           ],
         });
@@ -421,6 +457,7 @@ export class LogsService {
           imageUrl: url,
           thumbnailUrl: thumbnailUrl,
           id: item.id,
+          fileName: item.imageUrl,
           status: item.status,
         });
       }
@@ -430,7 +467,11 @@ export class LogsService {
 
     return result;
   }
-  async findProjectViedoByFristId(projectId: string, organizationId: string, fristId: string) {
+  async findProjectViedoByFristId(
+    projectId: string,
+    organizationId: string,
+    fristId: string,
+  ) {
     const cerrentTask = await this.galleryRepo.findOne({
       where: {
         id: fristId,
@@ -503,15 +544,23 @@ export class LogsService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.imageUrl}`,
+          )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.thumbnailUrl}`,
+          )
         : '';
 
       // Generate presigned URLs for multiple reference images
@@ -555,6 +604,7 @@ export class LogsService {
               imageUrl: url,
               thumbnailUrl: thumbnailUrl,
               id: item.id,
+              fileName: item.imageUrl,
               status: item.status,
             },
           ],
@@ -567,6 +617,7 @@ export class LogsService {
           thumbnailUrl: thumbnailUrl,
           id: item.id,
           status: item.status,
+          fileName: item.imageUrl,
         });
       }
     }

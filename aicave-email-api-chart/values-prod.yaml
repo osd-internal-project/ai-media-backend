@@ -1,0 +1,23 @@
+# Production Environment Values
+# Override specific values for PROD environment
+# Accessed via: aicave-email-api-service.aicave-prod.svc.cluster.local:8974
+
+namespace: aicave-prod
+replicaCount: 3
+
+image:
+  tag: "v1.0.1"
+
+env:
+  nodeEnv: "Production"
+  port: "5000"
+  redisHost: "my-redis-master"
+  redisPort: "6379"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "512Mi"
+    cpu: "1000m"

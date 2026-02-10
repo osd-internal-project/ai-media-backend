@@ -1,0 +1,40 @@
+# SIT Environment Values
+# Override specific values for SIT environment
+
+namespace: aicave-sit
+replicaCount: 1
+
+image:
+  tag: "v1.0.4"
+
+ingress:
+  hosts:
+    - host: sit.aicave.ai
+      paths:
+        - path: /public/api/v1/user(/|$)(.*)
+          pathType: ImplementationSpecific
+  tls:
+    enabled: true
+    secretName: aicave-console-tls-sit
+
+env:
+  nodeEnv: "Development"
+  port: "4000"
+  nodeTlsRejectUnauthorized: "0"
+  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
+  pathMountdirUpload: "./uploads"
+  pathDomain: "http://sit.aicave.ai"
+  emailApiUrl: "http://aicave-email-api-service.aicave-sit.svc.cluster.local:8974"
+  frontendUrl: "https://sit.aicave.ai"
+  keycloakUrl: "https://id24-sit.aicave.ai"
+  keycloakRealm: "eportal"
+  keycloakClientId: "eportal-client-id"
+  keycloakClientSecret: "kovdYL3AAs9v6e3zxNw4o3CbaBwZiCId"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
