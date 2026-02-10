@@ -48,7 +48,10 @@ export class ProjectController {
   ) {
     return this.projectService.update(id, updateProjectDto);
   }
-
+  @Delete(':id/remove')
+  deleteProject(@Param('id') id: string) {
+    return this.projectService.deleteProject(id);
+  }
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.projectService.remove(id);
@@ -81,6 +84,10 @@ export class ProjectController {
     @Param('userId') userId: string,
     @Query('requiredRole') requiredRole?: string,
   ) {
-    return this.projectService.hasProjectPermission(projectId, userId, requiredRole as any);
+    return this.projectService.hasProjectPermission(
+      projectId,
+      userId,
+      requiredRole as any,
+    );
   }
 }
