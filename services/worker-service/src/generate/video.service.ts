@@ -186,6 +186,7 @@ export class VideoProcessor extends WorkerHost {
             type: 'video',
             projectId: body.projectId,
           });
+          const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
           const videoRes = await axios.get(content.video_url, {
             responseType: 'arraybuffer',
             httpsAgent: this.agent,
@@ -230,7 +231,12 @@ export class VideoProcessor extends WorkerHost {
             type: 'video',
             projectId: body.projectId,
           });
-
+          await this.redis.set(
+            redisVideoCacheKey,
+            usage.total_tokens.toString(),
+            'EX',
+            24 * 60 * 60,
+          );
           await this.galleryRepo.updateMany({
             where: { taskId: taskId },
             data: {
