@@ -1,0 +1,23 @@
+# UAT Environment Values
+# Override specific values for UAT environment
+# Accessed via: aicave-email-api-service.aicave-uat.svc.cluster.local:8974
+
+namespace: aicave-uat
+replicaCount: 2
+
+image:
+  tag: "v1.0.1"
+
+env:
+  nodeEnv: "staging"
+  port: "5000"
+  redisHost: "my-redis-master.redis.svc.cluster.local"
+  redisPort: "6379"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "384Mi"
+    cpu: "750m"

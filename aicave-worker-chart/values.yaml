@@ -1,0 +1,63 @@
+# Default values for aicave-worker-service
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+appName: aicave-worker-service
+namespace: aicave-prod
+replicaCount: 3
+
+image:
+  repository: docker.io/library/ai-cave-worker-service
+  pullPolicy: IfNotPresent
+  tag: "v1.0.1"
+
+service:
+  type: ClusterIP
+  port: 8976
+  targetPort: 4000
+  containerPort: 8976
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/enable-websocket: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+  hosts:
+    - host: www.aicave.ai
+      paths:
+        - path: /websockets
+          pathType: ImplementationSpecific
+  tls:
+    enabled: true
+    secretName: aicave-console-tls
+  # WebSocket traffic is proxied to aicave-core-service (not worker itself)
+  websocketBackendService: aicave-core-service
+  websocketBackendPort: 8971
+
+env:
+  nodeEnv: "Development"
+  port: "4000"
+  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
+  redisHost: "my-redis-master.aicave-prod.svc.cluster.local"
+  redisPort: "6379"
+  storagePath: "https://www.aicave.ai/public/api/v1/s3"
+  tosBucket: "ai-cave"
+  tosAccessKey: "AKAPYjgyZmRiNzcwOGUzNGQzMWEzOTljMmJlMGMxZmIxN2M"
+  tosSecretKey: "WW1aaU5URTVNV1ptWmpKak5HWTJNbUpoTTJJeU1HWmlaak0zTlRRMVpUVQ=="
+  tosRegion: "ap-southeast-3"
+  tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "512Mi"
+    cpu: "1000m"
+
+nameOverride: ""
+fullnameOverride: ""

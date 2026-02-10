@@ -1,0 +1,23 @@
+# SIT Environment Values
+# Override specific values for SIT environment
+# Accessed via: aicave-email-api-service.aicave-sit.svc.cluster.local:8974
+
+namespace: aicave-sit
+replicaCount: 1
+
+image:
+  tag: "v1.0.1"
+
+env:
+  nodeEnv: "Development"
+  port: "5000"
+  redisHost: "my-redis-master.redis.svc.cluster.local"
+  redisPort: "6379"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"

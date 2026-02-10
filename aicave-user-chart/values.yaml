@@ -1,0 +1,59 @@
+# Default values for aicave-user-service
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+appName: aicave-user-service
+namespace: aicave-prod
+replicaCount: 3
+
+image:
+  repository: docker.io/library/ai-users-be
+  pullPolicy: IfNotPresent
+  tag: "v1.0.4"
+
+service:
+  type: ClusterIP
+  port: 8972
+  targetPort: 4000
+  containerPort: 8972
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/$2
+  hosts:
+    - host: www.aicave.ai
+      paths:
+        - path: /public/api/v1/user(/|$)(.*)
+          pathType: ImplementationSpecific
+  tls:
+    enabled: true
+    secretName: aicave-console-tls
+
+env:
+  nodeEnv: "production"
+  port: "4000"
+  nodeTlsRejectUnauthorized: "0"
+  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
+  pathMountdirUpload: "./uploads"
+  pathDomain: "http://www.aicave.ai"
+  emailApiUrl: "http://aicave-email-api-service.aicave-prod.svc.cluster.local:8974"
+  frontendUrl: "https://www.aicave.ai"
+  keycloakUrl: "https://id24.aicave.ai"
+  keycloakRealm: "eportal"
+  keycloakClientId: "eportal-client-id"
+  keycloakClientSecret: "kovdYL3AAs9v6e3zxNw4o3CbaBwZiCId"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "512Mi"
+    cpu: "1000m"
+
+nameOverride: ""
+fullnameOverride: ""
