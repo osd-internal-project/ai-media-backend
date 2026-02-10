@@ -8,7 +8,7 @@ export class GalleryService {
   constructor(
     private readonly galleryRepo: GalleryRepository,
     private readonly tosService: TosService,
-  ) { }
+  ) {}
 
   create(createGalleryDto: Prisma.GalleryCreateInput) {
     return this.galleryRepo.create({ data: createGalleryDto });
@@ -19,7 +19,7 @@ export class GalleryService {
   }
 
   async findMany(projectId: string, query: any) {
-    const organizationId = query.organizationId
+    const organizationId = query.organizationId;
     const page = +query.page || 1;
     const pageSize = +query.pageSize || 10;
     const data = await this.galleryRepo.findMany({
@@ -40,15 +40,23 @@ export class GalleryService {
     for (const item of data) {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.imageUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.imageUrl}`,
+          )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          `organize/${organizationId}/${item.projectId}/${item.typeGenerate === 'video' ? 'video-generate' : 'image-generate'}/${item.thumbnailUrl}`,
-        )
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.thumbnailUrl}`,
+          )
         : '';
       newData.set(item.id, {
         ...item,
@@ -90,6 +98,27 @@ export class GalleryService {
       data: { status: updateGalleryDto.status },
     });
     return data;
+  }
+  async downloadFile(id: string, query: any) {
+    const organizationId = query.organizationId;
+
+    const found = await this.galleryRepo.findOne({
+      where: {
+        id,
+      },
+    });
+    const file = await this.tosService.getObjectV2(
+      tosConfigs().tosBucket,
+      `organize/${organizationId || ''}/${found.projectId}/${
+        found.typeGenerate === 'video' ? 'video-generate' : 'image-generate'
+      }/${found.imageUrl}`,
+    );
+    console.log(`download : ${found.imageUrl}`);
+    return {
+      file,
+      name: found.imageUrl,
+      type: found.typeGenerate === 'video' ? 'video/mp4' : 'image/jpeg',
+    };
   }
   async updateById(id: string, updateGalleryDto: Prisma.GalleryUpdateInput) {
     const data = await this.galleryRepo.update({
