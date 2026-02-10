@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
 import { LogsService } from './logs.service';
 import { LogsController } from './logs.controller';
-import { PrismaModule } from '@ai-media/share';
-import { MinioClientModule } from '../minio-client/minio-client.module';
+import { PrismaModule, TosModule } from '@ai-media/share';
 
 @Module({
-  imports: [PrismaModule, MinioClientModule],
+  imports: [PrismaModule, TosModule],
   controllers: [LogsController],
   providers: [LogsService],
 })

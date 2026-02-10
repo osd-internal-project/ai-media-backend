@@ -48,6 +48,13 @@ export class ProjectMemberRepository {
     const prisma = option?.prisma ?? this.prisma;
     return prisma.projectMember.update(data);
   }
+  async updateMany(
+    data: Prisma.ProjectMemberUpdateManyArgs,
+    option?: { prisma?: TQueryClient },
+  ) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.projectMember.updateMany(data);
+  }
   async delete(
     condition: Prisma.ProjectMemberDeleteArgs,
     option?: { prisma?: TQueryClient },

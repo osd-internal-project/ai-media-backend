@@ -11,6 +11,9 @@ import {
   Query,
   Res,
   Inject,
+  Sse,
+  Logger,
+  MessageEvent,
 } from '@nestjs/common';
 import { GenerateImageService } from './generate-image.service';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
@@ -18,23 +21,25 @@ import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Response } from 'express';
-import { MinioClientService } from 'src/minio-client/minio-client.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
-import { minioConfigs } from 'src/configs';
+import { tosConfigs } from 'src/configs';
 import { ConfigType } from '@nestjs/config';
+import { Observable, fromEvent, interval, map, merge } from 'rxjs';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { TosService } from '@ai-media/share';
 
 @Controller('generate-image')
 export class GenerateImageController {
   constructor(
-    @Inject(minioConfigs.KEY)
-    private config: ConfigType<typeof minioConfigs>,
     private readonly GenerateImageService: GenerateImageService,
-    private readonly minioclientSerives: MinioClientService,
+    private eventEmitter: EventEmitter2,
+    private readonly tosService: TosService,
   ) { }
 
   @Post()
   create(@Body('body') createGenerateImageDto: CreateGenerateImageDto) {
+    // Logger.debug(createGenerateImageDto);
     return this.GenerateImageService.create(createGenerateImageDto);
   }
 
@@ -212,51 +217,68 @@ export class GenerateImageController {
     return this.GenerateImageService.remove(+id);
   }
 
-  // @Post('upload-images')
-  // @UseInterceptors(
-  //   FilesInterceptor('files', 10, {
-  //     storage: memoryStorage(),
-  //   }),
-  // )
-  // async uploadImage(
-  //   @UploadedFiles() files: Express.Multer.File[],
-  //   @Body('type') type,
-  // ) {
-  //   if (type && files.length > 0) {
-  //     const bucketname = this.config.minioBucketUpload;
-  //     const savedFiles = await Promise.all(
-  //       files.map((file) => {
-  //         const ext = path.extname(file.originalname); // นามสกุลไฟล์
-  //         const fileName = `${uuidv4()}${ext}`;
-  //         this.minioclientSerives.uploadFile(
-  //           file.buffer,
-  //           file.buffer.length,
-  //           bucketname,
-  //           fileName,
-  //         );
-  //         return {
-  //           filePath: `${bucketname}/${fileName}`,
-  //           fileType: file.mimetype,
-  //           fileName: fileName,
-  //         };
-  //       }),
-  //     );
+  @Post('upload-images')
+  @UseInterceptors(
+    FilesInterceptor('files', 10, {
+      storage: memoryStorage(),
+    }),
+  )
+  async uploadImage(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body('type') type,
+    @Body('organizationId') organizationId: string,
+    @Body('projectId') projectId: string,
+  ) {
+    if (type && files.length > 0) {
+      const savedFiles = await Promise.all(
+        files.map((file) => {
+          const ext = path.extname(file.originalname); // นามสกุลไฟล์
+          const fileName = `${uuidv4()}${ext}`;
+          this.tosService.putObject(
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${projectId}/uploads/${fileName}`,
+            file.buffer,
+          );
+          return {
+            filePath: `${tosConfigs().tosBucket}/${fileName}`,
+            fileType: file.mimetype,
+            fileName: fileName,
+          };
+        }),
+      );
+      const fileList = await this.GenerateImageService.upload(savedFiles);
+      return fileList;
+    }
+  }
+  @Sse('sse/:userId')
+  sse(@Param('userId') userId: string): Observable<MessageEvent> {
+    return fromEvent(this.eventEmitter, `image.update.${userId}`).pipe(
+      map((data) => ({ data } as MessageEvent)),
+    );
+  }
 
-  //     console.log('All files uploaded!');
-  //     // const data = files.map((file) => {
-  //     //   const ext = path.extname(file.originalname); // นามสกุลไฟล์
-  //     //   const fileName = `${uuidv4()}${ext}`;
-  //     //   Logger.debug(fileName);
-  //     //   return {
-  //     //     filePath: `${bucketname}/${fileName}`,
-  //     //     fileType: file.mimetype,
-  //     //     fileName: fileName,
-  //     //   };
-  //     // });
+  @Sse('sse/project/:projectId')
+  async sseProject(
+    @Param('projectId') projectId: string,
+  ): Promise<Observable<MessageEvent>> {
+    // 🔴 keep-alive ทุก 15 วินาที
 
-  //     const fileList = await this.GenerateImageService.upload(savedFiles);
-  //     console.log(fileList);
-  //     return fileList;
-  //   }
-  // }
+    const data$ = fromEvent(
+      this.eventEmitter,
+      `image.update.project.${projectId}`,
+    ).pipe(map((data) => ({ data } as MessageEvent)));
+
+    // 🔴 keep-alive ทุก 15 วินาที
+    const keepAlive$ = interval(15000).pipe(
+      map(
+        () =>
+        ({
+          // comment ตาม SSE spec (ไม่ trigger onmessage)
+          data: null,
+          comment: 'keep-alive',
+        } as MessageEvent),
+      ),
+    );
+    return merge(data$, keepAlive$);
+  }
 }

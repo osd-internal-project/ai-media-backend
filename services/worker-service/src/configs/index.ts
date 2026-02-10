@@ -1,0 +1,18 @@
+import { registerAs } from '@nestjs/config';
+
+export const appConfigs = registerAs('app', () => ({
+  env: process.env.NODE_ENV ?? 'local',
+  port: process.env.PORT || 5000,
+  RABBITMQ_URL: process.env.RABBITMQ_URL || 'amqp://user:password@localhost:5672',
+  storagePath: process.env.STORAGE_PATH,
+  redisHost: process.env.REDIS_HOST,
+  redisPort: parseInt(process.env.REDIS_PORT, 10),
+  redisPassword: process.env.REDIS_PASSWORD,
+}));
+export const tosConfigs = registerAs('tos', () => ({
+  tosBucket: process.env.TOS_BUCKET,
+  tosAccessKey: process.env.TOS_ACCESS_KEY,
+  tosSecretKey: process.env.TOS_SECRET_KEY,
+  tosRegion: process.env.TOS_REGION,
+  tosEndpoint: process.env.TOS_ENDPOINT,
+}));

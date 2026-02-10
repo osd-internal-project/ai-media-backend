@@ -17,6 +17,14 @@ import {
   OmnihumenTaskRepository,
   OrganizationRepository,
   OrganizationMemberRepository,
+  InvitationRepository,
+  ErrorLogRepository,
+  AuditLogRepository,
+  PlanRepository,
+  RegisterRepository,
+  RequestChangePasswordRepository,
+  RefImageRepository,
+  PromptGuideImageRepository,
 } from 'src/repositories';
 
 const services = [
@@ -37,6 +45,14 @@ const services = [
   OmnihumenTaskRepository,
   OrganizationRepository,
   OrganizationMemberRepository,
+  InvitationRepository,
+  ErrorLogRepository,
+  AuditLogRepository,
+  PlanRepository,
+  RegisterRepository,
+  RequestChangePasswordRepository,
+  RefImageRepository,
+  PromptGuideImageRepository,
 ];
 
 @Module({

@@ -16,19 +16,39 @@ import { UpdateLogDto } from './dto/update-log.dto';
 export class LogsController {
   constructor(private readonly logsService: LogsService) { }
 
-  @Get(':projectId')
-  findOne(@Param('projectId') projectId: string,
-    @Query('skip') skip?: number,
-    @Query('take') take?: number,) {
-    return this.logsService.findOne(projectId, +skip, +take);
-  }
-  @Get('find-vdo/:projectId')
-  findOneVDO(
+  @Get('find-image/:projectId')
+  findProjectImageByPage(
     @Param('projectId') projectId: string,
+    @Query('organizationId') organizationId: string,
     @Query('skip') skip?: number,
     @Query('take') take?: number,
   ) {
-    return this.logsService.findOneVDO(projectId, +skip, +take);
+    return this.logsService.findProjectImageByPage(projectId, organizationId, +skip, +take);
+  }
+  @Get('find-image/:projectId/frist')
+  findProjectImageByFristId(
+    @Param('projectId') projectId: string,
+    @Query('organizationId') organizationId: string,
+    @Query('fristid') fristId: string,
+  ) {
+    return this.logsService.findProjectImageByFristId(projectId, organizationId, fristId);
+  }
+  @Get('find-vdo/:projectId')
+  findProjectVideoByPage(
+    @Param('projectId') projectId: string,
+    @Query('organizationId') organizationId: string,
+    @Query('skip') skip?: number,
+    @Query('take') take?: number,
+  ) {
+    return this.logsService.findProjectVideoByPage(projectId, organizationId, +skip, +take);
+  }
+  @Get('find-vdo/:projectId/frist')
+  findProjectViedoByFristId(
+    @Param('projectId') projectId: string,
+    @Query('organizationId') organizationId: string,
+    @Query('fristid') fristId: string,
+  ) {
+    return this.logsService.findProjectViedoByFristId(projectId, organizationId, fristId);
   }
 
   @Get('generate-vdo-logs/:taskId')

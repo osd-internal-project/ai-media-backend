@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class GalleryRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
   async findAll(
     condition: Prisma.GalleryFindManyArgs,
     option?: { prisma?: TQueryClient },
@@ -54,6 +54,13 @@ export class GalleryRepository {
   ) {
     const prisma = option?.prisma ?? this.prisma;
     return prisma.gallery.delete(condition);
+  }
+  async updateMany(
+    data: Prisma.GalleryUpdateManyArgs,
+    option?: { prisma?: TQueryClient },
+  ) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.gallery.updateMany(data);
   }
   async deleteMany(
     condition: Prisma.GalleryDeleteManyArgs,

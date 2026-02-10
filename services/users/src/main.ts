@@ -33,6 +33,7 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   await app.listen(PORT);
+  console.log(`emailApiUrl : ${config().emailApiUrl}`);
   console.log(`service start on port : ${PORT}`);
   console.log(`Swagger documentation: http://localhost:${PORT}/api`);
 }

@@ -1,0 +1,33 @@
+# UAT Environment Values
+# Override specific values for UAT environment
+
+namespace: aicave-uat
+replicaCount: 2
+
+image:
+  tag: "v1.0.0"
+
+ingress:
+  hosts:
+    - host: uat.aicave.ai
+      paths:
+        - path: /public/api/v1/report(/|$)(.*)
+          pathType: ImplementationSpecific
+  tls:
+    enabled: true
+    secretName: aicave-console-tls-uat
+
+env:
+  nodeEnv: "staging"
+  port: "4001"
+  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
+  pathMountdirUpload: "./uploads"
+  pathDomain: "http://uat.aicave.ai"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "384Mi"
+    cpu: "750m"

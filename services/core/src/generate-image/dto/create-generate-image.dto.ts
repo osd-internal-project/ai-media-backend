@@ -1,5 +1,5 @@
 export class CreateGenerateImageDto {
-  type: 'image' | 'vdo';
+  type: 'image' | 'video';
   text: string;
   resolution: string;
   duration: string;
@@ -11,5 +11,8 @@ export class CreateGenerateImageDto {
   height: number;
   projectId: string;
   userId: string;
-  modelName?: string;  // Add optional model name
+  modelName?: string; // Add optional model name
+  generateAudio?: boolean;
+  generateConfig?: any;
+  organizationId: string;
 }

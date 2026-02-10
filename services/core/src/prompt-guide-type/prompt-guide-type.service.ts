@@ -9,19 +9,33 @@ export class PromptGuideTypeService {
   ) {}
 
   create(createPromptGuideTypeDto: Prisma.PromptGuideTypeCreateInput) {
-    return this.promptGuideTypeRepo.create({ data: createPromptGuideTypeDto });
+    const data = {
+      ...createPromptGuideTypeDto,
+      organizationId: createPromptGuideTypeDto.organizationId || null,
+    };
+    return this.promptGuideTypeRepo.create({ data });
   }
 
-  findAll(organizationId?: string) {
+  findAll(organizationId?: string, generateType?: string) {
     const whereType: Prisma.PromptGuideTypeWhereInput = organizationId
       ? {
-          OR: [{ organizationId }, { organizationId: null }],
+          OR: [
+            { organizationId },
+            { organizationId: null },
+            { organizationId: '' },
+          ],
+          generateType: generateType,
         }
       : {};
 
     const whereGuide: Prisma.PromptGuideWhereInput = organizationId
       ? {
-          OR: [{ organizationId }, { organizationId: null }],
+          OR: [
+            { organizationId },
+            { organizationId: null },
+            { organizationId: '' },
+          ],
+          generateType: generateType,
         }
       : {};
 
@@ -51,9 +65,13 @@ export class PromptGuideTypeService {
     id: number,
     updatePromptGuideTypeDto: Prisma.PromptGuideTypeUpdateInput,
   ) {
+    const data = {
+      ...updatePromptGuideTypeDto,
+      organizationId: updatePromptGuideTypeDto.organizationId || null,
+    };
     return this.promptGuideTypeRepo.update({
       where: { id },
-      data: updatePromptGuideTypeDto,
+      data,
     });
   }
 

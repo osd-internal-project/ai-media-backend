@@ -1,0 +1,41 @@
+# SIT Environment Values
+# Override specific values for SIT environment
+
+namespace: aicave-sit
+replicaCount: 1
+
+image:
+  tag: "v1.0.1"
+
+ingress:
+  hosts:
+    - host: sit.aicave.ai
+      paths:
+        - path: /websockets
+          pathType: ImplementationSpecific
+  tls:
+    enabled: true
+    secretName: aicave-console-tls-sit
+  websocketBackendService: aicave-core-service
+  websocketBackendPort: 8971
+
+env:
+  nodeEnv: "Development"
+  port: "4000"
+  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
+  redisHost: "my-redis-master.redis.svc.cluster.local"
+  redisPort: "6379"
+  storagePath: "https://sit.aicave.ai/public/api/v1/s3"
+  tosBucket: "ai-cave"
+  tosAccessKey: "AKAPYjgyZmRiNzcwOGUzNGQzMWEzOTljMmJlMGMxZmIxN2M"
+  tosSecretKey: "WW1aaU5URTVNV1ptWmpKak5HWTJNbUpoTTJJeU1HWmlaak0zTlRRMVpUVQ=="
+  tosRegion: "ap-southeast-3"
+  tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"

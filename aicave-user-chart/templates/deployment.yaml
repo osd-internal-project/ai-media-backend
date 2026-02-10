@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "aicave-user-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "aicave-user-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aicave-user-service.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ .Values.appName }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.service.containerPort }}
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: {{ .Values.env.nodeEnv | quote }}
+        - name: PORT
+          value: {{ .Values.env.port | quote }}
+        - name: NODE_TLS_REJECT_UNAUTHORIZED
+          value: {{ .Values.env.nodeTlsRejectUnauthorized | quote }}
+        - name: DATABASE_URL
+          value: {{ .Values.env.databaseUrl | quote }}
+        - name: PATH_MOUNTDIR_UPLOAD
+          value: {{ .Values.env.pathMountdirUpload | quote }}
+        - name: PATH_DOMAIN
+          value: {{ .Values.env.pathDomain | quote }}
+        - name: EMAIL_API_URL
+          value: {{ .Values.env.emailApiUrl | quote }}
+        - name: FRONTEND_URL
+          value: {{ .Values.env.frontendUrl | quote }}
+        - name: KEYCLOAK_URL
+          value: {{ .Values.env.keycloakUrl | quote }}
+        - name: KEYCLOAK_REALM
+          value: {{ .Values.env.keycloakRealm | quote }}
+        - name: KEYCLOAK_CLIENT_ID
+          value: {{ .Values.env.keycloakClientId | quote }}
+        - name: KEYCLOAK_CLIENT_SECRET
+          value: {{ .Values.env.keycloakClientSecret | quote }}
+        resources:
+          requests:
+            memory: {{ .Values.resources.requests.memory | quote }}
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.resources.limits.memory | quote }}
+            cpu: {{ .Values.resources.limits.cpu | quote }}

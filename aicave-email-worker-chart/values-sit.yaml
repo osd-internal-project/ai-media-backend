@@ -1,0 +1,28 @@
+# SIT Environment Values
+# Override specific values for SIT environment
+
+namespace: aicave-sit
+replicaCount: 1
+
+image:
+  tag: "v1.0.1"
+
+env:
+  nodeEnv: "Development"
+  port: "5001"
+  redisHost: "my-redis-master.redis.svc.cluster.local"
+  redisPort: "6379"
+  smtpHost: "smtp.office365.com"
+  smtpPort: "587"
+  smtpUser: "internalsupport@osd.co.th"
+  smtpPassword: "Internal-support@osd1234."
+  smtpFrom: "internalsupport@osd.co.th"
+  smtpService: "outlook"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"

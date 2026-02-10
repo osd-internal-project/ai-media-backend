@@ -3,6 +3,7 @@ import { CreateOrganizationMemberDto } from './dto/create-organization-members.d
 import { UpdateOrganizationMemberDto } from './dto/update-organization-members.dto';
 import { OrganizationMemberRepository } from '@ai-media/share';
 import { UsersRepository } from '@ai-media/share';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class OrganizationMembersService {
@@ -11,12 +12,21 @@ export class OrganizationMembersService {
     private readonly usersRepo: UsersRepository,
   ) {}
 
-  create(createOrganizationMembersDto: CreateOrganizationMemberDto) {
+  create(createOrganizationMembersDto: Prisma.OrganizationMemberCreateInput) {
     return this.organizationMemberRepo.create({
       data: createOrganizationMembersDto,
     });
   }
-
+  createFromInvite(createOrganizationMembersDto: CreateOrganizationMemberDto) {
+    return this.organizationMemberRepo.create({
+      data: {
+        ...createOrganizationMembersDto,
+        role: 'MEMBER',
+        maxImages: 10000,
+        maxToken: 10000,
+      },
+    });
+  }
   findAll() {
     return this.organizationMemberRepo.findMany({});
   }
@@ -30,6 +40,8 @@ export class OrganizationMembersService {
   findByOrganization(organizationId: string) {
     return this.organizationMemberRepo.findMany({
       where: { organizationId },
+      include: { users: true },
+      orderBy: { joinedAt: 'desc' },
     });
   }
   async findUserMemberByOrganization(organizationId: string, token: string) {

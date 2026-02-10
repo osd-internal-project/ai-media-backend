@@ -9,28 +9,47 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum LogSeverity {
+  INFO
+  WARN
+  ERROR
+  FATAL
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  DOWNLOAD
+  // เพิ่ม action อื่นๆ ตามต้องการ
+}
+
 model users {
-  id                   Int             @id @default(autoincrement())
-  userId               String          @unique @default(uuid()) @db.VarChar(50)
-  username             String          @unique @db.VarChar(100)
-  fullname             String          @db.VarChar(200)
-  email                String          @db.VarChar(200)
-  tier                 String          @db.VarChar(200)
-  description          String?         @db.Text
-  phoneNumber          String          @default("phone_number") @db.VarChar(50)
-  status               String          @default("active") @db.VarChar(50)
-  lastOn               DateTime?       @map("last_on")
-  maxToken             Int             @default(0)
-  maxImages            Int             @default(0) @map("max_images")
-  apiKeys              String?         @map("api_keys") @db.Text
-  token                String?         @db.VarChar(50)
-  createdAt            DateTime        @default(now()) @map("created_at")
-  updatedAt            DateTime        @updatedAt @map("updated_at")
+  id                   Int                  @id @default(autoincrement())
+  userId               String               @unique @default(uuid()) @db.VarChar(50)
+  username             String               @unique @db.VarChar(100)
+  fullname             String               @db.VarChar(200)
+  email                String               @db.VarChar(200)
+  tier                 String               @default("free") @db.VarChar(200)
+  description          String?              @db.Text
+  phoneNumber          String               @default("phone_number") @db.VarChar(50)
+  status               String               @default("active") @db.VarChar(50) //active, inactive, deleted, banned, invite
+  lastOn               DateTime?            @map("last_on")
+  maxToken             Int?                 @default(0)
+  maxImages            Int?                 @default(0) @map("max_images")
+  apiKeys              String?              @map("api_keys") @db.Text
+  token                String?              @db.VarChar(50)
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+  agreement            Boolean              @default(false)
+  role                 String?              @default("USER") @db.VarChar(50)
   groups               UserGroup[]
   projectMembers       ProjectMember[]
   galleries            Gallery[]
   logs                 Log[]
-  recentOrganizationId String?         @map("recent_organization_id") @db.VarChar(50)
+  recentOrganizationId String?              @map("recent_organization_id") @db.VarChar(50)
+  organizationMembers  OrganizationMember[]
 }
 
 model Project {
@@ -45,6 +64,11 @@ model Project {
   logs           Log[]
   organizationId String?         @map("organization_id") @db.VarChar(50)
 
+  accessTokenAmount Int? @default(0) @map("access_token_amount")
+  accessImageAmount Int? @default(0) @map("access_image_amount")
+  remainTokenAmount Int? @default(0) @map("remain_token_amount")
+  remainImageAmount Int? @default(0) @map("remain_image_amount")
+
   @@map("project")
 }
 
@@ -58,23 +82,28 @@ model ProjectMember {
   project Project @relation(fields: [projectId], references: [id])
   users   users   @relation(fields: [userId], references: [userId])
 
+  maxToken  Int? @default(0) @map("max_token")
+  maxImages Int? @default(0) @map("max_images")
+
   @@unique([projectId, userId]) // ห้ามซ้ำ
   @@map("project_member")
 }
 
 model Gallery {
-  id           String   @id @default(uuid())
-  taskId       String?
-  projectId    String
-  userId       String
-  imageUrl     String
-  prompt       String?
-  thumbnailUrl String?
-  typeGenerate String?
-  createdAt    DateTime @default(now())
-  status       Boolean? @default(false)
-  project      Project  @relation(fields: [projectId], references: [id])
-  users        users    @relation(fields: [userId], references: [userId])
+  id               String   @id @default(uuid())
+  taskId           String?
+  projectId        String
+  userId           String
+  imageUrl         String?
+  prompt           String?
+  thumbnailUrl     String?
+  typeGenerate     String?
+  createdAt        DateTime @default(now())
+  status           Boolean? @default(false)
+  project          Project  @relation(fields: [projectId], references: [id])
+  users            users    @relation(fields: [userId], references: [userId])
+  genneratedStatus String?  @default("PENDING") @db.VarChar(50)
+  generateConfig   Json?    @map("generate_config") @db.JsonB
 
   @@map("gallery")
 }
@@ -92,10 +121,12 @@ model Log {
   referenceImages String[] @default([])
   resolution      String?
   ratio           String?
+  generateAudio   Boolean? @default(false)
   createdAt       DateTime @default(now())
-
-  project Project @relation(fields: [projectId], references: [id])
-  users   users   @relation(fields: [userId], references: [userId])
+  generateConfig  Json?    @map("generate_config") @db.JsonB
+  project         Project  @relation(fields: [projectId], references: [id])
+  users           users    @relation(fields: [userId], references: [userId])
+  galleryId       String?  @map("gallary_id") @db.VarChar(100)
 
   @@map("log")
 }
@@ -215,8 +246,29 @@ model PromptGuide {
   promptGuideType   PromptGuideType? @relation(fields: [promptGuideTypeId], references: [id])
   promptGuideTypeId Int?             @map("prompt_guide_type_id")
   organizationId    String?          @map("organization_id") @db.VarChar(50)
+  generateType      String           @default("image") @map("generate_type") @db.VarChar(10) // image/video
+  promptGuideImages String[]         @default([]) @map("prompt_guide_images")
 
   @@map("prompt_guide")
+}
+
+model PromptGuideImage {
+  id            Int      @id @default(autoincrement())
+  uid           String   @unique @db.VarChar(50)
+  userId        String   @map("user_id") @db.VarChar(50)
+  index         Int      @default(0)
+  imageName     String   @map("image_name") @db.VarChar(200)
+  imagePath     String   @map("image_path") @db.VarChar(200)
+  imageType     String   @map("image_type") @db.VarChar(50)
+  imageSize     Int      @default(0) @map("image_size")
+  generateType  String   @map("generate_type") @db.VarChar(50)
+  status        String   @default("waiting") @db.VarChar(50)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  // promptGuide   PromptGuide? @relation(fields: [promptGuideId], references: [id])
+  promptGuideId Int?     @map("prompt_guide_id") @db.Integer()
+
+  @@map("prompt_guide_images")
 }
 
 model PromptGuideType {
@@ -227,6 +279,7 @@ model PromptGuideType {
   updatedAt      DateTime      @default(now()) @map("updated_at")
   organizationId String?       @map("organization_id") @db.VarChar(50)
   promptGuide    PromptGuide[]
+  generateType   String        @default("image") @map("generate_type") @db.VarChar(10) // image/video
 
   @@map("prompt_guide_type")
 }
@@ -266,6 +319,13 @@ model Organization {
   organizationMember OrganizationMember[]
   createdById        String               @map("created_by") @db.VarChar(50)
   updatedById        String?              @map("updated_by") @db.VarChar(50)
+  invitations        Invitation[]
+
+  packageTokenAmount Int? @map("package_token_amount")
+  packageImageAmount Int? @map("package_image_amount")
+  remainTokenAmount  Int? @default(0) @map("remain_token_amount")
+  remainImageAmount  Int? @default(0) @map("remain_image_amount")
+  maxUserAccess      Int? @map("max_user_access")
 
   @@map("organization")
 }
@@ -278,5 +338,170 @@ model OrganizationMember {
   joinedAt       DateTime     @default(now()) @map("joined_at")
   organization   Organization @relation(fields: [organizationId], references: [organizationId])
 
+  apiKeys   String? @map("api_keys") @db.Text
+  users     users   @relation(fields: [userId], references: [userId])
+  maxToken  Int?
+  maxImages Int?    @default(0) @map("max_images")
+
   @@map("organization_member")
+}
+
+model Invitation {
+  id             String   @id @default(uuid())
+  email          String   @db.VarChar(200)
+  organizationId String   @map("organization_id") @db.VarChar(50)
+  role           String   @default("MEMBER") @db.VarChar(50) // Matches OrganizationMember role
+  token          String   @unique @db.VarChar(100)
+  expiresAt      DateTime @map("expires_at")
+  status         String   @default("PENDING") @db.VarChar(20) // PENDING, ACCEPTED, EXPIRED
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [organizationId])
+
+  @@index([email])
+  @@map("invitation")
+}
+
+model RequestChangePassword {
+  id        String   @id @default(uuid())
+  username  String   @db.VarChar(200)
+  email     String   @db.VarChar(200)
+  token     String   @unique @db.VarChar(100)
+  expiresAt DateTime @map("expires_at")
+  status    String   @default("PENDING") @db.VarChar(20) // PENDING, ACCEPTED, EXPIRED
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([id])
+  @@map("request_change_password")
+}
+
+model ErrorLog {
+  id          BigInt      @id @default(autoincrement())
+  serviceName String      @map("service_name") @db.VarChar(50)
+  environment String      @default("development") @db.VarChar(20)
+  severity    LogSeverity
+  errorCode   String?     @map("error_code") @db.VarChar(50)
+  message     String      @db.Text
+  stackTrace  String?     @map("stack_trace") @db.Text
+  context     Json?       @db.JsonB // Prisma รองรับ JSONB
+  userId      String?     @map("user_id") @db.VarChar(50)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([serviceName, severity])
+  @@index([createdAt])
+  @@map("error_logs") // ชื่อตารางจริงใน DB
+}
+
+model AuditLog {
+  id         BigInt      @id @default(autoincrement())
+  userId     String      @map("user_id") @db.VarChar(50)
+  action     AuditAction
+  entityName String      @map("entity_name") @db.VarChar(50)
+  entityId   String      @map("entity_id") @db.VarChar(50)
+  oldValues  Json?       @map("old_values") @db.JsonB
+  newValues  Json?       @map("new_values") @db.JsonB
+  ipAddress  String?     @map("ip_address") @db.Inet // Map INET เป็น String ใน JS
+  userAgent  String?     @map("user_agent") @db.Text
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityName, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs") // ชื่อตารางจริงใน DB
+}
+
+model Plan {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @db.VarChar(100)
+  description String? @db.Text
+  badge       String? @db.VarChar(50)
+  isPopular   Boolean @default(false) @map("is_popular")
+  borderColor String? @map("border_color") @db.VarChar(50)
+  isDefault   Boolean @default(false) @map("is_default")
+  detailJson  Json?   @map("detail_json") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  prices   PlanPrice[]
+  features PlanFeature[]
+
+  @@map("plans")
+}
+
+model PlanPrice {
+  id     String @id @default(uuid()) @db.Uuid
+  planId String @map("plan_id") @db.Uuid
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  period String  @db.VarChar(20)
+  price  Decimal @db.Decimal(10, 2)
+
+  @@unique([planId, period])
+  @@map("plan_prices")
+}
+
+model Feature {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique @db.VarChar(50)
+  label     String   @db.VarChar(100)
+  icon      String?  @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  planFeatures PlanFeature[]
+
+  @@map("features")
+}
+
+model PlanFeature {
+  id        String @id @default(uuid()) @db.Uuid
+  planId    String @map("plan_id") @db.Uuid
+  featureId String @map("feature_id") @db.Uuid
+
+  plan    Plan    @relation(fields: [planId], references: [id])
+  feature Feature @relation(fields: [featureId], references: [id])
+
+  value       String  @db.Text
+  isHighlight Boolean @default(false) @map("is_highlight")
+  orderIndex  Int     @default(0) @map("order_index")
+  category    String? @default("General") @db.VarChar(100)
+
+  @@unique([planId, featureId])
+  @@map("plan_features")
+}
+
+model Register {
+  id          Int      @id @default(autoincrement())
+  username    String   @db.VarChar(100)
+  email       String   @db.VarChar(200)
+  fullname    String   @db.VarChar(200)
+  phoneNumber String?  @map("phone_number") @db.VarChar(50)
+  token       String   @unique @db.VarChar(100)
+  agreement   Boolean  @default(false)
+  isVerify    Boolean  @default(false) @map("is_verify")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("registers")
+}
+
+model RefImage {
+  id           Int      @id @default(autoincrement())
+  uid          String   @unique @db.VarChar(50)
+  userId       String   @map("user_id") @db.VarChar(50)
+  index        Int      @default(0)
+  projectId    String   @map("project_id") @db.VarChar(100)
+  imageName    String   @map("image_name") @db.VarChar(200)
+  imagePath    String   @map("image_path") @db.VarChar(200)
+  imageType    String   @map("image_type") @db.VarChar(50)
+  imageSize    Int      @default(0) @map("image_size")
+  generateType String   @map("generate_type") @db.VarChar(50)
+  status       String   @default("waiting") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("ref_images")
 }

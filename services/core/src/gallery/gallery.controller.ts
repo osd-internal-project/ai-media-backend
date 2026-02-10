@@ -7,9 +7,11 @@ import {
   Param,
   Delete,
   Query,
+  Res,
 } from '@nestjs/common';
 import { GalleryService } from './gallery.service';
 import { Prisma } from '@prisma/client';
+import { Response } from 'express';
 
 @Controller('gallery')
 export class GalleryController {
@@ -19,12 +21,10 @@ export class GalleryController {
   create(@Body('body') createGalleryDto: Prisma.GalleryCreateInput) {
     return this.galleryService.create(createGalleryDto);
   }
-
   @Get()
   findAll() {
     return this.galleryService.findAll();
   }
-
   @Get(':projectId')
   findOne(@Param('projectId') projectId: string, @Query() query: any) {
     return this.galleryService.findMany(projectId, query);
@@ -33,12 +33,35 @@ export class GalleryController {
   findByActivity(@Param('projectId') projectId: string, @Query() query: any) {
     return this.galleryService.findByActivity(projectId, query);
   }
-  @Patch(':taskId')
+
+  @Get('download/:id')
+  async downloadFile(
+    @Param('id') id: string,
+    @Query() query: any,
+    @Res() res: Response,
+  ) {
+    const { file, name ,type} = await this.galleryService.downloadFile(id, query);
+    // console.log(name);
+    res.set({
+      'Content-Disposition': `inline; filename="${name}"`,
+      'Content-Type':type,
+    });
+    res.send(file);
+  }
+
+  @Patch('task/:taskId')
   update(
     @Param('taskId') taskId: string,
     @Body('body') updateGalleryDto: Prisma.GalleryUpdateInput,
   ) {
     return this.galleryService.update(taskId, updateGalleryDto);
+  }
+  @Patch(':id')
+  updateById(
+    @Param('id') id: string,
+    @Body('body') updateGalleryDto: Prisma.GalleryUpdateInput,
+  ) {
+    return this.galleryService.updateById(id, updateGalleryDto);
   }
 
   @Delete(':id')

@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "aicave-core-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "aicave-core-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aicave-core-service.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ .Values.appName }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.service.containerPort }}
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: {{ .Values.env.nodeEnv | quote }}
+        - name: PORT
+          value: {{ .Values.env.port | quote }}
+        - name: DATABASE_URL
+          value: {{ .Values.env.databaseUrl | quote }}
+        - name: PATH_MOUNTDIR_UPLOAD
+          value: {{ .Values.env.pathMountdirUpload | quote }}
+        - name: STORAGE_PATH
+          value: {{ .Values.env.storagePath | quote }}
+        - name: BYTEPLUS_ACCESS_KEY
+          value: {{ .Values.env.byteplusAccessKey | quote }}
+        - name: BYTEPLUS_SECRET_KEY
+          value: {{ .Values.env.byteplusSecretKey | quote }}
+        - name: TOS_BUCKET
+          value: {{ .Values.env.tosBucket | quote }}
+        - name: TOS_ACCESS_KEY
+          value: {{ .Values.env.tosAccessKey | quote }}
+        - name: TOS_SECRET_KEY
+          value: {{ .Values.env.tosSecretKey | quote }}
+        - name: TOS_REGION
+          value: {{ .Values.env.tosRegion | quote }}
+        - name: TOS_ENDPOINT
+          value: {{ .Values.env.tosEndpoint | quote }}
+        - name: REDIS_HOST
+          value: {{ .Values.env.redisHost | quote }}
+        - name: REDIS_PORT
+          value: {{ .Values.env.redisPort | quote }}
+        resources:
+          requests:
+            memory: {{ .Values.resources.requests.memory | quote }}
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.resources.limits.memory | quote }}
+            cpu: {{ .Values.resources.limits.cpu | quote }}

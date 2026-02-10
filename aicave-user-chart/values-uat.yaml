@@ -1,0 +1,40 @@
+# UAT Environment Values
+# Override specific values for UAT environment
+
+namespace: aicave-uat
+replicaCount: 2
+
+image:
+  tag: "v1.0.4"
+
+ingress:
+  hosts:
+    - host: uat.aicave.ai
+      paths:
+        - path: /public/api/v1/user(/|$)(.*)
+          pathType: ImplementationSpecific
+  tls:
+    enabled: true
+    secretName: aicave-console-tls-uat
+
+env:
+  nodeEnv: "staging"
+  port: "4000"
+  nodeTlsRejectUnauthorized: "0"
+  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave_uat?schema=public"
+  pathMountdirUpload: "./uploads"
+  pathDomain: "http://uat.aicave.ai"
+  emailApiUrl: "http://aicave-email-api-service.aicave-uat.svc.cluster.local:8974"
+  frontendUrl: "https://uat.aicave.ai"
+  keycloakUrl: "https://id24-uat.aicave.ai"
+  keycloakRealm: "eportal"
+  keycloakClientId: "eportal-client-id"
+  keycloakClientSecret: "kovdYL3AAs9v6e3zxNw4o3CbaBwZiCId"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "200m"
+  limits:
+    memory: "384Mi"
+    cpu: "750m"

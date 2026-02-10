@@ -1,17 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { GalleryRepository } from '@ai-media/share';
+import { GalleryRepository, TosService } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
-import { MinioClientService } from 'src/minio-client/minio-client.service';
-import { ConfigType } from '@nestjs/config';
-import { minioConfigs } from 'src/configs';
+import { tosConfigs } from 'src/configs';
+
 @Injectable()
 export class GalleryService {
   constructor(
-    @Inject(minioConfigs.KEY)
-    private minioconfigs: ConfigType<typeof minioConfigs>,
     private readonly galleryRepo: GalleryRepository,
-    private readonly minioService: MinioClientService,
-  ) { }
+    private readonly tosService: TosService,
+  ) {}
 
   create(createGalleryDto: Prisma.GalleryCreateInput) {
     return this.galleryRepo.create({ data: createGalleryDto });
@@ -22,6 +19,7 @@ export class GalleryService {
   }
 
   async findMany(projectId: string, query: any) {
+    const organizationId = query.organizationId;
     const page = +query.page || 1;
     const pageSize = +query.pageSize || 10;
     const data = await this.galleryRepo.findMany({
@@ -35,22 +33,30 @@ export class GalleryService {
       orderBy: { createdAt: 'desc' },
     });
     const total = await this.galleryRepo.count({
-      where: { projectId: projectId },
+      where: { projectId: projectId, ...(query?.status && { status: true }) },
     });
 
     const newData = new Map();
     for (const item of data) {
       const url = item.imageUrl
-        ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'vdo' ? this.minioconfigs.minioBucketVdo : this.minioconfigs.minioBucket,
-          item.imageUrl,
-        )
+        ? await this.tosService.getPreSignedUrl(
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.imageUrl}`,
+          )
         : '';
       const thumbnailUrl = item.thumbnailUrl
-        ? await this.minioService.getPresignedUrl(
-          item.typeGenerate === 'vdo' ? this.minioconfigs.minioBucketVdo : this.minioconfigs.minioBucket,
-          item.thumbnailUrl,
-        )
+        ? await this.tosService.getPreSignedUrl(
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              item.typeGenerate === 'video'
+                ? 'video-generate'
+                : 'image-generate'
+            }/${item.thumbnailUrl}`,
+          )
         : '';
       newData.set(item.id, {
         ...item,
@@ -60,6 +66,7 @@ export class GalleryService {
     }
     return { data: Array.from(newData.values()), total };
   }
+
   async findByActivity(projectId: string, query: any) {
     const page = +query.page || 1;
     const pageSize = +query.pageSize || 10;
@@ -88,11 +95,40 @@ export class GalleryService {
       where: {
         id: found.id,
       },
-      data: { status: !updateGalleryDto.status },
+      data: { status: updateGalleryDto.status },
     });
     return data;
   }
+  async downloadFile(id: string, query: any) {
+    const organizationId = query.organizationId;
 
+    const found = await this.galleryRepo.findOne({
+      where: {
+        id,
+      },
+    });
+    const file = await this.tosService.getObjectV2(
+      tosConfigs().tosBucket,
+      `organize/${organizationId || ''}/${found.projectId}/${
+        found.typeGenerate === 'video' ? 'video-generate' : 'image-generate'
+      }/${found.imageUrl}`,
+    );
+    console.log(`download : ${found.imageUrl}`);
+    return {
+      file,
+      name: found.imageUrl,
+      type: found.typeGenerate === 'video' ? 'video/mp4' : 'image/jpeg',
+    };
+  }
+  async updateById(id: string, updateGalleryDto: Prisma.GalleryUpdateInput) {
+    const data = await this.galleryRepo.update({
+      where: {
+        id: id,
+      },
+      data: { status: updateGalleryDto.status },
+    });
+    return data;
+  }
   remove(id: string) {
     return this.galleryRepo.delete({ where: { id: id } });
   }

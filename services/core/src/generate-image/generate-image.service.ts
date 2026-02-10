@@ -6,70 +6,109 @@ import {
   GalleryRepository,
   MasterDataConfigApiRepository,
   UsersRepository,
+  OrganizationMemberRepository,
+  ErrorLogRepository,
+  AuditLogRepository,
+  ProjectMemberRepository,
+  TosService,
 } from '@ai-media/share';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
 import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import axios from 'axios';
 import * as https from 'https';
 import { v4 as uuidv4 } from 'uuid';
-import { MinioClientService } from 'src/minio-client/minio-client.service';
 import { ConfigType } from '@nestjs/config';
-import { minioConfigs } from 'src/configs';
+import { tosConfigs } from 'src/configs';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { Log } from 'src/logs/entities/log.entity';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as ffmpeg from 'fluent-ffmpeg';
+const ffmpegPath = require('ffmpeg-static');
+const ffprobePath = require('ffprobe-static');
+
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath.path);
 @Injectable()
-export class GenerateImageService {
+export class GenerateImageService implements OnModuleInit {
+  private readonly logger = new Logger(GenerateImageService.name);
+  private readonly agent = new https.Agent({ rejectUnauthorized: false });
+  private hasPendingTasks = false;
+
   constructor(
-    @Inject(minioConfigs.KEY)
-    private minioconfig: ConfigType<typeof minioConfigs>,
     private readonly generateimagerepo: GenerateImageRepository,
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
+    private readonly projectMemberRepository: ProjectMemberRepository,
+
     private readonly userRepo: UsersRepository,
-    private readonly minioClientSerives: MinioClientService,
+    private readonly organizationMemberRepo: OrganizationMemberRepository,
+    private eventEmitter: EventEmitter2,
+    private readonly errorLogRepo: ErrorLogRepository,
+    private readonly auditLogRepo: AuditLogRepository,
+    private readonly tosService: TosService,
   ) { }
+
+  async onModuleInit() {
+    // Check if there are any pending tasks on startup to set the flag correctly
+    const pendingTasks = await this.galleryRepo.findMany({
+      where: {
+        genneratedStatus: 'PROCESSING',
+        taskId: { not: null },
+        typeGenerate: 'video',
+      },
+      take: 1,
+    });
+    this.hasPendingTasks = pendingTasks.length > 0;
+    if (this.hasPendingTasks) {
+      this.logger.log('Restored pending VDO tasks monitoring.');
+    }
+  }
+
   async create(createGenerateImageDto: CreateGenerateImageDto) {
     console.log(createGenerateImageDto.type);
     const uuid = uuidv4();
-    const agent = new https.Agent({ rejectUnauthorized: false });
+
     const getConfigApi = await this.masterdataconfigapiRepo.findOne({
       where: { id: 1 },
     } as Prisma.MasterDataConfigApiFindFirstArgs);
+
     const user = await this.userRepo.findOne({
       where: { token: createGenerateImageDto.userId },
     });
-    const axiosConfig = {
-      headers: {
-        'Content-Type': `${getConfigApi.configType}`,
-        Authorization: `${getConfigApi.authorization}`,
+    if (user) {
+      await this.logAudit(user.userId, 'CREATE', createGenerateImageDto, uuid);
+    }
+    // 1. Validate Quota
+    const projectMember = await this.projectMemberRepository.findOne({
+      where: {
+        projectId: createGenerateImageDto.projectId,
+        userId: user.userId,
       },
-      httpsAgent: agent,
-    };
-
-    const description = createGenerateImageDto.type === 'vdo'
-      ? (createGenerateImageDto.image ? 'image-to-video' : 'text-to-video')
-      : (createGenerateImageDto.image ? 'image-to-image' : 'text-to-image');
-    const getModelType = createGenerateImageDto.modelName
-      ? await this.modeltypeRepo.findOne({
-        where: {
-          modelType: createGenerateImageDto.modelName,
-          type: createGenerateImageDto.type,
-        },
-      } as Prisma.MasterModelTypeFindFirstArgs)
-      : await this.modeltypeRepo.findOne({
-        where: {
-          type: createGenerateImageDto.type,
-          description: description,
-        },
-      } as Prisma.MasterModelTypeFindFirstArgs);
-
-    if (createGenerateImageDto.type === 'vdo') {
+    });
+    if (!projectMember) {
+      Logger.error(`Team member not found`);
+      return { status: 400, data: 'Token token limit exceeded' };
+    }
+    if (createGenerateImageDto.type === 'video') {
       const totalVDOGenerate = await this.logrepo.findMany({
         where: {
           userId: user.userId,
           typeGenerate: createGenerateImageDto.type,
+          projectId: createGenerateImageDto.projectId,
           status: 'success',
+          createdAt: {
+            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            lt: new Date(
+              new Date().getFullYear(),
+              new Date().getMonth() + 1,
+              1,
+            ),
+          },
         },
       });
       const totalTokenUsed = totalVDOGenerate.reduce(
@@ -77,435 +116,785 @@ export class GenerateImageService {
         0,
       );
 
-      if (totalTokenUsed > user.maxToken) {
-        return {
-          status: 400,
-          data: 'Token ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Token',
-        };
+      if (totalTokenUsed > (projectMember?.maxToken || 0)) {
+        Logger.error(
+          `Token used ${totalTokenUsed} exceed max token ${projectMember?.maxToken}`,
+        );
+        return { status: 400, data: 'Token token limit exceeded' };
       }
-      const imageArray = createGenerateImageDto.image;
-      const imageCount =
-        imageArray && Array.isArray(imageArray) ? imageArray.length : 0;
-      console.log(`imageCount: ${imageCount}`);
-      let imageContents: any[] = [];
-      if (imageCount === 1) {
-        const imageUrl = await this.minioClientSerives.getPresignedUrl(
-          this.minioconfig.minioBucketUpload,
-          imageArray[0],
-        );
-        imageContents.push({
-          type: 'image_url',
-          image_url: {
-            url: imageUrl,
-          },
-        });
-      } else if (imageCount >= 2) {
-        const imageUrl1 = await this.minioClientSerives.getPresignedUrl(
-          this.minioconfig.minioBucketUpload,
-          imageArray[0],
-        );
-        const imageUrl2 = await this.minioClientSerives.getPresignedUrl(
-          this.minioconfig.minioBucketUpload,
-          imageArray[1],
-        );
-        console.log(`Image URL 1: ${imageUrl1}`);
-        console.log(`Image URL 2: ${imageUrl2}`);
-        imageContents.push(
-          {
-            type: 'image_url',
-            image_url: { url: imageUrl1 },
-            role: 'first_frame',
-          },
-          {
-            type: 'image_url',
-            image_url: { url: imageUrl2 },
-            role: 'last_frame',
-          },
-        );
-      }
-      const base = {
-        model: getModelType.modelType,
-        content: [
-          {
-            type: 'text',
-            text: `${createGenerateImageDto.text} --resolution ${createGenerateImageDto.resolution} --duration ${createGenerateImageDto.duration} --ratio ${createGenerateImageDto.ratio} --camerafixed false`,
-          },
-          ...imageContents,
-        ],
-      };
-
-      const generateVideo = await axios.post(
-        `${getConfigApi.apiCreateTaskVdo}`,
-        base,
-        axiosConfig,
-      );
-      if (!generateVideo.data.id) {
-        Logger.error(`Error create task: ${generateVideo}`);
-        return {
-          status: 400,
-          data: 'Error create task',
-        };
-      }
-      await this.logrepo.create({
-        data: {
-          taskId: generateVideo.data.id,
-          projectId: createGenerateImageDto.projectId,
-          userId: user.userId,
-          prompt: `${createGenerateImageDto.text} `,
-          typeGenerate: createGenerateImageDto.type,
-          status: 'pending',
-          tokenUsed: 0,
-          ImageUsed: 0,
-          referenceImages: createGenerateImageDto.image || [],
-          resolution: createGenerateImageDto.resolution || '2k',
-          ratio: createGenerateImageDto.ratio || '1:1',
-        },
-      });
-      return { status: 200, data: generateVideo.data };
     } else {
       const totalImageGenerate = await this.logrepo.findMany({
         where: {
           userId: user.userId,
           typeGenerate: createGenerateImageDto.type,
+          projectId: createGenerateImageDto.projectId,
           status: 'success',
+          createdAt: {
+            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            lt: new Date(
+              new Date().getFullYear(),
+              new Date().getMonth() + 1,
+              1,
+            ),
+          },
         },
       });
-      const totalTokenUsed = totalImageGenerate.reduce(
+      const totalImageUsed = totalImageGenerate.reduce(
         (sum, item) => sum + item.ImageUsed,
         0,
       );
       if (
-        totalTokenUsed + Number(createGenerateImageDto.images) >
-        user.maxImages
+        totalImageUsed + Number(createGenerateImageDto.images) >
+        projectMember.maxImages
       ) {
-        return {
-          status: 400,
-          data: 'Image ที่คุณใช้เกินจำนวน กรุณาติดต่อผู้ดูแลระบบเพื่อเพิ่มจำนวน Image',
-        };
+        Logger.error(
+          `Token used ${totalImageUsed} exceed max token ${projectMember?.maxImages}`,
+        );
+        return { status: 400, data: 'Image limit exceeded' };
       }
-      const dataLogs = await this.logrepo.create({
-        data: {
-          taskId: uuid,
-          projectId: createGenerateImageDto.projectId,
-          userId: user.userId,
-          prompt: `${createGenerateImageDto.text} `,
-          typeGenerate: createGenerateImageDto.type,
-          status: 'pending',
-          tokenUsed: 0,
-          ImageUsed: 0,
-          referenceImages: createGenerateImageDto.image || [],
-          resolution: createGenerateImageDto.resolution || '2k',
-          ratio: createGenerateImageDto.ratio || '1:1',
+    }
+
+    // 2. Create Gallery PENDING & Emit
+    const galleryItem = await this.galleryRepo.create({
+      data: {
+        taskId: createGenerateImageDto.type === 'image' ? uuid : null,
+        projectId: createGenerateImageDto.projectId,
+        userId: user.userId,
+        prompt: createGenerateImageDto.text,
+        typeGenerate: createGenerateImageDto.type,
+        genneratedStatus: 'PENDING',
+        imageUrl: '',
+        status: false,
+        generateConfig: {
+          ...(createGenerateImageDto?.width && {
+            width: createGenerateImageDto?.width,
+          }),
+          ...(createGenerateImageDto?.height && {
+            height: createGenerateImageDto?.height,
+          }),
+          ...(createGenerateImageDto?.ratio && {
+            ratio: createGenerateImageDto?.ratio,
+          }),
+          ...(createGenerateImageDto?.images && {
+            imageCount: createGenerateImageDto?.images,
+          }),
+          ...(createGenerateImageDto?.resolution && {
+            resolution: createGenerateImageDto?.resolution,
+          }),
+          ...(createGenerateImageDto?.modelName && {
+            modelName: createGenerateImageDto?.modelName,
+          }),
+
+          ...(createGenerateImageDto?.duration && {
+            duration: createGenerateImageDto?.duration,
+          }),
+          content: createGenerateImageDto?.text,
+          ...(createGenerateImageDto?.generateAudio && {
+            generateAudio: createGenerateImageDto?.generateAudio,
+          }),
         },
-      });
-      let imageUrl = [];
-      if (
-        createGenerateImageDto.image &&
-        createGenerateImageDto.image.length > 0
-      ) {
-        imageUrl = await Promise.all(
-          createGenerateImageDto.image.map((img) =>
-            this.minioClientSerives.getPresignedUrl(this.minioconfig.minioBucketUpload, img),
-          ),
+      },
+    });
+    Logger.debug('GENERETE PENDING TASK', galleryItem.id);
+    this.eventEmitter.emit(
+      `image.update.project.${createGenerateImageDto.projectId}`,
+      {
+        galleryId: galleryItem.id,
+        status: 'PENDING',
+        type: createGenerateImageDto.type,
+      },
+    );
+
+    // 3. Prepare Request
+    const axiosConfig = {
+      headers: {
+        'Content-Type': `${getConfigApi.configType}`,
+        Authorization: `${getConfigApi.authorization}`,
+      },
+      httpsAgent: this.agent,
+    };
+
+    const getModelType = await this.getModelType(createGenerateImageDto);
+    if (!getModelType) {
+      await this.updateAndEmit(
+        user.userId,
+        galleryItem.projectId,
+        galleryItem.id,
+        'FAIL',
+      );
+      return { status: 400, data: 'Model not found' };
+    }
+
+    // 4. Send Request (Async execution to avoid blocking if needed, but here we wait for initial response)
+    try {
+      if (createGenerateImageDto.type === 'video') {
+        Logger.debug('SEND GENERATE VIDEO :', galleryItem.id);
+        const taskId = await this.handleVdoRequest(
+          createGenerateImageDto,
+          getModelType,
+          getConfigApi,
+          axiosConfig,
+          user,
+          galleryItem,
+          createGenerateImageDto.organizationId,
+        );
+        if (taskId) {
+          galleryItem.taskId = taskId;
+        }
+      } else {
+        Logger.debug('SEND GENERATE IMAGE :', galleryItem.id);
+        Logger.debug('Detail :', galleryItem);
+        await this.handleImageRequest(
+          uuid,
+          createGenerateImageDto,
+          getModelType,
+          getConfigApi,
+          axiosConfig,
+          user,
+          galleryItem,
         );
       }
+    } catch (error) {
+      this.logger.error(error);
+      await this.updateAndEmit(
+        user.userId,
+        galleryItem.projectId,
+        galleryItem.id,
+        'FAIL',
+      );
+      // We do not return error status here because we want the frontend to know the task started (optimistic) and failed later via SSE
+      // BUT the initial API return is also important.
+      return { status: 500, data: 'Generation failed' };
+    }
 
-      if (!getModelType) {
-        Logger.error(`Model not found: ${createGenerateImageDto.modelName}`);
-        return {
-          success: false,
-          message: `Model not found: ${createGenerateImageDto.modelName}`,
-          data: null,
-        };
+    return { status: 200, data: galleryItem };
+  }
+
+  // --- Handlers ---
+
+  private async getModelType(dto: CreateGenerateImageDto) {
+    const description =
+      dto.type === 'video'
+        ? dto.image
+          ? 'image-to-video'
+          : 'text-to-video'
+        : dto.image
+          ? 'image-to-image'
+          : 'text-to-image';
+
+    return dto.modelName
+      ? await this.modeltypeRepo.findOne({
+        where: { modelType: dto.modelName, type: dto.type },
+      } as Prisma.MasterModelTypeFindFirstArgs)
+      : await this.modeltypeRepo.findOne({
+        where: { type: dto.type, description: description },
+      } as Prisma.MasterModelTypeFindFirstArgs);
+  }
+
+  private async handleVdoRequest(
+    dto,
+    model,
+    config,
+    axiosConfig,
+    user,
+    gallery,
+    organizationId,
+  ) {
+    // Prepare Payload
+    let imageContents: any[] = [];
+    Logger.debug('dto.image', dto.image);
+    if (dto.image && Array.isArray(dto.image)) {
+      for (const img of dto.image) {
+        const url = await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizationId}/${dto.projectId}/uploads/${img.fileName}`
+        );
+        imageContents.push({
+          type: 'image_url',
+          image_url: { url },
+          role: 'first_frame',
+        });
       }
-
-      const base = {
-        model: getModelType.modelType,
-        prompt: `create ${createGenerateImageDto.images} images ${createGenerateImageDto.text} `,
-        ...(imageUrl.length > 0 && {
-          image: imageUrl.length === 1 ? imageUrl[0] : imageUrl,
-        }),
-        response_format: 'url',
-        ...(createGenerateImageDto.width &&
-          createGenerateImageDto.height && {
-          size: `${createGenerateImageDto.width}x${createGenerateImageDto.height}`,
-        }),
-        ...(createGenerateImageDto.images && {
-          sequential_image_generation: 'auto',
-          sequential_image_generation_options: {
-            max_images: getConfigApi.maxImage,
-          },
-        }),
-        stream: getConfigApi.stream,
-        watermark: getConfigApi.watermark,
-      };
-      console.log(base);
-
-      console.log('before');
-
-      const generateImage = await axios.post(
-        `${getConfigApi.apiCreateImage}`,
+      if (dto.image.length >= 2) {
+        const url1 = await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
+        );
+        const url2 = await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[1].fileName}`
+        );
+        imageContents = [
+          { type: 'image_url', image_url: { url: url1 }, role: 'first_frame' },
+          { type: 'image_url', image_url: { url: url2 }, role: 'last_frame' },
+        ];
+      } else if (dto.image.length === 1) {
+        const url = await this.tosService.getPreSignedUrl(
+          tosConfigs().tosBucket,
+          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
+        );
+        imageContents = [
+          { type: 'image_url', image_url: { url }, role: 'first_frame' },
+        ];
+      }
+    }
+    Logger.debug('imageContents', imageContents);
+    const base = {
+      model: model.modelType,
+      generate_audio: dto.generateAudio,
+      content: [
+        {
+          type: 'text',
+          text: `${dto.text} --resolution ${dto.resolution} --duration ${dto.duration} --ratio ${dto.ratio} --camerafixed false`,
+        },
+        ...imageContents,
+      ],
+    };
+    // const res = { data: { id: 'cgt-20260107165929-8ntxn' } };
+    Logger.debug(base);
+    try {
+      const res = await axios.post(
+        `${config.apiCreateTaskVdo}`,
         base,
         axiosConfig,
       );
-      if (!generateImage.data) {
-        Logger.error(`Error create task: ${generateImage}`);
-        return {
-          status: 400,
-          data: 'Error create task',
-        };
-      }
-      if (generateImage.data) {
-        await this.logrepo.update({
-          where: { id: dataLogs.id },
+
+      console.debug('sendvideo', res.data);
+      if (res.data.id) {
+        // Async Task ID returned
+        await this.galleryRepo.update({
+          where: { id: gallery.id },
+          data: { taskId: res.data.id, genneratedStatus: 'PROCESSING' },
+        });
+        await this.logrepo.create({
           data: {
-            taskId: uuid,
-            projectId: createGenerateImageDto.projectId,
+            taskId: res.data.id,
+            projectId: dto.projectId,
             userId: user.userId,
-            prompt: `${createGenerateImageDto.text}`,
-            status: 'success',
-            typeGenerate: createGenerateImageDto.type,
-            tokenUsed: generateImage.data.usage.total_tokens,
-            ImageUsed: generateImage.data.usage.generated_images,
+            prompt: dto.text,
+            typeGenerate: dto.type,
+            status: 'pending',
+            tokenUsed: 0,
+            ImageUsed: 0,
+            generateAudio: dto.generateAudio,
+            referenceImages: dto.image
+              ? dto.image.map((img) => img.fileName)
+              : [],
+            resolution: dto.resolution || '2k',
+            ratio: dto.ratio || '1:1',
+            generateConfig: {
+              ...(dto?.width && {
+                width: dto?.width,
+              }),
+              ...(dto?.height && {
+                height: dto?.height,
+              }),
+              ...(dto?.ratio && {
+                ratio: dto?.ratio,
+              }),
+              ...(dto?.images && {
+                imageCount: dto?.images,
+              }),
+              ...(dto?.resolution && {
+                resolution: dto?.resolution,
+              }),
+              ...(dto?.modelName && {
+                modelName: dto?.modelName,
+              }),
+
+              ...(dto?.duration && {
+                duration: dto?.duration,
+              }),
+              content: dto?.text,
+              ...(dto?.generateAudio && {
+                generateAudio: dto?.generateAudio,
+              }),
+            },
           },
         });
-        await Promise.all(
-          generateImage.data.data.map(async (e) => {
-            const res = await axios.get(e.url, {
-              responseType: 'arraybuffer',
-              httpsAgent: agent,
-            });
-            const buffer = Buffer.from(res.data);
-            const uuidName = uuidv4();
-            const pathname = e.url;
-            const fileNameFromPath = pathname.split('/').pop(); // '021763417932265c5f50319cb4d4388d7836967b82aebe55a0b1e_0.jpeg'
-            let ext = fileNameFromPath.split('.').pop(); // 'jpeg'
-            if (!ext || ext.length > 5) {
-              ext = 'jpg';
-            }
-            const objectName = `${uuid}/${uuidName}.${ext}`;
-            await this.minioClientSerives.uploadFile(
-              buffer,
-              buffer.length,
-              this.minioconfig.minioBucket,
-              objectName,
-            );
-            return await this.galleryRepo.create({
-              data: {
-                taskId: uuid,
-                projectId: createGenerateImageDto.projectId,
-                userId: user.userId,
-                prompt: `${createGenerateImageDto.text}`,
-                imageUrl: objectName,
-                typeGenerate: 'image',
-              },
-            });
-          }),
+
+        this.eventEmitter.emit(`image.update.project.${dto.projectId}`, {
+          galleryId: gallery.id,
+          status: 'PROCESSING',
+          taskId: res.data.id,
+        });
+
+        this.hasPendingTasks = true; // Enable Cron Loop
+        return res.data.id;
+      } else {
+        throw new Error('No Task ID returned');
+      }
+    } catch (error) {
+      Logger.error(error);
+      if (user) {
+        await this.logError(user.userId, error.message, error.stack, dto);
+      }
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.message
+      ) {
+        console.log(
+          user.userId,
+          `${error.response.data.message}`,
+          error.stack,
+          dto,
         );
+        this.logError(
+          user.userId,
+          `${error.response.data.message}`,
+          error.stack,
+          dto,
+        );
+      } else {
+        console.log(user.userId, `${error.message}`, error.stack, dto);
+        this.logError(user.userId, `${error.message}`, error.stack, dto);
       }
-      return { status: 400, data: generateImage.data };
+      throw error;
     }
   }
 
-  findAll(query: any, skip: number, take: number) {
-    return `This action returns all GenerateImage`;
-  }
-
-  async findOne(id: string) {
-    const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-      where: { id: 1 },
-    });
-    const logByTaskId = await this.logrepo.findOne({ where: { taskId: id } });
-    const agent = new https.Agent({
-      rejectUnauthorized: false,
-    });
-    const responseImage = await axios.get(
-      `${getConfigApi}/${getConfigApi.apiCreateTaskVdo}`,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: getConfigApi.authorization,
-        },
-        httpsAgent: agent,
-      },
-    );
-    if (responseImage.data.status === 'succeeded') {
-      const res = await axios.get(responseImage.data.content.video_url, {
-        responseType: 'arraybuffer',
-        httpsAgent: agent,
-      });
-      const buffer = Buffer.from(res.data);
-      const uuidName = uuidv4();
-      const pathname = responseImage.data.content.video_url;
-      const fileNameFromPath = pathname.split('/').pop();
-      let ext = fileNameFromPath.split('.').pop();
-      if (!ext || ext.length > 5) {
-        ext = 'mp4';
-      }
-      const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
-      await this.minioClientSerives.uploadFile(
-        buffer,
-        buffer.length,
-        this.minioconfig.minioBucketVdo,
-        objectName,
+  private async handleImageRequest(
+    taskId,
+    dto,
+    model,
+    config,
+    axiosConfig,
+    user,
+    gallery,
+  ) {
+    let imageUrls = [];
+    if (dto.image && dto.image.length > 0) {
+      imageUrls = await Promise.all(
+        dto.image.map(async (img) => {
+          return await this.tosService.getPreSignedUrl(
+            tosConfigs().tosBucket,
+            `organize/${dto.organizationId}/${dto.projectId}/uploads/${img.fileName}`
+          );
+        }),
       );
-      await this.galleryRepo.create({
-        data: {
-          taskId: logByTaskId.taskId,
-          projectId: logByTaskId.projectId,
-          userId: logByTaskId.userId,
-          imageUrl: objectName,
-          prompt: logByTaskId.prompt,
-          typeGenerate: 'vdo',
-        },
-      });
     }
-
-    return responseImage.data;
-  }
-
-  update(id: number, updateGenerateImageDto: UpdateGenerateImageDto) {
-    return `This action updates a #${id} GenerateImage`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} GenerateImage`;
-  }
-  async upload(data) {
-    const results = await Promise.all(
-      data.map((item) =>
-        this.generateimagerepo.create({
-          data: {
-            ...item,
+    try {
+      const base = {
+        model: model.modelType,
+        prompt: `create ${dto.images} images ${dto.text} `,
+        ...(imageUrls.length > 0 && {
+          image: imageUrls.length === 1 ? imageUrls[0] : imageUrls,
+        }),
+        response_format: 'url',
+        ...(dto.width && dto.height && { size: `${dto.width}x${dto.height}` }),
+        ...(dto.images && {
+          sequential_image_generation: 'auto',
+          sequential_image_generation_options: {
+            max_images: dto.images,
           },
         }),
-      ),
-    );
-    const fileNames = results.map((r) => r.fileName);
+        stream: config.stream,
+        watermark: config.watermark,
+      };
+      Logger.debug('SEND IMAGE DETAIL :', base);
+      const res = await axios.post(
+        `${config.apiCreateImage}`,
+        base,
+        axiosConfig,
+      );
 
-    return fileNames;
+      if (res.data && res.data.data) {
+        await this.galleryRepo.update({
+          where: { id: gallery.id },
+          data: { genneratedStatus: 'PROCESSING' },
+        });
+        Logger.debug('API RESPONSIVE :', res.data ?? res.data.data);
+        Logger.debug('UPDATE TASK PROCESSING :', gallery.id);
+
+        this.eventEmitter.emit(`image.update.project.${gallery.projectId}`, {
+          galleryId: gallery.id,
+          status: 'PROCESSING',
+        });
+        await Promise.all(
+          res.data.data.map(async (e, index) => {
+            const imgRes = await axios.get(e.url, {
+              responseType: 'arraybuffer',
+              httpsAgent: this.agent,
+            });
+            const buffer = Buffer.from(imgRes.data);
+            const uuidName = uuidv4();
+            const ext = 'jpg';
+            const objectName = `${uuidv4()}/${uuidName}.${ext}`;
+            Logger.debug(buffer.length);
+            await this.tosService.putObject(
+              tosConfigs().tosBucket,
+              `organize/${dto.organizationId}/${dto.projectId}/image-generate/${objectName}`,
+              buffer,
+            );
+
+            if (index === 0) {
+              await this.updateAndEmit(
+                user.userId,
+                gallery.projectId,
+                gallery.id,
+                'SUCCESS',
+                objectName,
+              );
+              Logger.debug('UPDATE TASK SUCCESS ');
+            } else {
+              await this.galleryRepo.create({
+                data: {
+                  taskId: taskId,
+                  projectId: gallery.projectId,
+                  userId: gallery.userId,
+                  prompt: gallery.prompt,
+                  imageUrl: objectName,
+                  typeGenerate: 'image',
+                  genneratedStatus: 'SUCCESS',
+                  status: false,
+                },
+              });
+              // Also emit for extra images?
+              // The frontend handles array of images if fetched.
+              // But if we want real-time appearance of *all* images, we might need to emit for each?
+              // Current updateAndEmit only updates the *primary* gallery item.
+              // Let's assume the primary emit is enough for now or we emit general update.
+            }
+          }),
+        );
+
+        await this.logrepo.create({
+          data: {
+            taskId: taskId,
+            projectId: dto.projectId,
+            userId: user.userId,
+            prompt: dto.text,
+            typeGenerate: dto.type,
+            status: 'success',
+            resolution: dto.resolution,
+            ratio: dto.ratio,
+            generateAudio: dto.generateAudio || false,
+            tokenUsed: res.data.usage?.total_tokens || 0,
+            ImageUsed: dto.images || 0,
+            referenceImages: dto.image
+              ? dto.image.map((img) => img.fileName)
+              : [],
+            generateConfig: {
+              ...(dto?.width && {
+                width: dto?.width,
+              }),
+              ...(dto?.height && {
+                height: dto?.height,
+              }),
+              ...(dto?.ratio && {
+                ratio: dto?.ratio,
+              }),
+              ...(dto?.images && {
+                imageCount: dto?.images,
+              }),
+              ...(dto?.resolution && {
+                resolution: dto?.resolution,
+              }),
+              ...(dto?.modelName && {
+                modelName: dto?.modelName,
+              }),
+
+              ...(dto?.duration && {
+                duration: dto?.duration,
+              }),
+              content: dto?.text,
+            },
+          },
+        });
+      } else {
+        throw new Error('No Data in response');
+      }
+    } catch (error) {
+      if (user) {
+        await this.logError(user.userId, error.message, error.stack, dto);
+      }
+      throw error;
+    }
   }
 
-  async createFileLogs(data) {
-    return this.generateimagerepo.create({
-      data: {
-        ...data,
+  // --- Cron Job for Polling ---
+  @Cron(CronExpression.EVERY_5_SECONDS)
+  async handleCron() {
+    if (!this.hasPendingTasks) {
+      return;
+    }
+
+    const tasks = await this.galleryRepo.findMany({
+      where: {
+        genneratedStatus: 'PROCESSING',
+        taskId: { not: null },
+        typeGenerate: 'video',
       },
     });
+
+    if (tasks.length === 0) {
+      this.hasPendingTasks = false;
+      return;
+    }
+
+    for (const task of tasks) {
+      await this.checkTaskStatus(task);
+    }
   }
 
-  async findOneNew(id: string) {
-    const logByTaskId = await this.logrepo.findOne({ where: { taskId: id } });
-    // 1. ตั้งค่า Agent (ถ้าจำเป็นต้อง bypass SSL หรือ config พิเศษ)
-    const agent = new https.Agent({
-      rejectUnauthorized: false,
-    });
-    const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-      where: { id: 1 },
-    });
+  async checkTaskStatus(task) {
     try {
-      // --- CODE ของคุณ ---
-      const url = `${getConfigApi.apiCreateTaskVdo}/${id}`;
+      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+        where: { id: 1 },
+      });
+      const url = `${getConfigApi.apiCreateTaskVdo}/${task.taskId}`;
       const token = getConfigApi.authorization;
       const authHeader = token.startsWith('Bearer ')
         ? token
         : `Bearer ${token}`;
 
-      // Logger.debug(`Request URL: ${url}`);
-      // Logger.debug(`Authorization: ${authHeader}`);
-
-      const videoRes = await axios.get(url, {
+      const res = await axios.get(url, {
         headers: {
           'Content-Type': 'application/json',
           Authorization: authHeader,
         },
-        httpsAgent: agent,
+        httpsAgent: this.agent,
       });
-      // Logger.debug(`Response status: ${result.status}`);
-      // Logger.debug(`Response data: ${JSON.stringify(result.data)}`);
-      // if (!videoRes.data) {
-      //   throw new Error('Video not found');
-      // }
-      if (
-        videoRes.data.status === 'succeeded' &&
-        videoRes.data.content.video_url
-      ) {
-        const videoUrl = videoRes.data.content.video_url;
-        const res = await axios.get(videoUrl, {
+      if (res.data.status === 'succeeded' && res.data.content?.video_url) {
+        Logger.debug(res.data);
+        const videoUrl = res.data.content.video_url;
+        const videoRes = await axios.get(videoUrl, {
           responseType: 'arraybuffer',
-          httpsAgent: agent,
+          httpsAgent: this.agent,
         });
-        // ------------------
-        Logger.debug(`Video URL: ${videoUrl}`);
-        // Logger.debug(`Response data: ${JSON.stringify(res.data)}`);
-        // 2. แปลง ArrayBuffer เป็น Node.js Buffer
-        const videoBuffer = Buffer.from(res.data);
+        const buffer = Buffer.from(videoRes.data);
         const uuidName = uuidv4();
-        const pathname = videoUrl;
-        const fileNameFromPath = pathname.split('/').pop();
-        let ext = fileNameFromPath.split('.').pop();
-        if (!ext || ext.length > 5) {
-          ext = 'mp4';
-        }
-        // 3. สร้าง Mock File Object (จำลอง Multer File)
-        // เพื่อให้ format ตรงกับที่ VideoService ต้องการ
+        const ext = 'mp4';
+
         const mockFile: Express.Multer.File = {
           fieldname: 'file',
-          originalname: `${uuidName}.${ext}`, // ตั้งชื่อไฟล์
+          originalname: `${uuidName}.${ext}`,
           encoding: '7bit',
-          mimetype: res.headers['content-type'] || 'video/mp4', // ดึง Type จาก Header
-          buffer: videoBuffer, // ใส่ Buffer ที่ได้จาก Axios
-          size: videoBuffer.length,
+          mimetype: 'video/mp4',
+          buffer: buffer,
+          size: buffer.length,
           stream: null,
           destination: '',
           filename: '',
           path: '',
         };
 
-        // 4. ส่งเข้า Service ตัวเดิมเพื่อทำ Thumbnail + Upload MinIO
-
-        // const objectName = `${responseImage.data.id}/${uuidName}.${ext}`;
-        // const thumbnailFileName = `thumb-${Date.now()}.png`;
-        const result = await this.minioClientSerives.uploadVideoWithThumbnail(
-          this.minioconfig.minioBucketVdo,
+        const result = await this.uploadVideoWithThumbnail(
+          task.organizationId,
+          task.projectId,
           mockFile,
-          id,
+          task.taskId,
         );
-        // Logger.debug(`Response Minio: ${JSON.stringify(result)}`);
-        const resultGallery = await this.galleryRepo.create({
-          data: {
-            taskId: logByTaskId.taskId,
-            projectId: logByTaskId.projectId,
-            userId: logByTaskId.userId,
-            imageUrl: result.file,
-            thumbnailUrl: result.thumbnail || '',
-            prompt: logByTaskId.prompt,
-            typeGenerate: 'vdo',
-          },
-        });
-        Logger.debug(`Response Gallery: ${JSON.stringify(resultGallery)}`);
-        return videoRes.data;
-      }
 
-      return videoRes.data;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        Logger.error(`Axios error: ${error.message}`);
-        if (error.response) {
-          Logger.error(`Response status: ${error.response.status}`);
-          Logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
+        await this.updateAndEmit(
+          task.userId,
+          task.projectId,
+          task.id,
+          'SUCCESS',
+          result.file,
+          result.thumbnail,
+        );
+
+        // Update Log status
+        const log = await this.logrepo.findOne({
+          where: { taskId: task.taskId },
+        });
+        if (log) {
+          await this.logrepo.update({
+            where: { id: log.id },
+            data: {
+              status: 'success',
+              tokenUsed: res.data.usage?.total_tokens || 0,
+            },
+          });
         }
-      } else {
-        Logger.error(`Error: ${error}`);
+      } else if (res.data.status === 'failed') {
+        await this.updateAndEmit(task.userId, task.projectId, task.id, 'FAIL');
+
+        // Update Log status
+        const log = await this.logrepo.findOne({
+          where: { taskId: task.taskId },
+        });
+        if (log) {
+          await this.logrepo.update({
+            where: { id: log.id },
+            data: { status: 'failed' },
+          });
+        }
       }
-      throw error; // Re-throw the original error or a meaningful one
+    } catch (e) {
+      await this.logError(task.userId, e.message, e.stack, { taskId: task.id });
+      this.logger.error(`Polling error for task ${task.taskId}: ${e.message}`);
+      if (e.response && e.response.status === 404) {
+        await this.updateAndEmit(task.userId, task.projectId, task.id, 'FAIL');
+      }
     }
   }
-  // async createMinioFileUrl(bucketName: string, path: string) {
-  //   const url = await this.minioclientSerives.getPresignedUrl(bucketName, path);
-  //   const domain = this.appconfigs.pathPublicDomain;
-  //   const ip = this.appconfigs.pathPublicIp;
-  //   console.log(url.replace(ip, domain));
-  //   return url.replace(ip, domain);
-  // }
+
+  private async updateAndEmit(
+    userId: string,
+    projectId: string,
+    id: string,
+    status: string,
+    url?: string,
+    thumbnail?: string,
+  ) {
+    await this.galleryRepo.update({
+      where: { id },
+      data: {
+        genneratedStatus: status,
+        imageUrl: url,
+        thumbnailUrl: thumbnail,
+      },
+    });
+    this.eventEmitter.emit(`image.update.project.${projectId}`, {
+      galleryId: id,
+      status,
+      url,
+    });
+  }
+
+  findAll(query: any, skip: number, take: number) {
+    return `This action returns all GenerateImage`;
+  }
+  async findOne(id: string) {
+    return `Action findOne`;
+  }
+  findOneNew(id: string) {
+    return `Action findOneNew`;
+  }
+  update(id: number, updateGenerateImageDto: UpdateGenerateImageDto) {
+    return `Update`;
+  }
+  remove(id: number) {
+    return `Remove`;
+  }
+  async upload(data) {
+    return data;
+  }
+
+  async createFileLogs(data: {
+    filePath: string;
+    fileType: string;
+    fileName: string;
+  }) {
+    return data;
+  }
+
+  private async logAudit(
+    userId: string,
+    action: string,
+    details: any,
+    entityId: string,
+  ) {
+    try {
+      await this.auditLogRepo.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          entityName: 'GenerateImage',
+          entityId,
+          newValues: details,
+        } as any,
+      });
+    } catch (e) {
+      Logger.error(`Failed to create audit log: ${e}`);
+    }
+  }
+
+  private async logError(
+    userId: string,
+    message: string,
+    stack: string,
+    context?: any,
+  ) {
+    try {
+      await this.errorLogRepo.create({
+        data: {
+          serviceName: 'GenerateImageService',
+          severity: 'ERROR',
+          message,
+          stackTrace: stack,
+          context: context,
+          userId,
+        } as any,
+      });
+    } catch (e) {
+      Logger.error(`Failed to create error log: ${e}`);
+    }
+  }
+  private async uploadVideoWithThumbnail(
+    organizationId: string,
+    projectId: string,
+    file: Express.Multer.File,
+    id: string,
+  ) {
+    const videoFileName = `${Date.now()}-${file.originalname}`;
+    const thumbnailFileName = `thumb-${Date.now()}.png`;
+    const objectName = `${id}/${videoFileName}`;
+    const thumbnailObjectName = `${id}/${thumbnailFileName}`;
+
+    // Use os.tmpdir() for better compatibility
+    const os = require('os');
+    const tempDir = os.tmpdir();
+    const tempVideoPath = path.join(tempDir, videoFileName);
+    const tempThumbPath = path.join(tempDir, thumbnailFileName);
+
+    // 2. เขียนไฟล์วิดีโอลง Disk ชั่วคราวเพื่อให้ FFmpeg อ่าน
+    fs.writeFileSync(tempVideoPath, file.buffer);
+
+    try {
+      // 3. สร้าง Thumbnail ด้วย FFmpeg
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempVideoPath)
+          .screenshots({
+            count: 1,
+            folder: path.dirname(tempThumbPath),
+            filename: path.basename(tempThumbPath),
+            timemarks: ['20%'], // จับภาพที่ตำแหน่ง 20% ของวิดีโอ
+            size: '320x?', // ปรับขนาด (กว้าง 320, สูง auto)
+          })
+          .on('end', resolve)
+          .on('error', reject);
+      });
+
+      // 4. Upload Video ขึ้น MinIO (ใช้ putObject แทน fPutObject)
+
+      await this.tosService.putObject(
+        tosConfigs().tosBucket,
+        `organize/${organizationId}/${projectId}/video-generate/${objectName}`,
+        file.buffer,
+      );
+
+      // 5. Upload Thumbnail ขึ้น MinIO
+      // อ่านไฟล์ thumbnail ขึ้นมาเป็น buffer ก่อน
+      const thumbBuffer = fs.readFileSync(tempThumbPath);
+      await this.tosService.putObject(
+        tosConfigs().tosBucket,
+        `organize/${organizationId}/${projectId}/video-generate/${thumbnailObjectName}`,
+        thumbBuffer,
+      );
+
+      // 6. (Optional) สร้าง Presigned URL แบบ Public (ถ้า bucket เป็น public ไม่ต้องใช้ presigned ก็ได้ แต่ code เดิมใช้)
+      // const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
+      // const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
+
+      return {
+        file: objectName,
+        thumbnail: thumbnailObjectName,
+      };
+    } catch (error) {
+      console.error('Error in uploadVideoWithThumbnail:', error);
+      throw new BadRequestException('Error processing video: ' + error.message);
+    } finally {
+      // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
+      try {
+        if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
+        if (fs.existsSync(tempThumbPath)) fs.unlinkSync(tempThumbPath);
+      } catch (cleanupError) {
+        console.error('Error cleaning up temp files:', cleanupError);
+      }
+    }
+  }
 }

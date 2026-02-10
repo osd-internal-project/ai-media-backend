@@ -32,7 +32,9 @@
     "build": "turbo run build",
     "build:libs": "turbo run build --filter=./libs/*",
     "generate": "prisma generate",
-    "start:dev": "cd services/inventory && nest start --watch"
+    "start:dev": "cd services/inventory && nest start --watch",
+    "migrate:deploy": "prisma migrate deploy --schema ./libs/prisma/schema.prisma",
+    "migrate:dev": "prisma migrate dev --schema ./libs/prisma/schema.prisma"
   },
   "workspaces": {
     "packages": [
