@@ -767,7 +767,7 @@ export class GenerateService {
       stream: configApi.stream ?? false,
       watermark: configApi.watermark ?? false,
       ratio: body.ratio,
-      size: body.size,
+      size: `${body.width}x${body.height}`,
       sequential_image_generation: body.sequentialImageGeneration,
       ...(body.maxImages && {
         sequential_image_generation_options: { max_images: body.maxImages },
