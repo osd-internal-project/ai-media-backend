@@ -1,0 +1,18 @@
+name: Deploy Worker Service
+
+on:
+  push:
+    # branches: [main]
+    # paths:
+    #   - "services/worker-service/**"
+    #   - "libs/**"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_deploy-service.yml
+    with:
+      service_path: services/worker-service
+      image_name: ai-cave-worker-service
+      chart_dir: aicave-worker-chart
+    secrets: inherit

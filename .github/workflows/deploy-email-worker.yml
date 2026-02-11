@@ -1,0 +1,18 @@
+name: Deploy Email Worker Service
+
+on:
+  push:
+    # branches: [main]
+    # paths:
+    #   - "services/email-worker/**"
+    #   - "libs/**"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/_deploy-service.yml
+    with:
+      service_path: services/email-worker
+      image_name: ai-cave-email-worker
+      chart_dir: aicave-email-worker-chart
+    secrets: inherit

@@ -1,182 +1,160 @@
-name: Backend CI/CD (3 Services, direnv)
+name: CI Workflow
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-env:
-  VERSION: ${{ github.sha }}
-
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, k8s]
 
     steps:
-      # -----------------------------------------------------------------------
-      # Free Disk Space
-      # -----------------------------------------------------------------------
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          swap-storage: true
-
-      # -----------------------------------------------------------------------
+      # ---------------------------------------------------------------------
       # Checkout
-      # -----------------------------------------------------------------------
+      # ---------------------------------------------------------------------
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # -----------------------------------------------------------------------
-      # Show version info
-      # -----------------------------------------------------------------------
-      - name: Show Build Version
+      # ---------------------------------------------------------------------
+      # Read package info
+      # ---------------------------------------------------------------------
+      - name: Read Package Info
+        id: pkg
         run: |
-          echo "Deploy version: $VERSION"
+          echo "name=$(jq -r .name package.json)" >> "$GITHUB_OUTPUT"
+          echo "ver=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+          echo "📦 Package: $(jq -r .name package.json)"
+          echo "📦 Version: $(jq -r .version package.json)"
+          echo "🌍 Deploy Env: ${{ secrets.DEPLOY_ENV }}"
 
-      # -----------------------------------------------------------------------
-      # Build and Save Services Sequentially
-      # -----------------------------------------------------------------------
-      - name: Build and Save Core
+      # ---------------------------------------------------------------------
+      # Build Docker image
+      # ---------------------------------------------------------------------
+      - name: Build Docker Image
         run: |
-          docker build --platform linux/amd64 \
-            -f services/core/Dockerfile \
-            -t core:${VERSION} .
-          docker save -o core-${VERSION}.tar core:${VERSION}
-          docker rmi core:${VERSION}
+          docker build --no-cache --platform linux/amd64 \
+            -t ${{ steps.pkg.outputs.name }}:${{ steps.pkg.outputs.ver }} -f ./Dockerfile .
 
-      - name: Build and Save Report
+      # ---------------------------------------------------------------------
+      # Save Docker image as TAR
+      # ---------------------------------------------------------------------
+      - name: Save Docker Image as TAR
         run: |
-          docker build --platform linux/amd64 \
-            -f services/report/Dockerfile \
-            -t report:${VERSION} .
-          docker save -o report-${VERSION}.tar report:${VERSION}
-          docker rmi report:${VERSION}
+          docker save -o image.tar \
+            ${{ steps.pkg.outputs.name }}:${{ steps.pkg.outputs.ver }}
 
-      - name: Build and Save Users
-        run: |
-          docker build --platform linux/amd64 \
-            -f services/users/Dockerfile \
-            -t users:${VERSION} .
-          docker save -o users-${VERSION}.tar users:${VERSION}
-          docker rmi users:${VERSION}
-
-      # -----------------------------------------------------------------------
-      # Install OpenVPN
-      # -----------------------------------------------------------------------
-      - name: Install OpenVPN
-        run: |
-          sudo apt update
-          sudo apt install -y openvpn openvpn-systemd-resolved
-
-      - name: Enable TUN Device
-        run: |
-          sudo modprobe tun
-          sudo chmod 600 /dev/net/tun
-
-      - name: Patch OpenVPN Cipher
-        run: |
-          echo 'cipher AES-256-CBC' >> .github/workflows/client.ovpn
-          echo 'data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305:AES-256-CBC' >> .github/workflows/client.ovpn
-
-      # -----------------------------------------------------------------------
-      # Connect VPN
-      # -----------------------------------------------------------------------
-      - name: Connect VPN
-        uses: kota65535/github-openvpn-connect-action@v2
-        with:
-          config_file: .github/workflows/client.ovpn
-          username: ${{ secrets.OVPN_USERNAME }}
-          password: ${{ secrets.OVPN_PASSWORD }}
-
-      # -----------------------------------------------------------------------
-      # Upload TAR files to server
-      # -----------------------------------------------------------------------
-      - name: Upload Images via SCP
+      # ---------------------------------------------------------------------
+      # Upload image TAR to all K8s workers
+      # ---------------------------------------------------------------------
+      - name: Upload TAR to Worker 1 (osd-saas01-worker-0001)
         uses: appleboy/scp-action@master
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          source: "*.tar"
-          target: "/home/osdadmin/"
+          host: ${{ secrets.WORKER_1_IP }}
+          username: ${{ secrets.WORKER_USER }}
+          key: ${{ secrets.K8S_SSH_KEY }}
+          source: "image.tar"
+          target: "/tmp/"
 
-      # -----------------------------------------------------------------------
-      # Deploy on server (direnv aware)
-      # -----------------------------------------------------------------------
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@master
+      - name: Upload TAR to Worker 2 (osd-saas01-worker-0002)
+        uses: appleboy/scp-action@master
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASSWORD }}
+          host: ${{ secrets.WORKER_2_IP }}
+          username: ${{ secrets.WORKER_USER }}
+          key: ${{ secrets.K8S_SSH_KEY }}
+          source: "image.tar"
+          target: "/tmp/"
+
+      - name: Upload TAR to Worker 3 (osd-saas01-worker-0003)
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.WORKER_3_IP }}
+          username: ${{ secrets.WORKER_USER }}
+          key: ${{ secrets.K8S_SSH_KEY }}
+          source: "image.tar"
+          target: "/tmp/"
+
+      # ---------------------------------------------------------------------
+      # Import image into containerd (k8s.io namespace) on all workers
+      # ---------------------------------------------------------------------
+      - name: Import Image on Worker 1
+        uses: appleboy/ssh-action@master
+        env:
+          SUDO_PASS: ${{ secrets.PASSWORD }}
+        with:
+          host: ${{ secrets.WORKER_1_IP }}
+          username: ${{ secrets.WORKER_USER }}
+          key: ${{ secrets.K8S_SSH_KEY }}
+          envs: SUDO_PASS
           script: |
             set -e
-            echo "Deploying version: ${VERSION}"
-            cd /home/osdadmin
+            echo "📦 Importing image on osd-saas01-worker-0001..."
+            echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images import /tmp/image.tar
+            rm -f /tmp/image.tar
+            echo "✅ Done"
 
-            # ---------------------------------------------------------------
-            # Load env from .envrc using direnv
-            # ---------------------------------------------------------------
-            if ! command -v direnv >/dev/null 2>&1; then
-              echo "direnv not found"
-              exit 1
-            fi
+      - name: Import Image on Worker 2
+        uses: appleboy/ssh-action@master
+        env:
+          SUDO_PASS: ${{ secrets.PASSWORD }}
+        with:
+          host: ${{ secrets.WORKER_2_IP }}
+          username: ${{ secrets.WORKER_USER }}
+          key: ${{ secrets.K8S_SSH_KEY }}
+          envs: SUDO_PASS
+          script: |
+            set -e
+            echo "📦 Importing image on osd-saas01-worker-0002..."
+            echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images import /tmp/image.tar
+            rm -f /tmp/image.tar
+            echo "✅ Done"
 
-            eval "$(direnv hook bash)"
-            direnv allow .
-            direnv export bash > /tmp/env.export
-            source /tmp/env.export
+      - name: Import Image on Worker 3
+        uses: appleboy/ssh-action@master
+        env:
+          SUDO_PASS: ${{ secrets.PASSWORD }}
+        with:
+          host: ${{ secrets.WORKER_3_IP }}
+          username: ${{ secrets.WORKER_USER }}
+          key: ${{ secrets.K8S_SSH_KEY }}
+          envs: SUDO_PASS
+          script: |
+            set -e
+            echo "📦 Importing image on osd-saas01-worker-0003..."
+            echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images import /tmp/image.tar
+            rm -f /tmp/image.tar
+            echo "✅ Done"
 
-            export_env_flags() {
-              env | grep -E '^[A-Z_][A-Z0-9_]*=' \
-                | grep -vE '^(HOME|PATH|PWD|SHLVL|USER|SHELL|TERM)=' \
-                | sed 's/^/-e /'
-            }
+      # ---------------------------------------------------------------------
+      # Helm upgrade (runs directly on self-hosted runner)
+      # ---------------------------------------------------------------------
+      # - name: Helm Upgrade
+      #   run: |
+      #     set -e
 
-            ENV_FLAGS="$(export_env_flags)"
+      #     DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+      #     NAME="${{ steps.pkg.outputs.name }}"
+      #     VER="${{ steps.pkg.outputs.ver }}"
 
-            # ---------------------------------------------------------------
-            # Core service (container port 4002)
-            # ---------------------------------------------------------------
-            docker load -i core-${VERSION}.tar
-            docker rm -f core || true
-            docker run -d \
-              --name core \
-              -p 4002:4002 \
-              --restart always \
-              $ENV_FLAGS \
-              core:${VERSION}
-            rm -f core-${VERSION}.tar
+      #     echo "🚀 Helm upgrade aicave-console (env: prod)"
 
-            # ---------------------------------------------------------------
-            # Report service (container port 4001)
-            # ---------------------------------------------------------------
-            docker load -i report-${VERSION}.tar
-            docker rm -f report || true
-            docker run -d \
-              --name report \
-              -p 4001:4001 \
-              --restart always \
-              $ENV_FLAGS \
-              report:${VERSION}
-            rm -f report-${VERSION}.tar
+      #     helm upgrade --install aicave-console ./aicave-console-chart \
+      #       -f ./aicave-console-chart/values-${DEPLOY_ENV}.yaml \
+      #       --set image.repository=docker.io/library/${NAME} \
+      #       --set image.tag=${VER} \
+      #       --namespace aicave-${DEPLOY_ENV} \
+      #       --wait \
+      #       --timeout 5m \
+      #       --atomic
 
-            # ---------------------------------------------------------------
-            # Users service (container port 4000)
-            # ---------------------------------------------------------------
-            docker load -i users-${VERSION}.tar
-            docker rm -f users || true
-            docker run -d \
-              --name users \
-              -p 4000:4000 \
-              --restart always \
-              $ENV_FLAGS \
-              users:${VERSION}
-            rm -f users-${VERSION}.tar
+      #     echo "✅ Deployment completed: ${NAME}:${VER} (env: prod)"
 
-            echo "Deployment completed successfully"
+      # ---------------------------------------------------------------------
+      # Verify deployment
+      # ---------------------------------------------------------------------
+      # - name: Verify Deployment
+      #   run: |
+      #     kubectl rollout status deployment/aicave-console \
+      #       -n aicave-${{ secrets.DEPLOY_ENV }}
+      #     kubectl get pods -n aicave-${{ secrets.DEPLOY_ENV }} \
+      #       -l app=aicave-console
