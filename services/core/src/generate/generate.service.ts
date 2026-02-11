@@ -1,6 +1,5 @@
 import {
   AuditLogRepository,
-  CreateGenerateDto,
   ErrorLogRepository,
   GalleryRepository,
   LogRepository,
@@ -21,13 +20,10 @@ import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
   ConflictException,
-  HttpException,
-  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import axios, { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
 import * as https from 'https';
@@ -58,7 +54,7 @@ export class GenerateService {
    */
   async createGenerationTask(body: RequestImageGenerateDto, clientId: string) {
     const taskId = body.taskId;
-    const redisImageCacheKey = `image_used_${body.userId}`;
+    const redisImageCacheKey = `${body.organizationId}/${body.projectId}/image_used_${body.userId}`;
 
     try {
       // 1. Validate User & Project
@@ -84,7 +80,7 @@ export class GenerateService {
       );
 
       if (isQuotaExceeded) {
-        return { status: 400, data: 'Token limit exceeded' };
+        return { status: 400, data: 'Image limit exceeded' };
       }
 
       // 3. Get Config & Model
@@ -253,6 +249,7 @@ export class GenerateService {
     clientId: string,
   ) {
     let taskId = body.taskId;
+    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
 
     try {
       // 1. Validate User & Project
@@ -267,6 +264,21 @@ export class GenerateService {
 
       if (user) {
         await this.logAudit(user.userId, 'CREATE', body, taskId);
+      }
+
+      // 2. Check Quota
+      const { isQuotaExceeded, currentTokenUsed } = await this.checkTokenVideoQuota(
+        user.userId,
+        body,
+        projectMember,
+        redisVideoCacheKey,
+      );
+
+      if (isQuotaExceeded) {
+        return {
+          status: 400,
+          data: `Token used ${currentTokenUsed} exceed max token ${projectMember.maxToken}`,
+        };
       }
 
       // TODO: Implement Quota Check for Video if needed
@@ -360,6 +372,13 @@ export class GenerateService {
         },
       });
 
+      // 6. อัพเดท cache
+      await this.redis.set(
+        redisVideoCacheKey,
+        currentTokenUsed.toString(),
+        'EX',
+        24 * 60 * 60,
+      );
       // 7. สร้าง Job ใน Queue
       const job = await this.videoQueue.add(
         QUEUE_NAME_VDO,
@@ -587,33 +606,35 @@ export class GenerateService {
     let currentImageUsed = 0;
     const maxImage = body.maxImages || 0;
 
+    let cachedImageUsed: string | null = null;
     if (cacheKey) {
-      const cachedImageUsed = await this.redis.get(cacheKey);
-      if (cachedImageUsed) {
-        currentImageUsed = parseInt(cachedImageUsed);
-      } else {
-        // Fallback to DB calculation
-        const aggregateResult = await this.logrepo.aggregate({
-          where: {
-            userId: userId,
-            typeGenerate: body.type,
-            projectId: body.projectId,
-            status: 'success',
-            createdAt: {
-              gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-              lt: new Date(
-                new Date().getFullYear(),
-                new Date().getMonth() + 1,
-                1,
-              ),
-            },
+      cachedImageUsed = await this.redis.get(cacheKey);
+    }
+
+    if (cachedImageUsed) {
+      currentImageUsed = parseInt(cachedImageUsed);
+    } else {
+      // Fallback to DB calculation
+      const aggregateResult = await this.logrepo.aggregate({
+        where: {
+          userId: userId,
+          typeGenerate: body.type,
+          projectId: body.projectId,
+          status: 'success',
+          createdAt: {
+            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            lt: new Date(
+              new Date().getFullYear(),
+              new Date().getMonth() + 1,
+              1,
+            ),
           },
-          _sum: {
-            ImageUsed: true,
-          },
-        });
-        currentImageUsed = aggregateResult._sum.ImageUsed || 0;
-      }
+        },
+        _sum: {
+          ImageUsed: true,
+        },
+      });
+      currentImageUsed = aggregateResult._sum.ImageUsed || 0;
     }
 
     const maxImageInPlan = projectMember?.maxImages || 0;
@@ -634,6 +655,79 @@ export class GenerateService {
       isQuotaExceeded: false,
       currentImageUsed: currentImageUsed,
       maxImageInPlan: maxImageInPlan,
+    };
+  }
+
+  private async checkTokenVideoQuota(
+    userId: string,
+    body: RequestVideoGenerateDto,
+    projectMember: {
+      id: string;
+      projectId: string;
+      userId: string;
+      role: string;
+      joinedAt: Date;
+      maxToken: number;
+      maxImages: number;
+    },
+    cacheKey: string,
+  ): Promise<{
+    isQuotaExceeded: boolean;
+    currentTokenUsed: number;
+    maxTokenInPlan: number;
+  }> {
+    let currentTokenUsed = 0;
+    const maxToken = body.maxImages || 0;
+
+    let cachedTokenUsed: string | null = null;
+    if (cacheKey) {
+      cachedTokenUsed = await this.redis.get(cacheKey);
+    }
+
+    if (cachedTokenUsed) {
+      currentTokenUsed = parseInt(cachedTokenUsed);
+    } else {
+      // Fallback to DB calculation
+      const aggregateResult = await this.logrepo.aggregate({
+        where: {
+          userId: userId,
+          typeGenerate: body.typeGenerate,
+          projectId: body.projectId,
+          status: 'success',
+          createdAt: {
+            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            lt: new Date(
+              new Date().getFullYear(),
+              new Date().getMonth() + 1,
+              1,
+            ),
+          },
+        },
+        _sum: {
+          tokenUsed: true,
+        },
+      });
+      currentTokenUsed = aggregateResult._sum.tokenUsed || 0;
+    }
+
+    const maxTokenInPlan = projectMember.maxToken || 0;
+    currentTokenUsed = currentTokenUsed + maxToken;
+    if (currentTokenUsed > maxTokenInPlan) {
+      Logger.error(
+        `Token used ${currentTokenUsed + maxToken
+        } exceed max token ${maxTokenInPlan}`,
+      );
+      return {
+        isQuotaExceeded: true,
+        currentTokenUsed: currentTokenUsed,
+        maxTokenInPlan: maxTokenInPlan,
+      };
+    }
+
+    return {
+      isQuotaExceeded: false,
+      currentTokenUsed: currentTokenUsed,
+      maxTokenInPlan: maxTokenInPlan,
     };
   }
 

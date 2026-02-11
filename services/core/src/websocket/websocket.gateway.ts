@@ -174,6 +174,7 @@ export class WebsocketGatewayService
         taskId: data.taskId,
         message: 'Task started',
         timestamp: new Date().toISOString(),
+        status: result.status,
         data: result.data
       });
       this.logger.log('🎨 Generate result from data: ', result);
@@ -236,6 +237,7 @@ export class WebsocketGatewayService
         taskId: data.taskId,
         message: 'Video Task started',
         timestamp: new Date().toISOString(),
+        status: result.status,
         data: result.data
       });
 
