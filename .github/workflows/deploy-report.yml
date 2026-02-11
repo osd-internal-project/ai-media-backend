@@ -2,10 +2,10 @@ name: Deploy Report Service
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "services/report/**"
-      - "libs/**"
+    # branches: [main]
+    # paths:
+    #   - "services/report/**"
+    #   - "libs/**"
   workflow_dispatch:
 
 jobs:

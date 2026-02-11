@@ -2,10 +2,10 @@ name: Deploy Worker Service
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "services/worker-service/**"
-      - "libs/**"
+    # branches: [main]
+    # paths:
+    #   - "services/worker-service/**"
+    #   - "libs/**"
   workflow_dispatch:
 
 jobs:

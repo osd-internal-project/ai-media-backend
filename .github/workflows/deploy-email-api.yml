@@ -2,10 +2,10 @@ name: Deploy Email API Service
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "services/email-api/**"
-      - "libs/**"
+    # branches: [main]
+    # paths:
+    #   - "services/email-api/**"
+    #   - "libs/**"
   workflow_dispatch:
 
 jobs:
