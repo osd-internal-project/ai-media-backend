@@ -2,10 +2,10 @@ name: Deploy Core Service
 
 on:
   push:
-    # branches: [development]
-    # paths:
-    #   - "services/core/**"
-    #   - "libs/**"
+    branches: [development]
+    paths:
+      - "services/core/**"
+      - "libs/**"
   workflow_dispatch:
 
 jobs:
