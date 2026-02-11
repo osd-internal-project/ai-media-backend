@@ -19,7 +19,7 @@ ingress:
 
 env:
   nodeEnv: "Development"
-  port: "4002"
+  port: "4000"
   databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave_sit?schema=public"
   pathMountdirUpload: "./uploads"
   storagePath: "https://sit.aicave.ai/public/api/v1/s3"

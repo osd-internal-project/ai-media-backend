@@ -2,7 +2,7 @@ name: Deploy Core Service
 
 on:
   push:
-    branches: [development]
+    # branches: [development]
     paths:
       - "services/core/**"
       - "libs/**"
