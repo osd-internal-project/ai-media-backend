@@ -57,6 +57,13 @@ jobs:
             ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
 
       # ---------------------------------------------------------------------
+      - name: Prune Docker Image and Build Cache
+        run: |
+          docker rmi ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} || true
+          docker image prune -f
+          docker builder prune -f
+
+      # ---------------------------------------------------------------------
       # Upload image TAR to all K8s workers
       # ---------------------------------------------------------------------
       - name: Upload TAR to Worker 1 (osd-saas01-worker-0001)
@@ -93,49 +100,70 @@ jobs:
         uses: appleboy/ssh-action@master
         env:
           SUDO_PASS: ${{ secrets.PASSWORD }}
+          IMAGE_REF: docker.io/library/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
         with:
           host: ${{ secrets.WORKER_1_IP }}
           username: ${{ secrets.WORKER_USER }}
           key: ${{ secrets.K8S_SSH_KEY }}
-          envs: SUDO_PASS
+          envs: SUDO_PASS,IMAGE_REF
           script: |
             set -e
+            trap 'rm -f /tmp/image.tar' EXIT
+            find /tmp -maxdepth 1 -name '*.tar.gz' -delete 2>/dev/null || true
+            echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images rm "${IMAGE_REF}" 2>/dev/null || true
             echo "Importing image on osd-saas01-worker-0001..."
             echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images import /tmp/image.tar
-            rm -f /tmp/image.tar
+            echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images label "${IMAGE_REF}" io.cri-containerd.pinned=pinned
             echo "Done"
 
       - name: Import Image on Worker 2
         uses: appleboy/ssh-action@master
         env:
           SUDO_PASS: ${{ secrets.PASSWORD }}
+          IMAGE_REF: docker.io/library/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
         with:
           host: ${{ secrets.WORKER_2_IP }}
           username: ${{ secrets.WORKER_USER }}
           key: ${{ secrets.K8S_SSH_KEY }}
-          envs: SUDO_PASS
+          envs: SUDO_PASS,IMAGE_REF
           script: |
             set -e
+            trap 'rm -f /tmp/image.tar' EXIT
+            find /tmp -maxdepth 1 -name '*.tar.gz' -delete 2>/dev/null || true
+            echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images rm "${IMAGE_REF}" 2>/dev/null || true
             echo "Importing image on osd-saas01-worker-0002..."
             echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images import /tmp/image.tar
-            rm -f /tmp/image.tar
+            echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images label "${IMAGE_REF}" io.cri-containerd.pinned=pinned
             echo "Done"
 
       - name: Import Image on Worker 3
         uses: appleboy/ssh-action@master
         env:
           SUDO_PASS: ${{ secrets.PASSWORD }}
+          IMAGE_REF: docker.io/library/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
         with:
           host: ${{ secrets.WORKER_3_IP }}
           username: ${{ secrets.WORKER_USER }}
           key: ${{ secrets.K8S_SSH_KEY }}
-          envs: SUDO_PASS
+          envs: SUDO_PASS,IMAGE_REF
           script: |
             set -e
+            trap 'rm -f /tmp/image.tar' EXIT
+            find /tmp -maxdepth 1 -name '*.tar.gz' -delete 2>/dev/null || true
+            echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images rm "${IMAGE_REF}" 2>/dev/null || true
             echo "Importing image on osd-saas01-worker-0003..."
             echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images import /tmp/image.tar
-            rm -f /tmp/image.tar
+            echo "$SUDO_PASS" | sudo -S ctr -n k8s.io images label "${IMAGE_REF}" io.cri-containerd.pinned=pinned
             echo "Done"
+
+      # ---------------------------------------------------------------------
+      # Cleanup runner workspace and orphaned SCP artifacts on Worker 1.
+      # ---------------------------------------------------------------------
+      - name: Cleanup Runner Workspace and Orphaned SCP Artifacts
+        if: always()
+        run: |
+          rm -f image.tar
+          find /tmp -maxdepth 1 -name '*.tar.gz' -delete 2>/dev/null || true
 
       # ---------------------------------------------------------------------
       # Helm upgrade (runs on self-hosted runner which has kubectl + helm)
