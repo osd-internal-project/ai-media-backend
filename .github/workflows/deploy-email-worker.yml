@@ -2,10 +2,10 @@ name: Deploy Email Worker Service
 
 on:
   push:
-    # branches: [main]
-    # paths:
-    #   - "services/email-worker/**"
-    #   - "libs/**"
+    branches: [main]
+    paths:
+      - "services/email-worker/**"
+      - "libs/**"
   workflow_dispatch:
 
 jobs:

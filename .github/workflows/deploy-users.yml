@@ -2,10 +2,10 @@ name: Deploy Users Service
 
 on:
   push:
-    # branches: [main]
-    # paths:
-    #   - "services/users/**"
-    #   - "libs/**"
+    branches: [main]
+    paths:
+      - "services/users/**"
+      - "libs/**"
   workflow_dispatch:
 
 jobs:
