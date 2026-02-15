@@ -14,6 +14,7 @@ import {
   QUEUE_NAME_VDO,
   ByteplusePayloadVideo,
   TosService,
+  QUEUE_NAME_OMNIHUMEN,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -46,8 +47,9 @@ export class GenerateService {
     @InjectRedis() private readonly redis: Redis,
     @InjectQueue(QUEUE_NAME_IMAGE) private imageQueue: Queue,
     @InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue,
+    @InjectQueue(QUEUE_NAME_OMNIHUMEN) private omnihumenQueue: Queue,
     private readonly tosService: TosService,
-  ) { }
+  ) {}
 
   /**
    * สร้าง Generation Task และส่งเข้า Queue
@@ -100,10 +102,7 @@ export class GenerateService {
       if (body.image && body.image.length > 0) {
         imageUrls = await Promise.all(
           body.image.map((img) =>
-            this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              img,
-            ),
+            this.tosService.getPreSignedUrl(tosConfigs().tosBucket, img),
           ),
         );
       }
@@ -267,12 +266,13 @@ export class GenerateService {
       }
 
       // 2. Check Quota
-      const { isQuotaExceeded, currentTokenUsed } = await this.checkTokenVideoQuota(
-        user.userId,
-        body,
-        projectMember,
-        redisVideoCacheKey,
-      );
+      const { isQuotaExceeded, currentTokenUsed } =
+        await this.checkTokenVideoQuota(
+          user.userId,
+          body,
+          projectMember,
+          redisVideoCacheKey,
+        );
 
       if (isQuotaExceeded) {
         return {
@@ -296,7 +296,11 @@ export class GenerateService {
 
       // 4. Prepare Payload
       const { basePayload, axiosConfig } =
-        await this.prepareGenerationPayloadVideo(body, getConfigApi, body.organizationId);
+        await this.prepareGenerationPayloadVideo(
+          body,
+          getConfigApi,
+          body.organizationId,
+        );
 
       console.log('basePayload', basePayload);
 
@@ -641,7 +645,8 @@ export class GenerateService {
     currentImageUsed = currentImageUsed + maxImage;
     if (currentImageUsed > maxImageInPlan) {
       Logger.error(
-        `Image used ${currentImageUsed + maxImage
+        `Image used ${
+          currentImageUsed + maxImage
         } exceed max image ${maxImageInPlan}`,
       );
       return {
@@ -676,6 +681,7 @@ export class GenerateService {
     currentTokenUsed: number;
     maxTokenInPlan: number;
   }> {
+    const frameRate = 24;
     let currentTokenUsed = 0;
     const maxToken = body.maxImages || 0;
 
@@ -707,14 +713,17 @@ export class GenerateService {
           tokenUsed: true,
         },
       });
-      currentTokenUsed = aggregateResult._sum.tokenUsed || 0;
+      const onhandToken =
+        (body.width * body.height * body.duration * frameRate) / 1024;
+      currentTokenUsed = aggregateResult._sum.tokenUsed + onhandToken || 0;
     }
 
     const maxTokenInPlan = projectMember.maxToken || 0;
     currentTokenUsed = currentTokenUsed + maxToken;
     if (currentTokenUsed > maxTokenInPlan) {
       Logger.error(
-        `Token used ${currentTokenUsed + maxToken
+        `Token used ${
+          currentTokenUsed + maxToken
         } exceed max token ${maxTokenInPlan}`,
       );
       return {
@@ -799,31 +808,31 @@ export class GenerateService {
         },
         ...(body.image[0]
           ? [
-            {
-              type: 'image_url',
-              image_url: {
-                url: await this.tosService.getPreSignedUrl(
-                  tosConfigs().tosBucket,
-                  body.image[0],
-                ),
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[0],
+                  ),
+                },
+                role: 'first_frame',
               },
-              role: 'first_frame',
-            },
-          ]
+            ]
           : []),
         ...(body.image[1]
           ? [
-            {
-              type: 'image_url',
-              image_url: {
-                url: await this.tosService.getPreSignedUrl(
-                  tosConfigs().tosBucket,
-                  body.image[1],
-                ),
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[1],
+                  ),
+                },
+                role: 'last_frame',
               },
-              role: 'last_frame',
-            },
-          ]
+            ]
           : []),
       ],
       draft: body.draft,
@@ -851,9 +860,311 @@ export class GenerateService {
     return await axios.post(url, payload, config);
   }
 
+
+    /**
+   * สร้าง Generation Task สำหรับ Omnihumen และส่งเข้า Queue
+   */
+  async createOmnihumenGenerationTask(
+    body: RequestVideoGenerateDto,
+    clientId: string,
+  ) {
+    let taskId = body.taskId;
+    const redisOmnihumenCacheKey = `${body.organizationId}/${body.projectId}/omnihumen_used_${body.userId}`;
+
+    try {
+      // 1. Validate User & Project
+      const { user, projectMember } = await this.validateUserAndProject(
+        body.userId,
+        body.projectId,
+      );
+
+      if (!projectMember) {
+        return { status: 400, data: 'Team member not found' };
+      }
+
+      if (user) {
+        await this.logAudit(user.userId, 'CREATE', body, taskId);
+      }
+
+      // 2. Check Quota
+      // const { isQuotaExceeded, currentTokenUsed } =
+      //   await this.checkTokenVideoQuota(
+      //     user.userId,
+      //     body,
+      //     projectMember,
+      //     redisOmnihumenCacheKey,
+      //   );
+
+      // if (isQuotaExceeded) {
+      //   return {
+      //     status: 400,
+      //     data: `Token used ${currentTokenUsed} exceed max token ${projectMember.maxToken}`,
+      //   };
+      // }
+
+      // TODO: Implement Quota Check for Video if needed
+      const modelDetail = await this.modeltypeRepo.findOne({
+        where: { modelType: body.model, type: 'omnihumen' },
+      });
+
+      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+        where: { id: 1 },
+      });
+
+      if (!modelDetail) {
+        return { status: 400, data: 'Model not found' };
+      }
+
+      // 4. Prepare Payload
+      const { basePayload, axiosConfig } =
+        await this.prepareGenerationPayloadOmnihumen(
+          body,
+          getConfigApi,
+          body.organizationId,
+        );
+
+      console.log('basePayload', basePayload);
+
+      // 5. Call External API
+      const res = await this.executeGenerationRequestOmnihumen(
+        getConfigApi.apiCreateTaskVdo,
+        basePayload,
+        axiosConfig,
+      );
+
+      // data mockup
+      // const res = {
+      //     data: {
+      //         id: uuidv4(),
+      //     },
+      // };
+      taskId = res.data.id;
+      await this.galleryRepo.create({
+        data: {
+          taskId,
+          projectId: body.projectId,
+          userId: user.userId,
+          prompt: body.prompt,
+          imageUrl: '',
+          typeGenerate: 'omnihumen',
+          genneratedStatus: 'PENDING',
+          status: false,
+          generateConfig: this.buildGenerateConfig({
+            ratio: body.ratio,
+            width: body.width,
+            height: body.height,
+            prompt: body.prompt,
+            duration: +body.duration,
+            modelName: body.model,
+            imageCount: 0,
+            resolution: body.size,
+            draft: body.draft,
+            generateAudio: body.generateAudio,
+            watermark: body.watermark,
+          }),
+        },
+      });
+      await this.logrepo.create({
+        data: {
+          taskId,
+          projectId: body.projectId,
+          userId: user.userId,
+          prompt: body.prompt,
+          typeGenerate: 'omnihumen',
+          status: 'pending',
+          tokenUsed: 0,
+          ImageUsed: 0,
+          generateAudio: body.generateAudio,
+          referenceImages:
+            body.image.length > 0
+              ? body.image.filter((item) => item !== null)
+              : [],
+          resolution: body.size,
+          ratio: body.ratio,
+          generateConfig: this.buildGenerateConfig({
+            ratio: body.ratio,
+            width: body.width,
+            height: body.height,
+            prompt: body.prompt,
+            duration: +body.duration,
+            modelName: body.model,
+            imageCount: 0,
+            resolution: body.size,
+            draft: body.draft,
+            generateAudio: body.generateAudio,
+            watermark: body.watermark,
+          }),
+        },
+      });
+
+      // 6. อัพเดท cache
+      await this.redis.set(
+        redisOmnihumenCacheKey,
+        // currentTokenUsed.toString(),
+        0,
+        'EX',
+        24 * 60 * 60,
+      );
+      // 7. สร้าง Job ใน Queue
+      const job = await this.omnihumenQueue.add(
+        QUEUE_NAME_OMNIHUMEN,
+        {
+          taskId,
+          clientId,
+          body: { ...body },
+          userId: user.userId,
+          videoTaskId: res.data.id,
+        },
+        {
+          jobId: taskId,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        },
+      );
+
+      // 8. บันทึก task metadata ใน Redis
+      await this.redis.set(
+        `task:${taskId}`,
+        JSON.stringify({
+          taskId,
+          jobId: job.id,
+          clientId,
+          userId: user.userId,
+          projectId: body.projectId,
+          status: 'queued',
+          type: 'omnihumen',
+          videoTaskId: res.data.id,
+          createdAt: new Date().toISOString(),
+        }),
+        'EX',
+        24 * 60 * 60,
+      );
+
+      console.log(`✅ Omnihumen Task created: ${taskId}, Job ID: ${job.id}`);
+
+      return {
+        status: 200,
+        data: {
+          taskId,
+          projectId: body.projectId,
+          userId: user.userId,
+          prompt: body.prompt,
+          typeGenerate: 'video',
+          genneratedStatus: 'PENDING',
+          createdAt: new Date().toISOString(),
+          status: false,
+          videoTaskId: res.data.id,
+          message: 'Omnihumen generation queued',
+          generateConfig: {
+            ratio: body.ratio,
+            width: body.width,
+            height: body.height,
+            content: body.prompt,
+            duration: body.duration.toString(),
+            modelName: body.model,
+            imageCount: 0,
+            resolution: body.size,
+            draft: body.draft,
+            generateAudio: body.generateAudio,
+            watermark: body.watermark,
+          },
+          users: {
+            fullname: user.fullname,
+            userId: user.userId,
+            username: user.username,
+          },
+          referenceImages: [
+            ...(body.image[0] ? [body.image[0]] : []),
+            ...(body.image[1] ? [body.image[1]] : []),
+          ],
+          resolution: body.size,
+          ratio: body.ratio,
+          imageUrls: [],
+        },
+      };
+    } catch (error) {
+      console.error('Error creating omnihumen generation task:', error);
+      this.handleGenerationError(error, body.userId);
+    }
+  } 
+
+
+    private async prepareGenerationPayloadOmnihumen(
+    body: RequestVideoGenerateDto,
+    configApi: any,
+    organizationId: string,
+  ) {
+    const axiosConfig: AxiosRequestConfig = {
+      headers: {
+        'Content-Type': configApi.configType,
+        Authorization: `${configApi.authorization}`,
+      },
+      httpsAgent: this.agent,
+    };
+
+    const basePayload = {
+      model: body.model,
+      content: [
+        {
+          type: 'text',
+          text: body.prompt,
+        },
+        ...(body.image[0]
+          ? [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[0],
+                  ),
+                },
+                role: 'first_frame',
+              },
+            ]
+          : []),
+        ...(body.image[1]
+          ? [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[1],
+                  ),
+                },
+                role: 'last_frame',
+              },
+            ]
+          : []),
+      ],
+      draft: body.draft,
+      generate_audio: body.generateAudio,
+      ratio: body.ratio,
+      duration: body.duration,
+      watermark: body.watermark,
+    } as ByteplusePayloadVideo;
+    return { basePayload, axiosConfig };
+  }
+
+  
+  private async executeGenerationRequestOmnihumen(
+    url: string,
+    payload: any,
+    config: AxiosRequestConfig,
+  ) {
+    return await axios.post(url, payload, config);
+  }
+
   private handleGenerationError(error: any, userId: string) {
     Logger.error(
-      `Error generate image: ${error?.response?.data?.error_description || error.message
+      `Error generate image: ${
+        error?.response?.data?.error_description || error.message
       }`,
       error?.response?.data ? JSON.stringify(error.response.data) : error.stack,
     );

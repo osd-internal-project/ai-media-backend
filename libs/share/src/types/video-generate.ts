@@ -7,7 +7,7 @@ export class RequestVideoGenerateDto {
     size: string;
     maxImages: number;
     watermark: boolean;
-    duration: string; // e.g. "5s", "10s"
+    duration: number; // e.g. "5s", "10s"
     ratio: string;
     projectId: string;
     userId: string;

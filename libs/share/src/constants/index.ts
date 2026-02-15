@@ -3,7 +3,7 @@ export class CreateGenerateDto {
     type: 'image' | 'video';
     text: string;
     resolution: string;
-    duration: string;
+    duration: number;
     image?: any;
     ratio: string;
     images: number;
@@ -20,3 +20,4 @@ export class CreateGenerateDto {
 
 export const QUEUE_NAME_IMAGE = 'image-generate-queue';
 export const QUEUE_NAME_VDO = 'vdo-generate-queue';
+export const QUEUE_NAME_OMNIHUMEN = 'omnihumen-generate-queue';

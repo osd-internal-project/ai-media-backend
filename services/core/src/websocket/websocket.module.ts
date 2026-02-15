@@ -3,7 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { WebsocketGatewayService } from './websocket.gateway';
 import { WebsocketService } from './websocket.service';
 import { GenerateService } from 'src/generate/generate.service';
-import { PrismaModule, QUEUE_NAME_IMAGE, QUEUE_NAME_VDO, TosModule } from '@ai-media/share';
+import { PrismaModule, QUEUE_NAME_IMAGE, QUEUE_NAME_VDO, QUEUE_NAME_OMNIHUMEN, TosModule } from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { LogsService } from 'src/logs/logs.service';
 
@@ -18,6 +18,9 @@ import { LogsService } from 'src/logs/logs.service';
     }),
     BullModule.registerQueue({
       name: QUEUE_NAME_VDO,
+    }),
+    BullModule.registerQueue({
+      name: QUEUE_NAME_OMNIHUMEN,
     }),
     BullModule.registerQueue({
       name: 'tasks',

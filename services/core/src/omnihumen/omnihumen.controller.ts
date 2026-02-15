@@ -11,8 +11,8 @@
 //   Logger,
 // } from '@nestjs/common';
 // import { OmnihumenService } from './omnihumen.service';
-// import { CreateOmnihumanDto } from './dto/create-omnihuman.dto';
-// import { UpdateOmnihumanDto } from './dto/update-omnihuman.dto';
+// import { CreateOmnihumenDto } from './dto/create-omnihumen.dto';
+// import { UpdateOmnihumenDto } from './dto/update-omnihumen.dto';
 // import { FileFieldsInterceptor } from '@nestjs/platform-express';
 
 // @Controller('omnihumen')
@@ -29,9 +29,9 @@
 //   create(
 //     @UploadedFiles()
 //     files: { image?: Express.Multer.File[]; audio?: Express.Multer.File[] },
-//     @Body() createOmnihumanDto: CreateOmnihumanDto,
+//     @Body() createOmnihumenDto: CreateOmnihumenDto,
 //   ) {
-//     const data = this.omnihumenService.create(createOmnihumanDto, files);
+//     const data = this.omnihumenService.create(createOmnihumenDto, files);
 //     Logger.debug(data);
 //     return data;
 //   }
@@ -49,9 +49,9 @@
 //   @Patch(':id')
 //   update(
 //     @Param('id') id: string,
-//     @Body() updateOmnihumanDto: UpdateOmnihumanDto,
+//     @Body() updateOmnihumenDto: UpdateOmnihumenDto,
 //   ) {
-//     return this.omnihumenService.update(+id, updateOmnihumanDto);
+//     return this.omnihumenService.update(+id, updateOmnihumenDto);
 //   }
 
 //   @Delete(':id')

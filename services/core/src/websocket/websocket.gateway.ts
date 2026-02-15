@@ -295,12 +295,17 @@ export class WebsocketGatewayService
         organizationId,
         data.skip,
         data.take,
-      ) : await this.logsService.findProjectVideoByPage(
+      ) : data.type === 'video' ? await this.logsService.findProjectVideoByPage(
         projectId,
         organizationId,
         data.skip,
         data.take,
-      )
+      )  : data.type === 'omnihumen' ? await this.logsService.findProjectOmniHumenByPage(
+        projectId,
+        organizationId,
+        data.skip,
+        data.take,
+      ) : []
 
       client.emit('chat:history', {
         success: true,

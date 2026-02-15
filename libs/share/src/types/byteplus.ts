@@ -40,6 +40,6 @@ export class ByteplusePayloadVideo {
     draft: boolean;
     generate_audio: boolean;
     ratio: string;
-    duration: string;
+    duration: number;
     watermark: boolean;
 }

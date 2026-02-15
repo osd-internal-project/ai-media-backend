@@ -231,12 +231,12 @@ export class VideoProcessor extends WorkerHost {
             type: 'video',
             projectId: body.projectId,
           });
-          await this.redis.set(
-            redisVideoCacheKey,
-            usage.total_tokens.toString(),
-            'EX',
-            24 * 60 * 60,
-          );
+          // await this.redis.set(
+          //   redisVideoCacheKey,
+          //   usage.total_tokens.toString(),
+          //   'EX',
+          //   24 * 60 * 60,
+          // );
           await this.galleryRepo.updateMany({
             where: { taskId: taskId },
             data: {

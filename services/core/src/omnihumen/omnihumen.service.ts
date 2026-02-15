@@ -1,6 +1,6 @@
 // import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
-// import { CreateOmnihumanDto } from './dto/create-omnihuman.dto';
-// import { UpdateOmnihumanDto } from './dto/update-omnihuman.dto';
+// import { CreateOmnihumenDto } from './dto/create-omnihumen.dto';
+// import { UpdateOmnihumenDto } from './dto/update-omnihumen.dto';
 // // import { GenerateImageService } from 'src/generate-image/generate-image.service';
 // import { v4 as uuidv4 } from 'uuid';
 // import * as path from 'path';
@@ -37,7 +37,7 @@
 //   ) { }
 
 //   async create(
-//     createOmnihumanDto: CreateOmnihumanDto,
+//     createOmnihumenDto: CreateOmnihumenDto,
 //     files: { image?: Express.Multer.File[]; audio?: Express.Multer.File[] },
 //   ) {
 //     // const baseUrl = configs().pathDomain;
@@ -98,22 +98,22 @@
 //         // audio_url: `${baseUrl}/stream-image/${audioFileName}`,
 //         // image_url: `${imageUrl}`,
 //         // audio_url: `${audioUrl}`,
-//         prompt: createOmnihumanDto.prompt || '',
+//         prompt: createOmnihumenDto.prompt || '',
 //       });
 //       if (generateTask?.data?.task_id) {
-//         // Logger.debug(createOmnihumanDto);
+//         // Logger.debug(createOmnihumenDto);
 //         const user = await this.usersRepository.findOne({
 //           where: {
-//             token: createOmnihumanDto.token,
+//             token: createOmnihumenDto.token,
 //           },
 //         });
 //         if (user.userId)
 //           await this.logrepo.create({
 //             data: {
 //               taskId: generateTask.data.task_id,
-//               projectId: createOmnihumanDto.projectId,
+//               projectId: createOmnihumenDto.projectId,
 //               userId: user.userId,
-//               prompt: `${createOmnihumanDto.prompt} `,
+//               prompt: `${createOmnihumenDto.prompt} `,
 //               typeGenerate: 'omnihumen',
 //               status: 'pending',
 //               tokenUsed: 0,
@@ -125,11 +125,11 @@
 //         const task = await this.omnihumenTaskRepository.create({
 //           data: {
 //             taskId: generateTask.data.task_id,
-//             projectId: createOmnihumanDto.projectId,
+//             projectId: createOmnihumenDto.projectId,
 //             userId: user?.userId,
-//             prompt: `${createOmnihumanDto.prompt} `,
+//             prompt: `${createOmnihumenDto.prompt} `,
 //             status: false,
-//             avatarName: createOmnihumanDto.avatarName,
+//             avatarName: createOmnihumenDto.avatarName,
 //             taskMessage: generateTask?.message,
 //           },
 //         });
@@ -146,15 +146,15 @@
 //   }
 
 //   findOne(id: number) {
-//     return `This action returns a #${id} omnihuman`;
+//     return `This action returns a #${id} omnihumen`;
 //   }
 
-//   update(id: number, updateOmnihumanDto: UpdateOmnihumanDto) {
-//     return `This action updates a #${id} omnihuman`;
+//   update(id: number, updateOmnihumenDto: UpdateOmnihumenDto) {
+//     return `This action updates a #${id} omnihumen`;
 //   }
 
 //   remove(id: number) {
-//     return `This action removes a #${id} omnihuman`;
+//     return `This action removes a #${id} omnihumen`;
 //   }
 
 //   async submitTask(payload: any) {

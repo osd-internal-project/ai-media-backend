@@ -1,4 +1,4 @@
 import { PartialType } from '@nestjs/swagger';
-import { CreateOmnihumanDto } from './create-omnihuman.dto';
+import { CreateOmnihumenDto } from './create-omnihumen.dto';
 
-export class UpdateOmnihumanDto extends PartialType(CreateOmnihumanDto) {}
+export class UpdateOmnihumenDto extends PartialType(CreateOmnihumenDto) {}

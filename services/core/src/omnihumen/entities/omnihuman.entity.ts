@@ -1,1 +1,1 @@
-export class Omnihuman {}
+export class Omnihumen {}

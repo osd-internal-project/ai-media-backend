@@ -1,4 +1,4 @@
-export class CreateOmnihumanDto {
+export class CreateOmnihumenDto {
   projectId: string;
   token: string;
   avatarName?: string;
