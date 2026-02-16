@@ -32,6 +32,7 @@ interface OminhumenProcessJob {
   body: RequestOmnihumenGenerateDto;
   userId: string;
   ominhumenTaskId: string;
+  reqKey: string;
 }
 
 interface BytepluseResponse {
@@ -102,7 +103,7 @@ export class OminhumenProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId } = job.data as OminhumenProcessJob;
+    const { taskId, clientId, body, userId, reqKey, ominhumenTaskId } = job.data as OminhumenProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
@@ -124,9 +125,9 @@ export class OminhumenProcessor extends WorkerHost {
       const sleep = (ms: number) =>
         new Promise((resolve) => setTimeout(resolve, ms));
 
-      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-        where: { id: 1 },
-      });
+      // const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+      //   where: { id: 1 },
+      // });
       while (true) {
         await this.publishToCore(clientId, 'worker:ominhumen-progress', {
           taskId,
@@ -134,17 +135,32 @@ export class OminhumenProcessor extends WorkerHost {
           type: 'ominhumen',
           projectId: body.projectId,
         });
-        const url = `${getConfigApi.apiCreateTaskVdo}/${taskId}`;
-        const token = getConfigApi.authorization;
-        const authHeader = token.startsWith('Bearer ')
-          ? token
-          : `Bearer ${token}`;
+        const url = 'https://cv.byteplusapi.com/';
+        const accessKey =
+          process.env.BYTEPLUS_ACCESS_KEY ||
+          'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';
+        const secretKey =
+          process.env.BYTEPLUS_SECRET_KEY ||
+          'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
 
-        const getResult = await axios.get(url, {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: authHeader,
-          },
+        const queryParams = { Action: 'CVGetResult', Version: '2024-06-06' };
+        const bodyPayload = {
+          req_key: reqKey,
+          task_id: ominhumenTaskId,
+        };
+
+        const headers = this.signBytePlusRequest(
+          'POST',
+          '/',
+          queryParams,
+          bodyPayload,
+          accessKey,
+          secretKey,
+        );
+
+        const getResult = await axios.post(url, bodyPayload, {
+          headers: headers,
+          params: queryParams,
           httpsAgent: this.agent,
         });
 
@@ -174,20 +190,27 @@ export class OminhumenProcessor extends WorkerHost {
         //         draft: false
         //     }
         // }
-        const status = getResult.data.status;
-        if (status === 'succeeded') {
+        const status = getResult.data.data.status;
+        if (status === 'done') {
           console.log(getResult.data);
-          const { id, content, usage } = getResult.data as BytepluseResponse;
+          let videoUrl = '';
+          try {
+            const respData = JSON.parse(getResult.data.data.resp_data);
+            videoUrl = respData.video_url;
+          } catch (e) {
+            console.error('Error parse resp_data', e);
+          }
+
           console.log('----- task succeeded -----');
           await this.publishToCore(clientId, 'worker:ominhumen-url-success', {
             taskId,
-            videoUrl: content.video_url,
+            videoUrl: videoUrl,
             timestamp: new Date().toISOString(),
             type: 'ominhumen',
             projectId: body.projectId,
           });
           const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/ominhumen_used_${body.userId}`;
-          const videoRes = await axios.get(content.video_url, {
+          const videoRes = await axios.get(videoUrl, {
             responseType: 'arraybuffer',
             httpsAgent: this.agent,
           });
@@ -246,7 +269,7 @@ export class OminhumenProcessor extends WorkerHost {
           });
           await this.logrepo.updateMany({
             where: { taskId: taskId },
-            data: { status: 'success', tokenUsed: usage.total_tokens },
+            data: { status: 'success', tokenUsed: 0 },
           });
           break;
         } else if (status === 'failed') {
@@ -465,7 +488,7 @@ export class OminhumenProcessor extends WorkerHost {
       };
     } catch (error) {
       console.error('Error in uploadVideoWithThumbnail:', error);
-      throw new BadRequestException('Error processing ominhumen: ' + error.message);
+      throw new BadRequestException('Error processing video: ' + error.message);
     } finally {
       // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
       try {
@@ -475,6 +498,98 @@ export class OminhumenProcessor extends WorkerHost {
         console.error('Error cleaning up temp files:', cleanupError);
       }
     }
+  }
+
+  private signBytePlusRequest(
+    method: string,
+    path: string,
+    queryParams: Record<string, string>,
+    body: any,
+    accessKey: string,
+    secretKey: string,
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const crypto = require('crypto');
+    const region = 'ap-singapore-1';
+    const service = 'cv';
+    const contentType = 'application/json';
+    const host = 'cv.byteplusapi.com';
+
+    const now = new Date();
+    const x_date = now.toISOString().replace(/[:-]|\.\d{3}/g, ''); // YYYYMMDDTHHMMSSZ
+    const short_date = x_date.slice(0, 8);
+
+    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    const x_content_sha256 = crypto
+      .createHash('sha256')
+      .update(bodyStr)
+      .digest('hex');
+
+    const queryString = Object.keys(queryParams)
+      .sort()
+      .map(
+        (key) =>
+          `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}`,
+      )
+      .join('&');
+
+    const canonicalHeaders =
+      `content-type:${contentType}\n` +
+      `host:${host}\n` +
+      `x-content-sha256:${x_content_sha256}\n` +
+      `x-date:${x_date}\n`;
+
+    const signedHeaders = 'content-type;host;x-content-sha256;x-date';
+
+    const canonicalRequest = [
+      method,
+      path,
+      queryString,
+      canonicalHeaders,
+      signedHeaders,
+      x_content_sha256,
+    ].join('\n');
+
+    const credentialScope = `${short_date}/${region}/${service}/request`;
+
+    const stringToSign = [
+      'HMAC-SHA256',
+      x_date,
+      credentialScope,
+      crypto.createHash('sha256').update(canonicalRequest).digest('hex'),
+    ].join('\n');
+
+    const kDate = crypto
+      .createHmac('sha256', secretKey)
+      .update(short_date)
+      .digest();
+    const kRegion = crypto
+      .createHmac('sha256', kDate)
+      .update(region)
+      .digest();
+    const kService = crypto
+      .createHmac('sha256', kRegion)
+      .update(service)
+      .digest();
+    const kSigning = crypto
+      .createHmac('sha256', kService)
+      .update('request')
+      .digest();
+
+    const signature = crypto
+      .createHmac('sha256', kSigning)
+      .update(stringToSign)
+      .digest('hex');
+
+    const authorization = `HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    return {
+      'Content-Type': contentType,
+      Host: host,
+      'X-Content-Sha256': x_content_sha256,
+      'X-Date': x_date,
+      Authorization: authorization,
+    };
   }
 
   async onModuleDestroy() {

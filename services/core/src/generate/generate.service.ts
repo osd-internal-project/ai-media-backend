@@ -15,6 +15,7 @@ import {
   ByteplusePayloadVideo,
   TosService,
   QUEUE_NAME_OMNIHUMEN,
+  ByteplusePayloadOmnihumen,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -860,14 +861,14 @@ export class GenerateService {
     return await axios.post(url, payload, config);
   }
 
-
-    /**
+  /**
    * สร้าง Generation Task สำหรับ Omnihumen และส่งเข้า Queue
    */
   async createOmnihumenGenerationTask(
     body: RequestVideoGenerateDto,
     clientId: string,
   ) {
+    console.log(body);
     let taskId = body.taskId;
     const redisOmnihumenCacheKey = `${body.organizationId}/${body.projectId}/omnihumen_used_${body.userId}`;
 
@@ -885,7 +886,6 @@ export class GenerateService {
       if (user) {
         await this.logAudit(user.userId, 'CREATE', body, taskId);
       }
-
       // 2. Check Quota
       // const { isQuotaExceeded, currentTokenUsed } =
       //   await this.checkTokenVideoQuota(
@@ -908,8 +908,9 @@ export class GenerateService {
       });
 
       const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-        where: { id: 1 },
+        where: { id: 2 },
       });
+      // console.log(getConfigApi);
 
       if (!modelDetail) {
         return { status: 400, data: 'Model not found' };
@@ -918,27 +919,29 @@ export class GenerateService {
       // 4. Prepare Payload
       const { basePayload, axiosConfig } =
         await this.prepareGenerationPayloadOmnihumen(
-          body,
+          {
+            req_key: modelDetail.modelType,
+            image_url: body.image[0],
+            audio_url: body.image[1],
+          },
           getConfigApi,
           body.organizationId,
         );
 
-      console.log('basePayload', basePayload);
-
       // 5. Call External API
       const res = await this.executeGenerationRequestOmnihumen(
-        getConfigApi.apiCreateTaskVdo,
+        'https://cv.byteplusapi.com/',
         basePayload,
         axiosConfig,
       );
-
+      console.log('res', res);
       // data mockup
       // const res = {
       //     data: {
       //         id: uuidv4(),
       //     },
       // };
-      taskId = res.data.id;
+      // taskId = res.data.task_id;
       await this.galleryRepo.create({
         data: {
           taskId,
@@ -949,19 +952,7 @@ export class GenerateService {
           typeGenerate: 'omnihumen',
           genneratedStatus: 'PENDING',
           status: false,
-          generateConfig: this.buildGenerateConfig({
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
-            prompt: body.prompt,
-            duration: +body.duration,
-            modelName: body.model,
-            imageCount: 0,
-            resolution: body.size,
-            draft: body.draft,
-            generateAudio: body.generateAudio,
-            watermark: body.watermark,
-          }),
+          // generateConfig: this.buildGenerateConfig({}),
         },
       });
       await this.logrepo.create({
@@ -969,7 +960,7 @@ export class GenerateService {
           taskId,
           projectId: body.projectId,
           userId: user.userId,
-          prompt: body.prompt,
+          prompt: '',
           typeGenerate: 'omnihumen',
           status: 'pending',
           tokenUsed: 0,
@@ -979,21 +970,9 @@ export class GenerateService {
             body.image.length > 0
               ? body.image.filter((item) => item !== null)
               : [],
-          resolution: body.size,
-          ratio: body.ratio,
-          generateConfig: this.buildGenerateConfig({
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
-            prompt: body.prompt,
-            duration: +body.duration,
-            modelName: body.model,
-            imageCount: 0,
-            resolution: body.size,
-            draft: body.draft,
-            generateAudio: body.generateAudio,
-            watermark: body.watermark,
-          }),
+          // resolution: body.size,
+          // ratio: body.ratio,
+          // generateConfig: this.buildGenerateConfig({}),
         },
       });
 
@@ -1013,7 +992,8 @@ export class GenerateService {
           clientId,
           body: { ...body },
           userId: user.userId,
-          videoTaskId: res.data.id,
+          ominhumenTaskId: res.data.data.task_id,
+          reqKey: modelDetail.modelType,
         },
         {
           jobId: taskId,
@@ -1038,7 +1018,7 @@ export class GenerateService {
           projectId: body.projectId,
           status: 'queued',
           type: 'omnihumen',
-          videoTaskId: res.data.id,
+          videoTaskId: res.data.data.task_id,
           createdAt: new Date().toISOString(),
         }),
         'EX',
@@ -1058,7 +1038,7 @@ export class GenerateService {
           genneratedStatus: 'PENDING',
           createdAt: new Date().toISOString(),
           status: false,
-          videoTaskId: res.data.id,
+          videoTaskId: res.data.data.task_id,
           message: 'Omnihumen generation queued',
           generateConfig: {
             ratio: body.ratio,
@@ -1091,68 +1071,53 @@ export class GenerateService {
       console.error('Error creating omnihumen generation task:', error);
       this.handleGenerationError(error, body.userId);
     }
-  } 
+  }
 
-
-    private async prepareGenerationPayloadOmnihumen(
-    body: RequestVideoGenerateDto,
+  private async prepareGenerationPayloadOmnihumen(
+    body: ByteplusePayloadOmnihumen,
     configApi: any,
     organizationId: string,
   ) {
+    const accessKey =
+      process.env.BYTEPLUS_ACCESS_KEY ||
+      'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';
+    const secretKey =
+      process.env.BYTEPLUS_SECRET_KEY ||
+      'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
+
+    const queryParams = { Action: 'CVSubmitTask', Version: '2024-06-06' };
+
+    // Construct basePayload first
+    const basePayload = {
+      req_key: 'realman_avatar_picture_omni15_cv',
+      image_url: await this.tosService.getPreSignedUrl(
+        tosConfigs().tosBucket,
+        body.image_url,
+      ),
+      audio_url: await this.tosService.getPreSignedUrl(
+        tosConfigs().tosBucket,
+        body.audio_url,
+      ),
+    } as ByteplusePayloadOmnihumen;
+
+    const headers = this.signBytePlusRequest(
+      'POST',
+      '/',
+      queryParams,
+      basePayload,
+      accessKey,
+      secretKey,
+    );
+
     const axiosConfig: AxiosRequestConfig = {
-      headers: {
-        'Content-Type': configApi.configType,
-        Authorization: `${configApi.authorization}`,
-      },
+      headers: headers,
+      params: queryParams,
       httpsAgent: this.agent,
     };
 
-    const basePayload = {
-      model: body.model,
-      content: [
-        {
-          type: 'text',
-          text: body.prompt,
-        },
-        ...(body.image[0]
-          ? [
-              {
-                type: 'image_url',
-                image_url: {
-                  url: await this.tosService.getPreSignedUrl(
-                    tosConfigs().tosBucket,
-                    body.image[0],
-                  ),
-                },
-                role: 'first_frame',
-              },
-            ]
-          : []),
-        ...(body.image[1]
-          ? [
-              {
-                type: 'image_url',
-                image_url: {
-                  url: await this.tosService.getPreSignedUrl(
-                    tosConfigs().tosBucket,
-                    body.image[1],
-                  ),
-                },
-                role: 'last_frame',
-              },
-            ]
-          : []),
-      ],
-      draft: body.draft,
-      generate_audio: body.generateAudio,
-      ratio: body.ratio,
-      duration: body.duration,
-      watermark: body.watermark,
-    } as ByteplusePayloadVideo;
     return { basePayload, axiosConfig };
   }
 
-  
   private async executeGenerationRequestOmnihumen(
     url: string,
     payload: any,
@@ -1170,7 +1135,7 @@ export class GenerateService {
     );
     if (axios.isAxiosError(error) && error.response) {
       const { status, data } = error.response;
-      const message = data?.error?.message;
+      const message = data?.error?.message || '';
 
       this.logError(userId, message, error.stack, data);
       throw new ConflictException(message);
@@ -1248,5 +1213,94 @@ export class GenerateService {
     } catch (e) {
       Logger.error(`Failed to create error log: ${e}`);
     }
+  }
+
+  private signBytePlusRequest(
+    method: string,
+    path: string,
+    queryParams: Record<string, string>,
+    body: any,
+    accessKey: string,
+    secretKey: string,
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const crypto = require('crypto');
+    const region = 'ap-singapore-1';
+    const service = 'cv';
+    const contentType = 'application/json';
+    const host = 'cv.byteplusapi.com';
+
+    const now = new Date();
+    const x_date = now.toISOString().replace(/[:-]|\.\d{3}/g, ''); // YYYYMMDDTHHMMSSZ
+    const short_date = x_date.slice(0, 8);
+
+    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    const x_content_sha256 = crypto
+      .createHash('sha256')
+      .update(bodyStr)
+      .digest('hex');
+
+    const queryString = Object.keys(queryParams)
+      .sort()
+      .map(
+        (key) =>
+          `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}`,
+      )
+      .join('&');
+
+    const canonicalHeaders =
+      `content-type:${contentType}\n` +
+      `host:${host}\n` +
+      `x-content-sha256:${x_content_sha256}\n` +
+      `x-date:${x_date}\n`;
+
+    const signedHeaders = 'content-type;host;x-content-sha256;x-date';
+
+    const canonicalRequest = [
+      method,
+      path,
+      queryString,
+      canonicalHeaders,
+      signedHeaders,
+      x_content_sha256,
+    ].join('\n');
+
+    const credentialScope = `${short_date}/${region}/${service}/request`;
+
+    const stringToSign = [
+      'HMAC-SHA256',
+      x_date,
+      credentialScope,
+      crypto.createHash('sha256').update(canonicalRequest).digest('hex'),
+    ].join('\n');
+
+    const kDate = crypto
+      .createHmac('sha256', secretKey)
+      .update(short_date)
+      .digest();
+    const kRegion = crypto.createHmac('sha256', kDate).update(region).digest();
+    const kService = crypto
+      .createHmac('sha256', kRegion)
+      .update(service)
+      .digest();
+    const kSigning = crypto
+      .createHmac('sha256', kService)
+      .update('request')
+      .digest();
+
+    const signature = crypto
+      .createHmac('sha256', kSigning)
+      .update(stringToSign)
+      .digest('hex');
+
+    const authorization = `HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    return {
+      'Content-Type': contentType,
+      Host: host,
+      'X-Content-Sha256': x_content_sha256,
+      'X-Date': x_date,
+      Authorization: authorization,
+    };
   }
 }

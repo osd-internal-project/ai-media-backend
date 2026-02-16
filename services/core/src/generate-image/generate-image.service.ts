@@ -12,7 +12,13 @@ import {
   ProjectMemberRepository,
   TosService,
 } from '@ai-media/share';
-import { BadRequestException, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { CreateGenerateImageDto } from './dto/create-generate-image.dto';
 import { UpdateGenerateImageDto } from './dto/update-generate-image.dto';
 import axios from 'axios';
@@ -51,7 +57,7 @@ export class GenerateImageService implements OnModuleInit {
     private readonly errorLogRepo: ErrorLogRepository,
     private readonly auditLogRepo: AuditLogRepository,
     private readonly tosService: TosService,
-  ) { }
+  ) {}
 
   async onModuleInit() {
     // Check if there are any pending tasks on startup to set the flag correctly
@@ -272,22 +278,25 @@ export class GenerateImageService implements OnModuleInit {
   // --- Handlers ---
 
   private async getModelType(dto: CreateGenerateImageDto) {
+    console.log(dto);
     const description =
       dto.type === 'video'
         ? dto.image
           ? 'image-to-video'
           : 'text-to-video'
-        : dto.image
+        : dto.type === 'image'
+        ? dto.image
           ? 'image-to-image'
-          : 'text-to-image';
+          : 'text-to-image'
+        : 'image-to-video';
 
     return dto.modelName
       ? await this.modeltypeRepo.findOne({
-        where: { modelType: dto.modelName, type: dto.type },
-      } as Prisma.MasterModelTypeFindFirstArgs)
+          where: { modelType: dto.modelName, type: dto.type },
+        } as Prisma.MasterModelTypeFindFirstArgs)
       : await this.modeltypeRepo.findOne({
-        where: { type: dto.type, description: description },
-      } as Prisma.MasterModelTypeFindFirstArgs);
+          where: { type: dto.type, description: description },
+        } as Prisma.MasterModelTypeFindFirstArgs);
   }
 
   private async handleVdoRequest(
@@ -306,7 +315,7 @@ export class GenerateImageService implements OnModuleInit {
       for (const img of dto.image) {
         const url = await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizationId}/${dto.projectId}/uploads/${img.fileName}`
+          `organize/${organizationId}/${dto.projectId}/uploads/${img.fileName}`,
         );
         imageContents.push({
           type: 'image_url',
@@ -317,11 +326,11 @@ export class GenerateImageService implements OnModuleInit {
       if (dto.image.length >= 2) {
         const url1 = await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
+          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[0].fileName}`,
         );
         const url2 = await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[1].fileName}`
+          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[1].fileName}`,
         );
         imageContents = [
           { type: 'image_url', image_url: { url: url1 }, role: 'first_frame' },
@@ -330,7 +339,7 @@ export class GenerateImageService implements OnModuleInit {
       } else if (dto.image.length === 1) {
         const url = await this.tosService.getPreSignedUrl(
           tosConfigs().tosBucket,
-          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[0].fileName}`
+          `organize/${organizationId}/${dto.projectId}/uploads/${dto.image[0].fileName}`,
         );
         imageContents = [
           { type: 'image_url', image_url: { url }, role: 'first_frame' },
@@ -468,7 +477,7 @@ export class GenerateImageService implements OnModuleInit {
         dto.image.map(async (img) => {
           return await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${dto.organizationId}/${dto.projectId}/uploads/${img.fileName}`
+            `organize/${dto.organizationId}/${dto.projectId}/uploads/${img.fileName}`,
           );
         }),
       );

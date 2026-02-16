@@ -22,7 +22,7 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
-
+  app.setGlobalPrefix('api');
   // ===================================
   // 2. Helmet Configuration (แก้ไขให้รองรับ WebSocket)
   // ===================================
