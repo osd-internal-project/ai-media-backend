@@ -6,6 +6,7 @@ import {
   PrismaModule,
   TosModule,
   QUEUE_NAME_OMNIHUMEN,
+  QUEUE_NAME_DREAMACTOR,
 } from '@ai-media/share';
 import { BullModule } from '@nestjs/bullmq';
 import { GenerateService } from './generate.service';
@@ -22,6 +23,9 @@ import { GenerateService } from './generate.service';
     }),
     BullModule.registerQueue({
       name: QUEUE_NAME_OMNIHUMEN,
+    }),
+    BullModule.registerQueue({
+      name: QUEUE_NAME_DREAMACTOR,
     }),
   ],
   controllers: [GenerateController],

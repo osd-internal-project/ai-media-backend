@@ -16,6 +16,8 @@ import {
   TosService,
   QUEUE_NAME_OMNIHUMEN,
   ByteplusePayloadOmnihumen,
+  ByteplusePayloadDreamactor,
+  QUEUE_NAME_DREAMACTOR,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -49,6 +51,7 @@ export class GenerateService {
     @InjectQueue(QUEUE_NAME_IMAGE) private imageQueue: Queue,
     @InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue,
     @InjectQueue(QUEUE_NAME_OMNIHUMEN) private omnihumenQueue: Queue,
+    @InjectQueue(QUEUE_NAME_DREAMACTOR) private dreamactorQueue: Queue,
     private readonly tosService: TosService,
   ) {}
 
@@ -1152,6 +1155,288 @@ export class GenerateService {
   }
 
   private async executeGenerationRequestOmnihumen(
+    url: string,
+    payload: any,
+    config: AxiosRequestConfig,
+  ) {
+    return await axios.post(url, payload, config);
+  }
+
+  /**
+   * สร้าง Generation Task สำหรับ Dreamactor และส่งเข้า Queue
+   */
+  async createDreamactorGenerationTask(body: any, clientId: string) {
+    let taskId = body.taskId;
+    const redisDreamactorCacheKey = `${body.organizationId}/${body.projectId}/dreamactor_used_${body.userId}`;
+
+    try {
+      // 1. Validate User & Project
+      const { user, projectMember } = await this.validateUserAndProject(
+        body.userId,
+        body.projectId,
+      );
+
+      if (!projectMember) {
+        return { status: 400, data: 'Team member not found' };
+      }
+
+      if (user) {
+        await this.logAudit(user.userId, 'CREATE', body, taskId);
+      }
+      // 2. Check Quota
+      // const { isQuotaExceeded, currentTokenUsed } =
+      //   await this.checkTokenVideoQuota(
+      //     user.userId,
+      //     body,
+      //     projectMember,
+      //     redisOmnihumenCacheKey,
+      //   );
+
+      // if (isQuotaExceeded) {
+      //   return {
+      //     status: 400,
+      //     data: `Token used ${currentTokenUsed} exceed max token ${projectMember.maxToken}`,
+      //   };
+      // }
+console.log("body", body);
+      // TODO: Implement Quota Check for Video if needed
+      const modelDetail = await this.modeltypeRepo.findOne({
+        where: { modelType: body.model, type: 'dreamactor' },
+      });
+
+      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+        where: { id: 2 },
+      });
+      // console.log(getConfigApi);
+
+      if (!modelDetail) {
+        return { status: 400, data: 'Model not found' };
+      }
+      // 4. Prepare Payload
+      // const resolution = body.resolution ? parseInt(body.resolution.replace('p', '')) : 720;
+      const { basePayload, axiosConfig } =
+        await this.prepareGenerationPayloadDreamactor(
+          {
+            req_key: modelDetail.modelType,
+            image_urls: [body.image[0]],
+            video_url: body.image[1],
+          },
+          getConfigApi,
+          body.organizationId,
+        );
+      console.log('basePayload', basePayload);
+
+      // 5. Call External API
+      const res = await this.executeGenerationRequestDreamactor(
+        'https://cv.byteplusapi.com/',
+        basePayload,
+        axiosConfig,
+      );
+      // data mockup
+      // const res = {
+      //     data: {
+      //         id: uuidv4(),
+      //     },
+      // };
+      taskId = res.data.data.task_id;
+      await this.galleryRepo.create({
+        data: {
+          taskId,
+          projectId: body.projectId,
+          userId: user.userId,
+          prompt: body.prompt,
+          imageUrl: '',
+          typeGenerate: 'dreamactor',
+          genneratedStatus: 'PENDING',
+          status: false,
+          generateConfig: this.buildGenerateConfig({
+            ratio: '',
+            width: 0,
+            height: 0,
+            prompt: '',
+            duration: 0,
+            modelName: '',
+            imageCount: 0,
+            generateAudio: false,
+            resolution: '',
+          }),
+        },
+      });
+      await this.logrepo.create({
+        data: {
+          taskId,
+          projectId: body.projectId,
+          userId: user.userId,
+          prompt: body.prompt || '',
+          typeGenerate: 'dreamactor',
+          status: 'pending',
+          tokenUsed: 0,
+          ImageUsed: 0,
+          generateAudio: body.generateAudio,
+          referenceImages:
+            body.image.length > 0
+              ? body.image.filter((item) => item !== null)
+              : [],
+          resolution: body.resolution,
+          // ratio: body.ratio,
+          generateConfig: this.buildGenerateConfig({
+            ratio: '',
+            width: 0,
+            height: 0,
+            prompt: '',
+            duration: 0,
+            modelName: '',
+            imageCount: 0,
+            generateAudio: false,
+            resolution: '',
+          }),
+        },
+      });
+
+      // 6. อัพเดท cache
+      await this.redis.set(
+        redisDreamactorCacheKey,
+        // currentTokenUsed.toString(),
+        0,
+        'EX',
+        24 * 60 * 60,
+      );
+      // 7. สร้าง Job ใน Queue
+      const job = await this.dreamactorQueue.add(
+        QUEUE_NAME_DREAMACTOR,
+        {
+          taskId,
+          clientId,
+          body: { ...body },
+          userId: user.userId,
+          dreamactorTaskId: taskId,
+          reqKey: modelDetail.modelType,
+        },
+        {
+          jobId: taskId,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        },
+      );
+
+      // 8. บันทึก task metadata ใน Redis
+      await this.redis.set(
+        `task:${taskId}`,
+        JSON.stringify({
+          taskId,
+          jobId: job.id,
+          clientId,
+          userId: user.userId,
+          projectId: body.projectId,
+          status: 'queued',
+          type: 'dreamactor',
+          dreamactorTaskId: res.data.data.task_id,
+          createdAt: new Date().toISOString(),
+        }),
+        'EX',
+        24 * 60 * 60,
+      );
+
+      console.log(`✅ Dreamactor Task created: ${taskId}, Job ID: ${job.id}`);
+
+      return {
+        status: 200,
+        data: {
+          taskId,
+          projectId: body.projectId,
+          userId: user.userId,
+          prompt: body.prompt,
+          typeGenerate: 'dreamactor',
+          genneratedStatus: 'PENDING',
+          createdAt: new Date().toISOString(),
+          status: false,
+          dreamactorTaskId: taskId,
+          message: 'Dreamactor generation queued',
+          generateConfig: {
+            content: body.prompt,
+            modelName: body.model,
+            imageCount: 0,
+            resolution: body.resolution,
+            fastMode: body.fastMode,
+            seed: body.seed,
+          },
+          users: {
+            fullname: user.fullname,
+            userId: user.userId,
+            username: user.username,
+          },
+          referenceImages: [
+            ...(body.image[0] ? [body.image[0]] : []),
+            ...(body.image[1] ? [body.image[1]] : []),
+          ],
+          resolution: body.size,
+          ratio: body.ratio,
+          imageUrls: [],
+        },
+      };
+    } catch (error) {
+      console.error('Error creating dreamactor generation task:', error);
+      this.handleGenerationError(error, body.userId);
+    }
+  }
+
+  private async prepareGenerationPayloadDreamactor(
+    body: ByteplusePayloadDreamactor,
+    configApi: any,
+    organizationId: string,
+  ) {
+    const accessKey =
+      process.env.BYTEPLUS_ACCESS_KEY ||
+      'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';
+    const secretKey =
+      process.env.BYTEPLUS_SECRET_KEY ||
+      'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
+
+    const queryParams = {
+      Action: 'CVSync2AsyncSubmitTask',
+      Version: '2024-06-06',
+    };
+
+    // Construct basePayload first
+    const basePayload = {
+      ...body,
+      req_key: 'dreamactor_m20_gen_video_cvtob',
+      image_urls: await Promise.all(
+        body.image_urls.map(
+          async (url) =>
+            await this.tosService.getPreSignedUrl(tosConfigs().tosBucket, url),
+        ),
+      ),
+      video_url: await this.tosService.getPreSignedUrl(
+        tosConfigs().tosBucket,
+        body.video_url,
+      ),
+    } as ByteplusePayloadDreamactor;
+
+    const headers = this.signBytePlusRequest(
+      'POST',
+      '/',
+      queryParams,
+      basePayload,
+      accessKey,
+      secretKey,
+    );
+
+    const axiosConfig: AxiosRequestConfig = {
+      headers: headers,
+      params: queryParams,
+      httpsAgent: this.agent,
+    };
+
+    return { basePayload, axiosConfig };
+  }
+
+  private async executeGenerationRequestDreamactor(
     url: string,
     payload: any,
     config: AxiosRequestConfig,

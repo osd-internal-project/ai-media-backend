@@ -21,3 +21,4 @@ export class CreateGenerateDto {
 export const QUEUE_NAME_IMAGE = 'image-generate-queue';
 export const QUEUE_NAME_VDO = 'vdo-generate-queue';
 export const QUEUE_NAME_OMNIHUMEN = 'omnihumen-generate-queue';
+export const QUEUE_NAME_DREAMACTOR = 'dreamactor-generate-queue';

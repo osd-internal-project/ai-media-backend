@@ -603,6 +603,155 @@ export class LogsService {
 
     return result;
   }
+
+    async findProjectDreamactorByPage(
+    projectId: string,
+    organizationId: string,
+    skip?: number,
+    take?: number,
+  ) {
+    const data = await this.galleryRepo.findMany({
+      where: {
+        projectId: projectId,
+        taskId: { not: null },
+        typeGenerate: 'dreamactor',
+      },
+      include: { users: true },
+      orderBy: { createdAt: 'desc' },
+      ...(skip !== undefined && take !== undefined && { skip, take }),
+    });
+    const targetTaskIds = data.map((t) => t.taskId);
+
+    if (targetTaskIds.length === 0) {
+      return [];
+    }
+
+    // const data = await this.galleryRepo.findMany({
+    //   where: {
+    //     taskId: { in: targetTaskIds },
+    //     typeGenerate: 'video',
+    //   },
+    //   include: { users: true },
+    //   orderBy: { createdAt: 'desc' },
+    // });
+
+    const logData = await this.logrepo.findMany({
+      where: {
+        taskId: { in: targetTaskIds },
+        typeGenerate: 'dreamactor',
+      },
+      select: {
+        taskId: true,
+        referenceImages: true,
+        resolution: true,
+        ratio: true,
+        generateAudio: true,
+      },
+    });
+
+    const referenceImagesMap = new Map();
+    const resolutionMap = new Map();
+    const ratioMap = new Map();
+    const generateAudio = new Map();
+
+    logData.forEach((log) => {
+      if (log.referenceImages && log.referenceImages.length > 0) {
+        referenceImagesMap.set(log.taskId, log.referenceImages);
+      }
+      if (log.resolution) {
+        resolutionMap.set(log.taskId, log.resolution);
+      }
+      if (log.ratio) {
+        ratioMap.set(log.taskId, log.ratio);
+      }
+      if (log.generateAudio) {
+        generateAudio.set(log.taskId, log.generateAudio);
+      }
+    });
+
+    const newData = new Map();
+    for (const item of data) {
+      const url = item.imageUrl
+        ? await this.tosService.getPreSignedUrl(
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              `${item.typeGenerate}-generate`
+            }/${item.imageUrl}`,
+          )
+        : '';
+      const thumbnailUrl = item.thumbnailUrl
+        ? await this.tosService.getPreSignedUrl(
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/${
+              `${item.typeGenerate}-generate`
+            }/${item.thumbnailUrl}`,
+          )
+        : '';
+
+      // Generate presigned URLs for multiple reference images
+      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
+      let referenceImageUrls = [];
+      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
+        for (const filename of referenceImageFilenames) {
+          const fileStats = await this.tosService.headObject(
+            tosConfigs().tosBucket,
+            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
+          );
+          if (fileStats) {
+            const url = await this.tosService.getPreSignedUrl(
+              tosConfigs().tosBucket,
+              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
+            );
+            referenceImageUrls.push(url);
+          } else {
+            const placeholder =
+              'data:image/svg+xml;base64,' +
+              Buffer.from(
+                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" fill="#333"/>
+                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
+              </svg>`,
+              ).toString('base64');
+            referenceImageUrls.push(placeholder);
+          }
+        }
+      }
+
+      if (!newData.has(item.taskId)) {
+        newData.set(item.taskId, {
+          ...item,
+          referenceImages: referenceImageUrls,
+          resolution: resolutionMap.get(item.taskId) || null,
+          ratio: ratioMap.get(item.taskId) || null,
+          generateAudio: generateAudio.get(item.taskId) || null,
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl: thumbnailUrl,
+              id: item.id,
+              status: item.status,
+              fileName: item.imageUrl,
+            },
+          ],
+        });
+        delete newData.get(item.taskId).imageUrl;
+        delete newData.get(item.taskId).thumbnailUrl;
+      } else {
+        newData.get(item.taskId).imageUrls.push({
+          imageUrl: url,
+          thumbnailUrl: thumbnailUrl,
+          id: item.id,
+          fileName: item.imageUrl,
+          status: item.status,
+        });
+      }
+    }
+
+    const result = Array.from(newData.values());
+
+    return result;
+  }
+
   async findProjectViedoByFristId(
     projectId: string,
     organizationId: string,

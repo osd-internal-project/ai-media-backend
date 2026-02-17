@@ -3,12 +3,21 @@ import { BullModule } from '@nestjs/bullmq';
 import { WebsocketGatewayService } from './websocket.gateway';
 import { WebsocketService } from './websocket.service';
 import { GenerateService } from 'src/generate/generate.service';
-import { PrismaModule, QUEUE_NAME_IMAGE, QUEUE_NAME_VDO, QUEUE_NAME_OMNIHUMEN, TosModule } from '@ai-media/share';
+import {
+  PrismaModule,
+  QUEUE_NAME_IMAGE,
+  QUEUE_NAME_VDO,
+  QUEUE_NAME_OMNIHUMEN,
+  QUEUE_NAME_DREAMACTOR,
+  TosModule,
+} from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { LogsService } from 'src/logs/logs.service';
 
 @Module({
-  imports: [PrismaModule, TosModule,
+  imports: [
+    PrismaModule,
+    TosModule,
     RedisModule.forRoot({
       type: 'single',
       url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
@@ -23,10 +32,23 @@ import { LogsService } from 'src/logs/logs.service';
       name: QUEUE_NAME_OMNIHUMEN,
     }),
     BullModule.registerQueue({
+      name: QUEUE_NAME_DREAMACTOR,
+    }),
+    BullModule.registerQueue({
       name: 'tasks',
     }),
   ],
-  providers: [WebsocketGatewayService, GenerateService, WebsocketService, LogsService],
-  exports: [WebsocketGatewayService, GenerateService, WebsocketService, LogsService],
+  providers: [
+    WebsocketGatewayService,
+    GenerateService,
+    WebsocketService,
+    LogsService,
+  ],
+  exports: [
+    WebsocketGatewayService,
+    GenerateService,
+    WebsocketService,
+    LogsService,
+  ],
 })
-export class WebsocketModule { }
+export class WebsocketModule {}
