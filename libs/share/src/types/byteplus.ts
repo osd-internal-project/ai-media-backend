@@ -48,4 +48,8 @@ export class ByteplusePayloadOmnihumen {
   req_key: string;
   image_url: string;
   audio_url: string;
+  output_resolution?: number;
+  seed?: number;
+  pe_fast_mode?: boolean;
+  prompt?: string;
 }

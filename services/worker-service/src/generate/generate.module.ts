@@ -6,7 +6,7 @@ import { VideoProcessor } from './video.service';
 import { QUEUE_NAME_IMAGE, QUEUE_NAME_OMNIHUMEN, QUEUE_NAME_VDO, TosModule } from '@ai-media/share';
 import { PrismaModule } from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
-import { OminhumenProcessor } from './ominhumen.service';
+import { OmnihumenProcessor } from './omnihumen.service';
 
 @Module({
   imports: [
@@ -27,7 +27,7 @@ import { OminhumenProcessor } from './ominhumen.service';
     }),
   ],
   controllers: [],
-  providers: [ImageProcessor, VideoProcessor, OminhumenProcessor], // อย่าลืมใส่ Processor
-  exports: [ImageProcessor, VideoProcessor, OminhumenProcessor],
+  providers: [ImageProcessor, VideoProcessor, OmnihumenProcessor], // อย่าลืมใส่ Processor
+  exports: [ImageProcessor, VideoProcessor, OmnihumenProcessor],
 })
 export class GenerateModule {}

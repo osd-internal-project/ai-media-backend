@@ -87,9 +87,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.imageUrl}`,
           )
         : '';
@@ -97,9 +95,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.thumbnailUrl}`,
           )
         : '';
@@ -238,9 +234,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.imageUrl}`,
           )
         : '';
@@ -248,9 +242,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.thumbnailUrl}`,
           )
         : '';
@@ -387,9 +379,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.imageUrl}`,
           )
         : '';
@@ -397,9 +387,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.thumbnailUrl}`,
           )
         : '';
@@ -539,9 +527,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.imageUrl}`,
           )
         : '';
@@ -549,9 +535,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.thumbnailUrl}`,
           )
         : '';
@@ -698,9 +682,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.imageUrl}`,
           )
         : '';
@@ -708,9 +690,7 @@ export class LogsService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.thumbnailUrl}`,
           )
         : '';

@@ -42,9 +42,7 @@ export class GalleryService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.imageUrl}`,
           )
         : '';
@@ -52,9 +50,7 @@ export class GalleryService {
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
             `organize/${organizationId}/${item.projectId}/${
-              item.typeGenerate === 'video'
-                ? 'video-generate'
-                : 'image-generate'
+              `${item.typeGenerate}-generate`
             }/${item.thumbnailUrl}`,
           )
         : '';
@@ -110,7 +106,7 @@ export class GalleryService {
     const file = await this.tosService.getObjectV2(
       tosConfigs().tosBucket,
       `organize/${organizationId || ''}/${found.projectId}/${
-        found.typeGenerate === 'video' ? 'video-generate' : 'image-generate'
+        `${found.typeGenerate}-generate`
       }/${found.imageUrl}`,
     );
     console.log(`download : ${found.imageUrl}`);

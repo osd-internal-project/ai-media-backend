@@ -26,12 +26,12 @@ const ffprobePath = require('ffprobe-static');
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
 
-interface OminhumenProcessJob {
+interface OmnihumenProcessJob {
   taskId: string;
   clientId: string;
   body: RequestOmnihumenGenerateDto;
   userId: string;
-  ominhumenTaskId: string;
+  omnihumenTaskId: string;
   reqKey: string;
 }
 
@@ -62,8 +62,8 @@ interface BytepluseResponse {
 // concurrency: 5 คือ ทำพร้อมกันได้ 5 งาน (ถ้าเครื่องไหว)
 @Injectable()
 @Processor(QUEUE_NAME_OMNIHUMEN)
-export class OminhumenProcessor extends WorkerHost {
-  private readonly logger = new Logger(OminhumenProcessor.name);
+export class OmnihumenProcessor extends WorkerHost {
+  private readonly logger = new Logger(OmnihumenProcessor.name);
   private agent: https.Agent;
   private redisPublisher: Redis;
 
@@ -103,17 +103,17 @@ export class OminhumenProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId, reqKey, ominhumenTaskId } = job.data as OminhumenProcessJob;
+    const { taskId, clientId, body, userId, reqKey, omnihumenTaskId } = job.data as OmnihumenProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
 
     try {
       // 1. ส่ง event "started" ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:ominhumen-started', {
+      await this.publishToCore(clientId, 'worker:omnihumen-started', {
         taskId,
         timestamp: new Date().toISOString(),
-        type: 'ominhumen',
+        type: 'omnihumen',
         projectId: body.projectId,
       });
 
@@ -129,10 +129,10 @@ export class OminhumenProcessor extends WorkerHost {
       //   where: { id: 1 },
       // });
       while (true) {
-        await this.publishToCore(clientId, 'worker:ominhumen-progress', {
+        await this.publishToCore(clientId, 'worker:omnihumen-progress', {
           taskId,
           timestamp: new Date().toISOString(),
-          type: 'ominhumen',
+          type: 'omnihumen',
           projectId: body.projectId,
         });
         const url = 'https://cv.byteplusapi.com/';
@@ -146,7 +146,7 @@ export class OminhumenProcessor extends WorkerHost {
         const queryParams = { Action: 'CVGetResult', Version: '2024-06-06' };
         const bodyPayload = {
           req_key: reqKey,
-          task_id: ominhumenTaskId,
+          task_id: omnihumenTaskId,
         };
 
         const headers = this.signBytePlusRequest(
@@ -202,14 +202,14 @@ export class OminhumenProcessor extends WorkerHost {
           }
 
           console.log('----- task succeeded -----');
-          await this.publishToCore(clientId, 'worker:ominhumen-url-success', {
+          await this.publishToCore(clientId, 'worker:omnihumen-url-success', {
             taskId,
             videoUrl: videoUrl,
             timestamp: new Date().toISOString(),
-            type: 'ominhumen',
+            type: 'omnihumen',
             projectId: body.projectId,
           });
-          const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/ominhumen_used_${body.userId}`;
+          const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/omnihumen_used_${body.userId}`;
           const videoRes = await axios.get(videoUrl, {
             responseType: 'arraybuffer',
             httpsAgent: this.agent,
@@ -239,18 +239,18 @@ export class OminhumenProcessor extends WorkerHost {
           );
           console.log('returngenerate');
 
-          await this.publishToCore(clientId, 'worker:ominhumen-upload-success', {
+          await this.publishToCore(clientId, 'worker:omnihumen-upload-success', {
             taskId,
             videoUrl: await this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${body.organizationId}/${body.projectId}/ominhumen-generate/${result.file}`,
+              `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${result.file}`,
             ),
             thumbnailUrl: await this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${body.organizationId}/${body.projectId}/ominhumen-generate/${result.thumbnail}`,
+              `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${result.thumbnail}`,
             ),
             timestamp: new Date().toISOString(),
-            type: 'ominhumen',
+            type: 'omnihumen',
             projectId: body.projectId,
           });
           // await this.redis.set(
@@ -291,11 +291,11 @@ export class OminhumenProcessor extends WorkerHost {
       });
 
       // 5. ส่ง event "complete" ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:ominhumen-complete', {
+      await this.publishToCore(clientId, 'worker:omnihumen-complete', {
         taskId,
         success: true,
         timestamp: new Date().toISOString(),
-        type: 'ominhumen',
+        type: 'omnihumen',
         projectId: body.projectId,
       });
 
@@ -339,11 +339,11 @@ export class OminhumenProcessor extends WorkerHost {
       });
 
       // ส่ง error event ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:ominhumen-error', {
+      await this.publishToCore(clientId, 'worker:omnihumen-error', {
         taskId,
         error: error.message,
         timestamp: new Date().toISOString(),
-        type: 'ominhumen',
+        type: 'omnihumen',
         projectId: body.projectId,
       });
 
@@ -465,7 +465,7 @@ export class OminhumenProcessor extends WorkerHost {
 
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizationId}/${projectId}/ominhumen-generate/${objectName}`,
+        `organize/${organizationId}/${projectId}/omnihumen-generate/${objectName}`,
         file.buffer,
       );
 
@@ -474,7 +474,7 @@ export class OminhumenProcessor extends WorkerHost {
       const thumbBuffer = fs.readFileSync(tempThumbPath);
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizationId}/${projectId}/ominhumen-generate/${thumbnailObjectName}`,
+        `organize/${organizationId}/${projectId}/omnihumen-generate/${thumbnailObjectName}`,
         thumbBuffer,
       );
 

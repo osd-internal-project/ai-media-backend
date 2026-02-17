@@ -864,11 +864,7 @@ export class GenerateService {
   /**
    * สร้าง Generation Task สำหรับ Omnihumen และส่งเข้า Queue
    */
-  async createOmnihumenGenerationTask(
-    body: RequestVideoGenerateDto,
-    clientId: string,
-  ) {
-    console.log(body);
+  async createOmnihumenGenerationTask(body: any, clientId: string) {
     let taskId = body.taskId;
     const redisOmnihumenCacheKey = `${body.organizationId}/${body.projectId}/omnihumen_used_${body.userId}`;
 
@@ -914,19 +910,24 @@ export class GenerateService {
 
       if (!modelDetail) {
         return { status: 400, data: 'Model not found' };
-      }
-
+      } 
       // 4. Prepare Payload
+      const resolution = body.resolution ? parseInt(body.resolution.replace('p', '')) : 720;
       const { basePayload, axiosConfig } =
         await this.prepareGenerationPayloadOmnihumen(
           {
             req_key: modelDetail.modelType,
             image_url: body.image[0],
             audio_url: body.image[1],
+            output_resolution: resolution,
+            prompt: body.prompt,
+            seed: body.seed,
+            pe_fast_mode: body.fastMode,
           },
           getConfigApi,
           body.organizationId,
         );
+      console.log('basePayload', basePayload);
 
       // 5. Call External API
       const res = await this.executeGenerationRequestOmnihumen(
@@ -951,8 +952,20 @@ export class GenerateService {
           imageUrl: '',
           typeGenerate: 'omnihumen',
           genneratedStatus: 'PENDING',
-          status: false,
-          // generateConfig: this.buildGenerateConfig({}),
+          status: false, 
+          generateConfig: this.buildGenerateConfig({
+            resolution: body.resolution,
+            seed: body.seed,
+            fastMode: body.fastMode,
+            ratio: '',
+            width: 0,
+            height: 0,
+            prompt: '',
+            duration: 0,
+            modelName: '',
+            imageCount: 0,
+            generateAudio: false,
+          }),
         },
       });
       await this.logrepo.create({
@@ -960,7 +973,7 @@ export class GenerateService {
           taskId,
           projectId: body.projectId,
           userId: user.userId,
-          prompt: '',
+          prompt: body.prompt || '',
           typeGenerate: 'omnihumen',
           status: 'pending',
           tokenUsed: 0,
@@ -970,9 +983,21 @@ export class GenerateService {
             body.image.length > 0
               ? body.image.filter((item) => item !== null)
               : [],
-          // resolution: body.size,
+          resolution: body.resolution,
           // ratio: body.ratio,
-          // generateConfig: this.buildGenerateConfig({}),
+          generateConfig: this.buildGenerateConfig({
+            resolution: body.resolution,
+            seed: body.seed,
+            fastMode: body.fastMode,
+            ratio: '',
+            width: 0,
+            height: 0,
+            prompt: '',
+            duration: 0,
+            modelName: '',
+            imageCount: 0,
+            generateAudio: false,
+          }),
         },
       });
 
@@ -992,7 +1017,7 @@ export class GenerateService {
           clientId,
           body: { ...body },
           userId: user.userId,
-          ominhumenTaskId: res.data.data.task_id,
+          omnihumenTaskId: res.data.data.task_id,
           reqKey: modelDetail.modelType,
         },
         {
@@ -1041,17 +1066,12 @@ export class GenerateService {
           videoTaskId: res.data.data.task_id,
           message: 'Omnihumen generation queued',
           generateConfig: {
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
             content: body.prompt,
-            duration: body.duration.toString(),
             modelName: body.model,
             imageCount: 0,
-            resolution: body.size,
-            draft: body.draft,
-            generateAudio: body.generateAudio,
-            watermark: body.watermark,
+            resolution: body.resolution,
+            fastMode: body.fastMode,
+            seed: body.seed,
           },
           users: {
             fullname: user.fullname,
@@ -1089,6 +1109,7 @@ export class GenerateService {
 
     // Construct basePayload first
     const basePayload = {
+      ...body,
       req_key: 'realman_avatar_picture_omni15_cv',
       image_url: await this.tosService.getPreSignedUrl(
         tosConfigs().tosBucket,
@@ -1156,6 +1177,8 @@ export class GenerateService {
     generateAudio: boolean;
     draft?: boolean;
     watermark?: boolean;
+    seed?: number;
+    fastMode?: boolean;
   }) {
     return {
       ...(body?.width && { width: body?.width }),
