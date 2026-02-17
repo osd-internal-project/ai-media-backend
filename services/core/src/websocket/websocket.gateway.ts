@@ -322,19 +322,80 @@ export class WebsocketGatewayService
       await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
 
       // Broadcast to room
-      this.server.to(roomName).emit('task-video:started', { ...result, oldTaskId: data.taskId });
+      this.server.to(roomName).emit('task-omnihumen:started', { ...result, oldTaskId: data.taskId });
 
       return { success: true, data: result };
 
     } catch (error) {
       this.logger.error('Generate video error:', error);
-      client.emit('video-generate:error', {
+      client.emit('omnihumen-generate:error', {
         taskId: data.taskId,
         message: error.message || 'Internal server error',
       });
       return { success: false, message: error.message || 'Internal server error' };
     }
   }
+
+   @SubscribeMessage('generate:dreamactor')
+  async handleGenerateDreamactor(
+    @MessageBody() data: RequestVideoGenerateDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      this.logger.log('🎥 Generate Dreamactor request from client: ', client.id);
+
+      const { projectId } = data;
+      const roomName = `${projectId}:dreamactor`;
+
+      // const result = await this.generateService.createDreamactorGenerationTask(
+      //   data,
+      //   client.id,
+      // );
+
+      // Broadcast to room
+      this.server.to(roomName).emit('dreamactor-task:created', {
+        taskId: data.taskId,
+        message: 'OmniHumen Task started',
+        timestamp: new Date().toISOString(),
+        status: result.status,
+        data: result.data
+      });
+
+      this.logger.log('🎥 Generate Dreamactor result: ', result);
+
+      if (result.status !== 200) {
+        client.emit('dreamactor-generate:error', {
+          taskId: data.taskId,
+          message: result.data,
+        });
+        return { success: false, message: result.data };
+      }
+
+      if (typeof result.data === 'string') {
+        client.emit('dreamactor-generate:error', {
+          taskId: data.taskId,
+          message: 'Invalid response from generation service',
+        });
+        return { success: false, message: 'Invalid response from generation service' };
+      }
+
+      await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
+
+      // Broadcast to room
+      this.server.to(roomName).emit('task-dreamactor:started', { ...result, oldTaskId: data.taskId });
+
+      return { success: true, data: result };
+
+    } catch (error) {
+      this.logger.error('Generate video error:', error);
+      client.emit('dreamactor-generate:error', {
+        taskId: data.taskId,
+        message: error.message || 'Internal server error',
+      });
+      return { success: false, message: error.message || 'Internal server error' };
+    }
+  }
+
   @SubscribeMessage('chat:get-history')
   async handleGetHistory(
     @MessageBody() data: {
