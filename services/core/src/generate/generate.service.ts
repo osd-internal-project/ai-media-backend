@@ -910,9 +910,11 @@ export class GenerateService {
 
       if (!modelDetail) {
         return { status: 400, data: 'Model not found' };
-      } 
+      }
       // 4. Prepare Payload
-      const resolution = body.resolution ? parseInt(body.resolution.replace('p', '')) : 720;
+      const resolution = body.resolution
+        ? parseInt(body.resolution.replace('p', ''))
+        : 720;
       const { basePayload, axiosConfig } =
         await this.prepareGenerationPayloadOmnihumen(
           {
@@ -935,14 +937,24 @@ export class GenerateService {
         basePayload,
         axiosConfig,
       );
-      console.log('res', res);
+      // const res = {
+      //   data: {
+      //     data: {
+      //       task_id: '1234567890abcdef',
+      //     },
+      //   },
+      // };
+      // const taskId = res.data.data.task_id;
       // data mockup
       // const res = {
       //     data: {
       //         id: uuidv4(),
       //     },
       // };
-      // taskId = res.data.task_id;
+      taskId = res.data.data.task_id;
+      console.log('Response from external API:', res);
+      console.log('taskId---:', taskId);
+      
       await this.galleryRepo.create({
         data: {
           taskId,
@@ -952,7 +964,7 @@ export class GenerateService {
           imageUrl: '',
           typeGenerate: 'omnihumen',
           genneratedStatus: 'PENDING',
-          status: false, 
+          status: false,
           generateConfig: this.buildGenerateConfig({
             resolution: body.resolution,
             seed: body.seed,
@@ -1017,7 +1029,7 @@ export class GenerateService {
           clientId,
           body: { ...body },
           userId: user.userId,
-          omnihumenTaskId: res.data.data.task_id,
+          omnihumenTaskId: taskId,
           reqKey: modelDetail.modelType,
         },
         {
@@ -1043,7 +1055,7 @@ export class GenerateService {
           projectId: body.projectId,
           status: 'queued',
           type: 'omnihumen',
-          videoTaskId: res.data.data.task_id,
+          omnihumenTaskId: taskId,
           createdAt: new Date().toISOString(),
         }),
         'EX',
@@ -1059,11 +1071,11 @@ export class GenerateService {
           projectId: body.projectId,
           userId: user.userId,
           prompt: body.prompt,
-          typeGenerate: 'video',
+          typeGenerate: 'omnihumen',
           genneratedStatus: 'PENDING',
           createdAt: new Date().toISOString(),
           status: false,
-          videoTaskId: res.data.data.task_id,
+          omnihumenTaskId: taskId,
           message: 'Omnihumen generation queued',
           generateConfig: {
             content: body.prompt,
