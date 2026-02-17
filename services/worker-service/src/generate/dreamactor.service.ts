@@ -191,6 +191,7 @@ export class DreamactorProcessor extends WorkerHost {
         //     }
         // }
         const status = getResult.data.data.status;
+        console.log('status', status);
         if (status === 'done') {
           console.log(getResult.data);
           let videoUrl = '';

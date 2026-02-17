@@ -86,17 +86,17 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.imageUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
           )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.thumbnailUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
           )
         : '';
 
@@ -233,17 +233,17 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.imageUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
           )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.thumbnailUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
           )
         : '';
 
@@ -378,17 +378,17 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.imageUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
           )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.thumbnailUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
           )
         : '';
 
@@ -456,7 +456,7 @@ export class LogsService {
     return result;
   }
 
-   async findProjectOmniHumenByPage(
+  async findProjectOmniHumenByPage(
     projectId: string,
     organizationId: string,
     skip?: number,
@@ -500,7 +500,6 @@ export class LogsService {
         generateAudio: true,
       },
     });
-
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
@@ -526,20 +525,19 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.imageUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
           )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.thumbnailUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
           )
         : '';
-
       // Generate presigned URLs for multiple reference images
       const referenceImageFilenames = referenceImagesMap.get(item.taskId);
       let referenceImageUrls = [];
@@ -547,12 +545,12 @@ export class LogsService {
         for (const filename of referenceImageFilenames) {
           const fileStats = await this.tosService.headObject(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
+            filename || '',
           );
           if (fileStats) {
             const url = await this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
+              filename,
             );
             referenceImageUrls.push(url);
           } else {
@@ -604,7 +602,7 @@ export class LogsService {
     return result;
   }
 
-    async findProjectDreamactorByPage(
+  async findProjectDreamactorByPage(
     projectId: string,
     organizationId: string,
     skip?: number,
@@ -674,17 +672,17 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.imageUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
           )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.thumbnailUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
           )
         : '';
 
@@ -695,12 +693,12 @@ export class LogsService {
         for (const filename of referenceImageFilenames) {
           const fileStats = await this.tosService.headObject(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
+            filename || '',
           );
           if (fileStats) {
             const url = await this.tosService.getPreSignedUrl(
               tosConfigs().tosBucket,
-              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
+              filename,
             );
             referenceImageUrls.push(url);
           } else {
@@ -830,17 +828,17 @@ export class LogsService {
       const url = item.imageUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.imageUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
           )
         : '';
       const thumbnailUrl = item.thumbnailUrl
         ? await this.tosService.getPreSignedUrl(
             tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.thumbnailUrl}`,
+            `organize/${organizationId}/${
+              item.projectId
+            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
           )
         : '';
 

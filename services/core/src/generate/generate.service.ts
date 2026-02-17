@@ -1187,8 +1187,7 @@ export class GenerateService {
       //     status: 400,
       //     data: `Token used ${currentTokenUsed} exceed max token ${projectMember.maxToken}`,
       //   };
-      // }
-console.log("body", body);
+      // } 
       // TODO: Implement Quota Check for Video if needed
       const modelDetail = await this.modeltypeRepo.findOne({
         where: { modelType: body.model, type: 'dreamactor' },
@@ -1222,12 +1221,7 @@ console.log("body", body);
         basePayload,
         axiosConfig,
       );
-      // data mockup
-      // const res = {
-      //     data: {
-      //         id: uuidv4(),
-      //     },
-      // };
+      
       taskId = res.data.data.task_id;
       await this.galleryRepo.create({
         data: {
@@ -1325,7 +1319,7 @@ console.log("body", body);
           projectId: body.projectId,
           status: 'queued',
           type: 'dreamactor',
-          dreamactorTaskId: res.data.data.task_id,
+          dreamactorTaskId: taskId,
           createdAt: new Date().toISOString(),
         }),
         'EX',
