@@ -104,6 +104,18 @@ export class WebsocketGatewayService
       'worker:video-upload-success',
       'worker:video-complete',
       'worker:video-error',
+      'worker:omnihumen-started',
+      'worker:omnihumen-progress',
+      'worker:omnihumen-url-success',
+      'worker:omnihumen-upload-success',
+      'worker:omnihumen-complete',
+      'worker:omnihumen-error',
+      'worker:dreamactor-started',
+      'worker:dreamactor-progress',
+      'worker:dreamactor-url-success',
+      'worker:dreamactor-upload-success',
+      'worker:dreamactor-complete',
+      'worker:dreamactor-error',
     );
 
     // รับ messages จาก Worker
