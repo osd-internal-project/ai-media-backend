@@ -12,7 +12,10 @@ import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
 import { WebsocketService } from './websocket.service';
 import { GenerateService } from 'src/generate/generate.service';
-import { RequestImageGenerateDto, RequestVideoGenerateDto } from '@ai-media/share';
+import {
+  RequestImageGenerateDto,
+  RequestVideoGenerateDto,
+} from '@ai-media/share';
 import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { redisConfigs } from '../configs';
@@ -27,7 +30,8 @@ import { JoinRoomDto, LeaveRoomDto, SendMessageDto } from './dto/chat.dto';
 })
 @Injectable()
 export class WebsocketGatewayService
-  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
+  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
+{
   private readonly logger = new Logger(WebsocketGatewayService.name);
 
   @WebSocketServer()
@@ -175,7 +179,7 @@ export class WebsocketGatewayService
         message: 'Task started',
         timestamp: new Date().toISOString(),
         status: result.status,
-        data: result.data
+        data: result.data,
       });
       this.logger.log('🎨 Generate result from data: ', result);
       if (result.status !== 200) {
@@ -193,7 +197,10 @@ export class WebsocketGatewayService
           message: 'Invalid response from generation service',
         });
         // [NEW] Return error acknowledgement
-        return { success: false, message: 'Invalid response from generation service' };
+        return {
+          success: false,
+          message: 'Invalid response from generation service',
+        };
       }
 
       // บันทึก task ที่เกี่ยวข้องกับ client
@@ -204,7 +211,6 @@ export class WebsocketGatewayService
 
       // [NEW] Return success acknowledgement
       return { success: true, data: result };
-
     } catch (error) {
       this.logger.error('Generate error:', error);
       client.emit('generate:error', {
@@ -212,7 +218,10 @@ export class WebsocketGatewayService
         message: error.message || 'Internal server error',
       });
       // [NEW] Return error acknowledgement
-      return { success: false, message: error.message || 'Internal server error' };
+      return {
+        success: false,
+        message: error.message || 'Internal server error',
+      };
     }
   }
 
@@ -238,7 +247,7 @@ export class WebsocketGatewayService
         message: 'Video Task started',
         timestamp: new Date().toISOString(),
         status: result.status,
-        data: result.data
+        data: result.data,
       });
 
       this.logger.log('🎥 Generate Video result: ', result);
@@ -256,27 +265,34 @@ export class WebsocketGatewayService
           taskId: data.taskId,
           message: 'Invalid response from generation service',
         });
-        return { success: false, message: 'Invalid response from generation service' };
+        return {
+          success: false,
+          message: 'Invalid response from generation service',
+        };
       }
 
       await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
 
       // Broadcast to room
-      this.server.to(roomName).emit('task-video:started', { ...result, oldTaskId: data.taskId });
+      this.server
+        .to(roomName)
+        .emit('task-video:started', { ...result, oldTaskId: data.taskId });
 
       return { success: true, data: result };
-
     } catch (error) {
       this.logger.error('Generate video error:', error);
       client.emit('video-generate:error', {
         taskId: data.taskId,
         message: error.message || 'Internal server error',
       });
-      return { success: false, message: error.message || 'Internal server error' };
+      return {
+        success: false,
+        message: error.message || 'Internal server error',
+      };
     }
   }
 
-   @SubscribeMessage('generate:omnihumen')
+  @SubscribeMessage('generate:omnihumen')
   async handleGenerateOmniHumen(
     @MessageBody() data: RequestVideoGenerateDto,
     @ConnectedSocket() client: Socket,
@@ -298,7 +314,7 @@ export class WebsocketGatewayService
         message: 'OmniHumen Task started',
         timestamp: new Date().toISOString(),
         status: result.status,
-        data: result.data
+        data: result.data,
       });
 
       this.logger.log('🎥 Generate OmniHumen result: ', result);
@@ -316,49 +332,59 @@ export class WebsocketGatewayService
           taskId: data.taskId,
           message: 'Invalid response from generation service',
         });
-        return { success: false, message: 'Invalid response from generation service' };
+        return {
+          success: false,
+          message: 'Invalid response from generation service',
+        };
       }
 
       await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
 
       // Broadcast to room
-      this.server.to(roomName).emit('task-omnihumen:started', { ...result, oldTaskId: data.taskId });
+      this.server
+        .to(roomName)
+        .emit('task-omnihumen:started', { ...result, oldTaskId: data.taskId });
 
       return { success: true, data: result };
-
     } catch (error) {
       this.logger.error('Generate video error:', error);
       client.emit('omnihumen-generate:error', {
         taskId: data.taskId,
         message: error.message || 'Internal server error',
       });
-      return { success: false, message: error.message || 'Internal server error' };
+      return {
+        success: false,
+        message: error.message || 'Internal server error',
+      };
     }
   }
 
-   @SubscribeMessage('generate:dreamactor')
+  @SubscribeMessage('generate:dreamactor')
   async handleGenerateDreamactor(
     @MessageBody() data: RequestVideoGenerateDto,
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      this.logger.log('🎥 Generate Dreamactor request from client: ', client.id);
+      this.logger.log(
+        '🎥 Generate Dreamactor request from client: ',
+        client.id,
+      );
 
       const { projectId } = data;
       const roomName = `${projectId}:dreamactor`;
 
-      // const result = await this.generateService.createDreamactorGenerationTask(
-      //   data,
-      //   client.id,
-      // );
+      const result = await this.generateService.createDreamactorGenerationTask(
+        data,
+        client.id,
+      );
 
       // Broadcast to room
       this.server.to(roomName).emit('dreamactor-task:created', {
         taskId: data.taskId,
         message: 'OmniHumen Task started',
         timestamp: new Date().toISOString(),
-        // status: result.status,
-        // data: result.data
+        status: result.status,
+        data: result.data,
       });
 
       this.logger.log('🎥 Generate Dreamactor result: ', result);
@@ -376,56 +402,78 @@ export class WebsocketGatewayService
           taskId: data.taskId,
           message: 'Invalid response from generation service',
         });
-        return { success: false, message: 'Invalid response from generation service' };
+        return {
+          success: false,
+          message: 'Invalid response from generation service',
+        };
       }
 
       await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
 
       // Broadcast to room
-      this.server.to(roomName).emit('task-dreamactor:started', { ...result, oldTaskId: data.taskId });
+      this.server
+        .to(roomName)
+        .emit('task-dreamactor:started', { ...result, oldTaskId: data.taskId });
 
       return { success: true, data: result };
-
     } catch (error) {
       this.logger.error('Generate video error:', error);
       client.emit('dreamactor-generate:error', {
         taskId: data.taskId,
         message: error.message || 'Internal server error',
       });
-      return { success: false, message: error.message || 'Internal server error' };
+      return {
+        success: false,
+        message: error.message || 'Internal server error',
+      };
     }
   }
 
   @SubscribeMessage('chat:get-history')
   async handleGetHistory(
-    @MessageBody() data: {
-      projectId: string,
-      organizationId: string,
-      skip: number,
-      take: number,
-      type: 'image' | 'video'
+    @MessageBody()
+    data: {
+      projectId: string;
+      organizationId: string;
+      skip: number;
+      take: number;
+      type: 'image' | 'video';
     },
     @ConnectedSocket() client: Socket,
   ) {
     const projectId = data.projectId;
     const organizationId = data.organizationId;
     try {
-      const conversation = data.type === 'image' ? await this.logsService.findProjectImageByPage(
-        projectId,
-        organizationId,
-        data.skip,
-        data.take,
-      ) : data.type === 'video' ? await this.logsService.findProjectVideoByPage(
-        projectId,
-        organizationId,
-        data.skip,
-        data.take,
-      )  : data.type === 'omnihumen' ? await this.logsService.findProjectOmniHumenByPage(
-        projectId,
-        organizationId,
-        data.skip,
-        data.take,
-      ) : []
+      const conversation =
+        data.type === 'image'
+          ? await this.logsService.findProjectImageByPage(
+              projectId,
+              organizationId,
+              data.skip,
+              data.take,
+            )
+          : data.type === 'video'
+          ? await this.logsService.findProjectVideoByPage(
+              projectId,
+              organizationId,
+              data.skip,
+              data.take,
+            )
+          : data.type === 'omnihumen'
+          ? await this.logsService.findProjectOmniHumenByPage(
+              projectId,
+              organizationId,
+              data.skip,
+              data.take,
+            )
+          : data.type === 'dreamactor'
+          ? await this.logsService.findProjectDreamactorByPage(
+              projectId,
+              organizationId,
+              data.skip,
+              data.take,
+            )
+          : [];
 
       client.emit('chat:history', {
         success: true,
@@ -480,7 +528,11 @@ export class WebsocketGatewayService
       const roomName = `${projectId}:${type}`;
       await client.join(roomName);
       this.logger.log(`Client ${client.id} joined room ${roomName}`);
-      client.emit('room:joined', { projectId, type, message: `Joined room ${roomName}` });
+      client.emit('room:joined', {
+        projectId,
+        type,
+        message: `Joined room ${roomName}`,
+      });
     } catch (error) {
       this.logger.error(`Error joining room: ${error.message}`);
       client.emit('error', { message: 'Failed to join room' });
@@ -497,7 +549,11 @@ export class WebsocketGatewayService
       const roomName = `${projectId}:${type}`;
       await client.leave(roomName);
       this.logger.log(`Client ${client.id} left room ${roomName}`);
-      client.emit('room:left', { projectId, type, message: `Left room ${roomName}` });
+      client.emit('room:left', {
+        projectId,
+        type,
+        message: `Left room ${roomName}`,
+      });
     } catch (error) {
       this.logger.error(`Error leaving room: ${error.message}`);
       client.emit('error', { message: 'Failed to leave room' });
@@ -510,7 +566,8 @@ export class WebsocketGatewayService
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      const { projectId, type, message, senderId, senderName, senderAvatar } = data;
+      const { projectId, type, message, senderId, senderName, senderAvatar } =
+        data;
       const roomName = `${projectId}:${type}`;
       const payload = {
         id: new Date().getTime().toString(), // Helper ID for frontend key

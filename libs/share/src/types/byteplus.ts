@@ -53,3 +53,11 @@ export class ByteplusePayloadOmnihumen {
   pe_fast_mode?: boolean;
   prompt?: string;
 }
+
+
+export class ByteplusePayloadDreamactor {
+  req_key: string;
+  image_urls: string[];
+  video_url: string; 
+  prompt?: string;
+}
