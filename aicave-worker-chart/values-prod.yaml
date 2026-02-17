@@ -5,7 +5,7 @@ namespace: aicave-prod
 replicaCount: 3
 
 image:
-  tag: "v1.0.1"
+  tag: "v1.0.2"
 
 ingress:
   hosts:
