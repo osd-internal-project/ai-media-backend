@@ -357,8 +357,8 @@ export class WebsocketGatewayService
         taskId: data.taskId,
         message: 'OmniHumen Task started',
         timestamp: new Date().toISOString(),
-        status: result.status,
-        data: result.data
+        // status: result.status,
+        // data: result.data
       });
 
       this.logger.log('🎥 Generate Dreamactor result: ', result);
