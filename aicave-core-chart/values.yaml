@@ -9,7 +9,7 @@ replicaCount: 3
 image:
   repository: docker.io/library/ai-core-be
   pullPolicy: IfNotPresent
-  tag: "v1.0.29"
+  tag: "v1.0.30"
 
 service:
   type: ClusterIP
