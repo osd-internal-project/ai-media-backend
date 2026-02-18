@@ -449,7 +449,7 @@ export class WebsocketGatewayService
       organizationId: string;
       skip: number;
       take: number;
-      type: 'image' | 'video';
+      type: 'image' | 'video' | 'omnihumen' | 'dreamactor';
     },
     @ConnectedSocket() client: Socket,
   ) {
