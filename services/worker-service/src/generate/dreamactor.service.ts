@@ -362,7 +362,7 @@ export class DreamactorProcessor extends WorkerHost {
         },
       });
 
-      throw error;
+      throw error; // Stop retrying by not throwing error
     }
   }
 

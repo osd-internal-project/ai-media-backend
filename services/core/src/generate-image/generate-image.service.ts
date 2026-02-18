@@ -225,7 +225,7 @@ export class GenerateImageService implements OnModuleInit {
         user.userId,
         galleryItem.projectId,
         galleryItem.id,
-        'FAIL',
+        'FAILED',
       );
       return { status: 400, data: 'Model not found' };
     }
@@ -265,7 +265,7 @@ export class GenerateImageService implements OnModuleInit {
         user.userId,
         galleryItem.projectId,
         galleryItem.id,
-        'FAIL',
+        'FAILED',
       );
       // We do not return error status here because we want the frontend to know the task started (optimistic) and failed later via SSE
       // BUT the initial API return is also important.
@@ -718,7 +718,7 @@ export class GenerateImageService implements OnModuleInit {
           });
         }
       } else if (res.data.status === 'failed') {
-        await this.updateAndEmit(task.userId, task.projectId, task.id, 'FAIL');
+        await this.updateAndEmit(task.userId, task.projectId, task.id, 'FAILED');
 
         // Update Log status
         const log = await this.logrepo.findOne({
@@ -735,7 +735,7 @@ export class GenerateImageService implements OnModuleInit {
       await this.logError(task.userId, e.message, e.stack, { taskId: task.id });
       this.logger.error(`Polling error for task ${task.taskId}: ${e.message}`);
       if (e.response && e.response.status === 404) {
-        await this.updateAndEmit(task.userId, task.projectId, task.id, 'FAIL');
+        await this.updateAndEmit(task.userId, task.projectId, task.id, 'FAILED');
       }
     }
   }
