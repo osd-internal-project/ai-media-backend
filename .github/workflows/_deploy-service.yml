@@ -168,35 +168,35 @@ jobs:
       # ---------------------------------------------------------------------
       # Helm upgrade (runs on self-hosted runner which has kubectl + helm)
       # ---------------------------------------------------------------------
-      - name: Helm Upgrade
-        run: |
-          set -e
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
-          IMAGE="${{ inputs.image_name }}"
-          VER="${{ steps.pkg.outputs.ver }}"
-          CHART="${{ inputs.chart_dir }}"
-          RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
+      # - name: Helm Upgrade
+      #   run: |
+      #     set -e
+      #     DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+      #     IMAGE="${{ inputs.image_name }}"
+      #     VER="${{ steps.pkg.outputs.ver }}"
+      #     CHART="${{ inputs.chart_dir }}"
+      #     RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
 
-          echo "Helm upgrade ${RELEASE} (env: ${DEPLOY_ENV})"
+      #     echo "Helm upgrade ${RELEASE} (env: ${DEPLOY_ENV})"
 
-          helm upgrade --install ${RELEASE} ./${CHART} \
-            -f ./${CHART}/values-${DEPLOY_ENV}.yaml \
-            --set image.repository=docker.io/library/${IMAGE} \
-            --set image.tag=${VER} \
-            --namespace aicave-${DEPLOY_ENV} \
-            --wait \
-            --timeout 5m \
-            --atomic
+      #     helm upgrade --install ${RELEASE} ./${CHART} \
+      #       -f ./${CHART}/values-${DEPLOY_ENV}.yaml \
+      #       --set image.repository=docker.io/library/${IMAGE} \
+      #       --set image.tag=${VER} \
+      #       --namespace aicave-${DEPLOY_ENV} \
+      #       --wait \
+      #       --timeout 5m \
+      #       --atomic
 
-          echo "Deployment completed: ${IMAGE}:${VER} (env: ${DEPLOY_ENV})"
+      #     echo "Deployment completed: ${IMAGE}:${VER} (env: ${DEPLOY_ENV})"
 
       # ---------------------------------------------------------------------
       # Verify deployment
       # ---------------------------------------------------------------------
-      - name: Verify Deployment
-        run: |
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
-          CHART="${{ inputs.chart_dir }}"
-          RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
-          kubectl rollout status deployment/${RELEASE} -n aicave-${DEPLOY_ENV}
-          kubectl get pods -n aicave-${DEPLOY_ENV} -l app=${RELEASE}
+      # - name: Verify Deployment
+      #   run: |
+      #     DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+      #     CHART="${{ inputs.chart_dir }}"
+      #     RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
+      #     kubectl rollout status deployment/${RELEASE} -n aicave-${DEPLOY_ENV}
+      #     kubectl get pods -n aicave-${DEPLOY_ENV} -l app=${RELEASE}
