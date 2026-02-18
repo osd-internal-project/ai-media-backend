@@ -3,4 +3,4 @@ name: aicave-email-worker-service
 description: A Helm chart for AICave Email Worker Service (internal only, no ingress)
 type: application
 version: 1.0.0
-appVersion: "v1.0.1"
+appVersion: "v1.0.3"

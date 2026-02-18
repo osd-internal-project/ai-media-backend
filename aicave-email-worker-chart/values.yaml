@@ -9,7 +9,7 @@ replicaCount: 3
 image:
   repository: docker.io/library/ai-cave-email-worker
   pullPolicy: IfNotPresent
-  tag: "v1.0.1"
+  tag: "v1.0.3"
 
 service:
   type: ClusterIP
