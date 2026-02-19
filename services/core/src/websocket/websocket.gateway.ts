@@ -506,8 +506,7 @@ export class WebsocketGatewayService
       type: 'image' | 'video' | 'omnihumen' | 'dreamactor';
     },
     @ConnectedSocket() client: Socket,
-  ) {
-    Logger.debug(data, 'chat:get-history');
+  ) { 
     const projectId = data.projectId;
     const organizationId = data.organizationId;
     const token = data.userId;
