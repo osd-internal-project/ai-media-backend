@@ -486,11 +486,57 @@ export class WebsocketGatewayService
               data.take,
             )
           : [];
-
       client.emit('chat:history', {
         success: true,
         data: { messages: conversation },
       });
+    } catch (error) {
+      client.emit('chat:error', {
+        message: error.message,
+      });
+    }
+  }
+  @SubscribeMessage('chat:get-used-credit')
+  async handleGetUsedCredit(
+    @MessageBody()
+    data: {
+      projectId: string;
+      organizationId: string;
+      userId: string;
+      type: 'image' | 'video' | 'omnihumen' | 'dreamactor';
+    },
+    @ConnectedSocket() client: Socket,
+  ) { 
+    const projectId = data.projectId;
+    const organizationId = data.organizationId;
+    const token = data.userId;
+    const type = data.type;
+    const usedCreditKey = `${organizationId}/${projectId}/${type}_used_${token}`;
+    const totalCreditKey = `${organizationId}/${projectId}/${type}_total_${token}`;
+    await this.redis.del(totalCreditKey); 
+    try {
+      const redisUsedCredit = await this.redis.get(usedCreditKey);
+      const redisTotalCredit = await this.redis.get(totalCreditKey); 
+      if (redisUsedCredit && redisTotalCredit) { 
+        client.emit('chat:used-credit', {
+          success: true,
+          data: { usedCredit: redisUsedCredit, totalCredit: redisTotalCredit },
+        });
+      } else {
+        const { usedCredit, totalCredit } =
+          await this.logsService.findUsedCredit(
+            projectId,
+            organizationId,
+            token,
+            type,
+          ); 
+        await this.redis.set(usedCreditKey, usedCredit);
+        await this.redis.set(totalCreditKey, totalCredit);
+        client.emit('chat:used-credit', {
+          success: true,
+          data: { usedCredit, totalCredit },
+        });
+      }
     } catch (error) {
       client.emit('chat:error', {
         message: error.message,

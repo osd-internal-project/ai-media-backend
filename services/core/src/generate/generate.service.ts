@@ -717,11 +717,12 @@ export class GenerateService {
           tokenUsed: true,
         },
       });
-      const onhandToken =
-        (body.width * body.height * body.duration * frameRate) / 1024;
-      currentTokenUsed = aggregateResult._sum.tokenUsed + onhandToken || 0;
-    }
 
+      currentTokenUsed = aggregateResult._sum.tokenUsed || 0;
+    }
+    const onhandToken =
+      (body.width * body.height * body.duration * frameRate) / 1024;
+    currentTokenUsed = currentTokenUsed + onhandToken || 0;
     const maxTokenInPlan = projectMember.maxToken || 0;
     currentTokenUsed = currentTokenUsed + maxToken;
     if (currentTokenUsed > maxTokenInPlan) {
@@ -957,7 +958,7 @@ export class GenerateService {
       taskId = res.data.data.task_id;
       console.log('Response from external API:', res);
       console.log('taskId---:', taskId);
-      
+
       await this.galleryRepo.create({
         data: {
           taskId,
@@ -1197,7 +1198,7 @@ export class GenerateService {
       //     status: 400,
       //     data: `Token used ${currentTokenUsed} exceed max token ${projectMember.maxToken}`,
       //   };
-      // } 
+      // }
       // TODO: Implement Quota Check for Video if needed
       const modelDetail = await this.modeltypeRepo.findOne({
         where: { modelType: body.model, type: 'dreamactor' },
@@ -1231,7 +1232,7 @@ export class GenerateService {
         basePayload,
         axiosConfig,
       );
-      
+
       taskId = res.data.data.task_id;
       await this.galleryRepo.create({
         data: {
