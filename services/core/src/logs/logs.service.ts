@@ -6,6 +6,7 @@ import {
   ErrorLogRepository,
   AuditLogRepository,
   TosService,
+  ProjectMemberRepository,
 } from '@ai-media/share';
 import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
 import { tosConfigs } from 'src/configs';
@@ -19,6 +20,7 @@ export class LogsService {
     private readonly auditLogRepo: AuditLogRepository,
     private readonly errorLogRepo: ErrorLogRepository,
     private readonly tosService: TosService,
+    private readonly projectMemberRepository: ProjectMemberRepository,
   ) {}
   async findProjectImageByPage(
     projectId: string,
@@ -954,7 +956,52 @@ export class LogsService {
     });
     return { data, count };
   }
-
+  async findUsedCredit(
+    projectId: string,
+    organizationId: string,
+    token: string,
+    type: 'image' | 'video' | 'omnihumen' | 'dreamactor',
+  ): Promise<{ usedCredit?: number; totalCredit?: number }> {
+    const findUser = await this.userRepo.findOne({ where: { token: token } });
+    const aggregateResult = await this.logrepo.aggregate({
+      where: {
+        userId: findUser.userId,
+        typeGenerate: type,
+        projectId: projectId,
+        OR: [{ status: 'success' }, { status: 'pending' }],
+        createdAt: {
+          gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+          lt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
+        },
+      },
+      _sum: {
+        ImageUsed: true,
+        tokenUsed: true,
+      },
+    });
+    const currentCredit =
+      type === 'image'
+        ? aggregateResult._sum.ImageUsed || 0
+        : type === 'video'
+        ? aggregateResult._sum.tokenUsed || 0
+        : 0;
+    const projectMember = await this.projectMemberRepository.findOne({
+      where: {
+        projectId: projectId,
+        userId: findUser.userId,
+      },
+    }); 
+    const totalCredit =
+      type === 'image'
+        ? projectMember?.maxImages || 0
+        : type === 'video'
+        ? projectMember?.maxToken || 0
+        : 0;
+    return {
+      usedCredit: currentCredit,
+      totalCredit,
+    };
+  }
   async logError(
     serviceName: string,
     severity: LogSeverity,
