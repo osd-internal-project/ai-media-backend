@@ -2,10 +2,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Values.appName }}-webhook-ingress
+  name: {{ .Values.appName }}-ingress
   namespace: {{ .Values.namespace }}
-  labels:
-    {{- include "aicave-worker-service.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -30,9 +28,9 @@ spec:
         pathType: {{ .pathType }}
         backend:
           service:
-            name: {{ $.Values.ingress.websocketBackendService }}
+            name: {{ $.Values.appName }}
             port:
-              number: {{ $.Values.ingress.websocketBackendPort }}
+              number: {{ $.Values.service.port }}
       {{- end }}
   {{- end }}
 {{- end }}

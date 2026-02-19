@@ -3,4 +3,4 @@ name: aicave-core-service
 description: A Helm chart for AICave Core Service Backend Application
 type: application
 version: 1.0.0
-appVersion: "v1.0.29"
+appVersion: "v1.0.30"

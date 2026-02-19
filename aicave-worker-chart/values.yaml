@@ -21,22 +21,22 @@ ingress:
   enabled: true
   className: nginx
   annotations:
-    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
-    nginx.ingress.kubernetes.io/enable-websocket: "true"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "32k"
+    nginx.ingress.kubernetes.io/large-client-header-buffers: "4 32k"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/$2
   hosts:
     - host: www.aicave.ai
       paths:
-        - path: /websockets
+        - path: /public/api/v1/worker(/|$)(.*)
           pathType: ImplementationSpecific
   tls:
     enabled: true
     secretName: aicave-console-tls
-  # WebSocket traffic is proxied to aicave-core-service (not worker itself)
-  websocketBackendService: aicave-core-service
-  websocketBackendPort: 8971
 
 env:
   nodeEnv: "Development"
