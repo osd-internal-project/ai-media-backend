@@ -4,8 +4,6 @@ kind: Ingress
 metadata:
   name: {{ .Values.appName }}-ingress
   namespace: {{ .Values.namespace }}
-  labels:
-    {{- include "aicave-core-service.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

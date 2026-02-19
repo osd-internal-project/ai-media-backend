@@ -4,16 +4,16 @@ metadata:
   name: {{ .Values.appName }}
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "aicave-worker-service.labels" . | nindent 4 }}
+    app: {{ .Values.appName }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "aicave-worker-service.selectorLabels" . | nindent 6 }}
+      app: {{ .Values.appName }}
   template:
     metadata:
       labels:
-        {{- include "aicave-worker-service.selectorLabels" . | nindent 8 }}
+        app: {{ .Values.appName }}
     spec:
       containers:
       - name: {{ .Values.appName }}
