@@ -963,10 +963,12 @@ export class LogsService {
     type: 'image' | 'video' | 'omnihumen' | 'dreamactor',
   ): Promise<{ usedCredit?: number; totalCredit?: number }> {
     const findUser = await this.userRepo.findOne({ where: { token: token } });
+    console.log('findUser', findUser.userId,);
+      console.log('project', projectId  ,);
     const aggregateResult = await this.logrepo.aggregate({
       where: {
         userId: findUser.userId,
-        typeGenerate: type,
+        typeGenerate: type === 'image' ? 'image' : { not: 'image' },
         projectId: projectId,
         OR: [{ status: 'success' }, { status: 'pending' }],
         createdAt: {
@@ -979,24 +981,25 @@ export class LogsService {
         tokenUsed: true,
       },
     });
+    Logger.debug('totalCredit', aggregateResult);
+
     const currentCredit =
       type === 'image'
         ? aggregateResult._sum.ImageUsed || 0
-        : type === 'video'
-        ? aggregateResult._sum.tokenUsed || 0
-        : 0;
+        : aggregateResult._sum.tokenUsed || 0;
     const projectMember = await this.projectMemberRepository.findOne({
       where: {
         projectId: projectId,
         userId: findUser.userId,
       },
-    }); 
+    });
     const totalCredit =
       type === 'image'
         ? projectMember?.maxImages || 0
         : type === 'video'
         ? projectMember?.maxToken || 0
         : 0;
+
     return {
       usedCredit: currentCredit,
       totalCredit,
