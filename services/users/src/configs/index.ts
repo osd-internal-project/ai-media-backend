@@ -9,6 +9,7 @@ export default () => ({
     realm: process.env.KEYCLOAK_REALM,
     clientId: process.env.KEYCLOAK_CLIENT_ID,
     clientSecret: process.env.KEYCLOAK_CLIENT_SECRET,
+    redirectUri: process.env.KEYCLOAK_REDIRECT_URI,
   },
   emailApiUrl: process.env.EMAIL_API_URL || 'http://localhost:5000',
 });

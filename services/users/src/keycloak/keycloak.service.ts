@@ -7,15 +7,20 @@ import {
   ConflictException,
   HttpException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import axios from 'axios';
 import configs from 'src/configs';
 import * as https from 'https';
+import * as jwt from "jsonwebtoken";
+import { UsersService } from 'src/users/users.service';
 
 @Injectable()
 export class KeycloakService {
   constructor(
     private readonly usersRepo: UsersRepository,
+    @Inject(forwardRef(() => UsersService)) private readonly usersService: UsersService,
   ) { }
   private async getAdminToken(): Promise<string> {
     const config = configs().keycloak;
@@ -276,6 +281,29 @@ export class KeycloakService {
       },
     );
   }
+
+  async refresh(refreshToken: string) {
+    const config = configs().keycloak;
+    const params = new URLSearchParams();
+    params.append('client_id', config.clientId);
+    params.append('client_secret', config.clientSecret);
+    params.append('grant_type', 'refresh_token');
+    params.append('refresh_token', refreshToken);
+
+    const response = await axios.post(
+      `${config.url}/realms/${config.realm}/protocol/openid-connect/token`,
+      params,
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+        }),
+      },
+    );
+
+    return response.data;
+  }
+
   async login(loginDto: any): Promise<any> {
     const config = configs().keycloak;
     const params = new URLSearchParams();
@@ -332,6 +360,7 @@ export class KeycloakService {
       );
     }
   }
+
   async getPasswordPolicy() {
     const config = configs().keycloak;
     const token = await this.getAdminToken();
@@ -345,5 +374,91 @@ export class KeycloakService {
       },
     );
     return data.passwordPolicy;
+  }
+
+  async findUserByEmail(email: string) {
+    const config = configs().keycloak;
+    const token = await this.getAdminToken();
+    const { data } = await axios.get(
+      `${config.url}/admin/realms/${config.realm}/users`,
+      {
+        params: { email, exact: true },
+        headers: { Authorization: `Bearer ${token}` },
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+        }),
+      },
+    );
+    return data;
+  }
+
+  async getGoogleLoginUrl() {
+    const config = configs().keycloak;
+    const rootUrl = `${config.url}/realms/${config.realm}/protocol/openid-connect/auth`;
+    const params = new URLSearchParams({
+      client_id: config.clientId,
+      redirect_uri: `${config.redirectUri}`,
+      response_type: 'code',
+      kc_idp_hint: 'google',
+      scope: 'openid email profile',
+    });
+    return `${rootUrl}?${params.toString()}`
+  }
+
+  async googleCallback(code: string) {
+    const config = configs().keycloak;
+    const params = new URLSearchParams();
+    params.append("client_id", config.clientId);
+    params.append("client_secret", config.clientSecret);
+    params.append("grant_type", "authorization_code");
+    params.append("code", code);
+    params.append("redirect_uri", config.redirectUri);
+
+    const tokenRes = await axios.post(
+      `${config.url}/realms/${config.realm}/protocol/openid-connect/token`,
+      params,
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: configs().env === 'local' || configs().env === 'development' ? false : true,
+        }),
+      }
+    );
+
+    const tokens = tokenRes.data;
+    const idToken = tokens.id_token;
+    const decoded: any = jwt.decode(idToken);
+    const email = decoded.email;
+    const users = await this.findUserByEmail(email);
+    const user = users && users.length > 0 ? users[0] : null;
+
+    if (user) {
+      const fullname = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.username;
+
+      // Update local db state or create a personal organization/project
+      const userDetail = await this.usersService.createFirstUser({
+        email: email,
+        username: user.username,
+        fullname: fullname,
+        phoneNumber: '',
+        tokenKeycloak: user.id,
+        firstName: user.firstName,
+      });
+
+      return {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_in: tokens.expires_in,
+        id: userDetail.userId,
+        id_token: tokens.id_token,
+        recentOrganizationId: userDetail?.recentOrganizationId,
+        userId: userDetail?.userId,
+        role: userDetail?.role,
+      };
+    }
+
+    return tokens;
   }
 }

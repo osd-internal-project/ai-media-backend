@@ -1,9 +1,21 @@
-import { Body, Controller, Post, Headers, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Post, Headers, UnauthorizedException, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
+
+  @Get("google")
+  async googleLogin() {
+    return {
+      url: await this.authService.getGoogleLoginUrl()
+    };
+  }
+
+  @Post("google/callback")
+  async googleCallback(@Body() body: any) {
+    return this.authService.googleCallback(body.code);
+  }
 
   @Post('login')
   async login(@Body() loginDto: any) {
@@ -17,8 +29,6 @@ export class AuthController {
   }
 
   @Post('validate')
-  // async validate(@Body() body: { token: string }) {
-    // const isValid = await this.authService.validateToken(body.token);
   async validate(@Headers('authorization') authHeader: string) {
     if (!authHeader) {
       throw new UnauthorizedException('Authorization header missing');
@@ -30,4 +40,6 @@ export class AuthController {
     const isValid = await this.authService.validateToken(token);
     return { valid: isValid };
   }
+
+
 }
