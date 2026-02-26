@@ -116,7 +116,7 @@ model Log {
   projectId       String
   userId          String
   prompt          String
-  tokenUsed       Int
+  tokenUsed       Float
   ImageUsed       Int
   referenceImages String[] @default([])
   resolution      String?

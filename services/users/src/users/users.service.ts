@@ -6,6 +6,8 @@ import {
   BadRequestException,
   InternalServerErrorException,
   NotFoundException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { RegisterUserDto } from './dto/register-user.dto';
 import {
@@ -37,7 +39,7 @@ export class UsersService {
     private readonly organizationRepo: OrganizationRepository,
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
-    private readonly keycloakService: KeycloakService,
+    @Inject(forwardRef(() => KeycloakService)) private readonly keycloakService: KeycloakService,
     private readonly planRepo: PlanRepository,
     private readonly httpService: HttpService,
     private readonly registerRepo: RegisterRepository,
@@ -540,6 +542,109 @@ export class UsersService {
     }
 
     return request;
+  }
+
+  async createFirstUser(register: { email: string, username: string, fullname: string, phoneNumber: string, tokenKeycloak: string, firstName: string }) {
+    const existingUser = await this.userRepo.findOne({
+      where: { email: register.email },
+      select: {
+        recentOrganizationId: true,
+        username: true,
+        email: true,
+        status: true,
+        userId: true,
+        role: true,
+      }
+    });
+    if (existingUser) {
+      return existingUser
+    }
+    const newUser = await this.userRepo.create({
+      data: {
+        email: register.email,
+        username: register.username,
+        fullname: register.fullname,
+        status: 'active',
+        phoneNumber: register.phoneNumber,
+        token: register.tokenKeycloak,
+      },
+    });
+
+    const userId = newUser.userId;
+    const freePlan = await this.planRepo.findOne({
+      where: { isDefault: true },
+    });
+    const freePlanDetails = freePlan.detailJson as any;
+    const maxDefaultImage = parseInt(freePlanDetails?.packageImageAmount) || 0;
+    const maxDefaultToken = parseInt(freePlanDetails?.packageTokenAmount) || 0;
+    const personalOrg = await this.organizationRepo.create({
+      data: {
+        name: `${register.firstName} Personal`,
+        slug: `${register.firstName}-personal`,
+        type: 'personal',
+        createdById: userId,
+        status: true,
+        packageImageAmount: maxDefaultImage,
+        packageTokenAmount: maxDefaultToken,
+        remainImageAmount: maxDefaultImage,
+        remainTokenAmount: maxDefaultToken,
+        maxUserAccess: 1,
+      },
+    });
+
+    if (personalOrg) {
+      await this.organizationMemberRepo.create({
+        data: {
+          organizationId: personalOrg.organizationId,
+          userId: userId,
+          role: 'OWNER',
+        },
+      });
+
+      const personalProject = await this.projectRepo.create({
+        data: {
+          name: `${register.firstName} Project`,
+          organizationId: personalOrg.organizationId,
+          status: 'active',
+          remainImageAmount: maxDefaultImage,
+          remainTokenAmount: maxDefaultToken,
+          accessImageAmount: maxDefaultImage,
+          accessTokenAmount: maxDefaultToken,
+        },
+      });
+
+      if (personalProject) {
+        await this.projectMemberRepo.create({
+          data: {
+            projectId: personalProject.id,
+            userId: userId,
+            role: 'OWNER',
+            maxImages: maxDefaultImage,
+            maxToken: maxDefaultToken,
+          },
+        });
+      }
+
+      await this.userRepo.update({
+        where: { userId },
+        data: {
+          recentOrganizationId: personalOrg.organizationId,
+        },
+      });
+    }
+
+    // Return the newly created user
+    return this.userRepo.findOne({
+      where: { userId },
+      select: {
+        recentOrganizationId: true,
+        username: true,
+        email: true,
+        status: true,
+        userId: true,
+        role: true,
+      }
+    });
   }
 
   async confirmChangePassword(body: any) {

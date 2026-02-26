@@ -11,7 +11,7 @@ export class AuthService {
   constructor(
     private readonly keycloakService: KeycloakService,
     private readonly usersRepo: UsersRepository,
-  ) {}
+  ) { }
 
   async login(loginDto: any) {
     // 1. Check if user exists in local database
@@ -30,6 +30,14 @@ export class AuthService {
 
     // 2. If exists, proceed to Keycloak authentication
     return this.keycloakService.login(loginDto);
+  }
+
+  async getGoogleLoginUrl() {
+    return await this.keycloakService.getGoogleLoginUrl();
+  }
+
+  async googleCallback(code: string) {
+    return await this.keycloakService.googleCallback(code);
   }
 
   async checkUserExists(email: string) {
