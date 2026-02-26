@@ -17,7 +17,7 @@ service:
   type: ClusterIP
   port: 8972
   targetPort: 4000
-  containerPort: 8972
+  containerPort: 4000
 
 ingress:
   enabled: true

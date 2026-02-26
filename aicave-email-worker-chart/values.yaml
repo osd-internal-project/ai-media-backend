@@ -17,7 +17,7 @@ service:
   type: ClusterIP
   port: 8975
   targetPort: 5001
-  containerPort: 8975
+  containerPort: 5001
 
 env:
   nodeEnv: "Production"

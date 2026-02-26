@@ -17,7 +17,7 @@ service:
   type: ClusterIP
   port: 8973
   targetPort: 4001
-  containerPort: 8973
+  containerPort: 4001
 
 ingress:
   enabled: true
