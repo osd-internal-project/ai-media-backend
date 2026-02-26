@@ -51,6 +51,8 @@ spec:
           value: {{ .Values.env.keycloakClientId | quote }}
         - name: KEYCLOAK_CLIENT_SECRET
           value: {{ .Values.env.keycloakClientSecret | quote }}
+        - name: KEYCLOAK_REDIRECT_URI
+          value: {{ .Values.env.keycloakRedirectUri | quote }}
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

@@ -48,6 +48,7 @@ env:
   keycloakRealm: "eportal"
   keycloakClientId: "eportal-client-id"
   keycloakClientSecret: "kovdYL3AAs9v6e3zxNw4o3CbaBwZiCId"
+  keycloakRedirectUri: "https://www.aicave.ai/callback"
 
 resources:
   requests:
