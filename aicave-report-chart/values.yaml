@@ -8,8 +8,10 @@ replicaCount: 3
 
 image:
   repository: docker.io/library/ai-report-be
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   tag: "v1.0.0"
+
+imagePullSecretName: huawei-swr-secret
 
 service:
   type: ClusterIP

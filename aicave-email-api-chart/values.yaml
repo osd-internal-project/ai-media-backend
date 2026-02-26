@@ -9,8 +9,10 @@ replicaCount: 3
 
 image:
   repository: docker.io/library/ai-cave-email-api
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   tag: "v1.0.1"
+
+imagePullSecretName: huawei-swr-secret
 
 service:
   type: ClusterIP
