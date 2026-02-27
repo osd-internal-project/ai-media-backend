@@ -14,5 +14,5 @@ jobs:
     with:
       service_path: services/users
       image_name: ai-users-be
-      chart_dir: aicave-user-chart
+      chart_dir: charts/aicave-user-chart
     secrets: inherit
