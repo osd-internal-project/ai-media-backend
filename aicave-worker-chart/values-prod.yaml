@@ -11,7 +11,7 @@ ingress:
   hosts:
     - host: www.aicave.ai
       paths:
-        - path: /websockets
+        - path: /public/api/v1/worker(/|$)(.*)
           pathType: ImplementationSpecific
   tls:
     enabled: true
