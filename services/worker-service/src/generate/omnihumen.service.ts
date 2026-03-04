@@ -20,6 +20,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as ffmpeg from 'fluent-ffmpeg';
 import { tosConfigs } from 'src/configs';
+import { GenerateHelperService } from './generate-helper.service';
 const ffmpegPath = require('ffmpeg-static');
 const ffprobePath = require('ffprobe-static');
 
@@ -74,6 +75,7 @@ export class OmnihumenProcessor extends WorkerHost {
     private readonly refImageRepository: RefImageRepository,
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly tosService: TosService,
+    private readonly generateHelperService: GenerateHelperService,
   ) {
     super();
     this.agent = new https.Agent({
@@ -103,8 +105,10 @@ export class OmnihumenProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId, reqKey, omnihumenTaskId } = job.data as OmnihumenProcessJob;
+    const { taskId, clientId, body, userId, reqKey, omnihumenTaskId } =
+      job.data as OmnihumenProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
+    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${userId}`;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
 
@@ -239,20 +243,24 @@ export class OmnihumenProcessor extends WorkerHost {
           );
           console.log('returngenerate');
 
-          await this.publishToCore(clientId, 'worker:omnihumen-upload-success', {
-            taskId,
-            videoUrl: await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${result.file}`,
-            ),
-            thumbnailUrl: await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${result.thumbnail}`,
-            ),
-            timestamp: new Date().toISOString(),
-            type: 'omnihumen',
-            projectId: body.projectId,
-          });
+          await this.publishToCore(
+            clientId,
+            'worker:omnihumen-upload-success',
+            {
+              taskId,
+              videoUrl: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${result.file}`,
+              ),
+              thumbnailUrl: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${result.thumbnail}`,
+              ),
+              timestamp: new Date().toISOString(),
+              type: 'omnihumen',
+              projectId: body.projectId,
+            },
+          );
           // await this.redis.set(
           //   redisVideoCacheKey,
           //   usage.total_tokens.toString(),
@@ -271,9 +279,55 @@ export class OmnihumenProcessor extends WorkerHost {
             where: { taskId: taskId },
             data: { status: 'success', tokenUsed: 0 },
           });
+          const log = await this.logrepo.findOne({
+            where: { taskId: taskId },
+          });
+          //Update used credit
+          if (log) {
+            const updated =
+              await this.generateHelperService.updateUsedCreditSuccess(
+                userId,
+                body.organizationId,
+                body.projectId,
+                'credit',
+                log.usedCredit,
+              );
+            const usedCredit =
+              updated.usedCreditAllowance + updated.holdCreditAllowance;
+            await this.redis.set(
+              redisVideoCacheKey,
+              usedCredit.toString(),
+              'EX',
+              24 * 60 * 60,
+            );
+          }
           break;
         } else if (status === 'failed') {
           console.log('----- task failed -----');
+          await this.logrepo.updateMany({
+            where: { taskId },
+            data: {
+              status: 'failed',
+            },
+          });
+          const failedLog = await this.logrepo.findOne({
+            where: { taskId },
+          });
+          const updated = await this.generateHelperService.updateUsedCreditFail(
+            userId,
+            body.organizationId,
+            body.projectId,
+            'credit',
+            failedLog.usedCredit,
+          );
+          const usedCredit =
+            updated.usedCreditAllowance + updated.holdCreditAllowance;
+          await this.redis.set(
+            redisVideoCacheKey,
+            usedCredit.toString(),
+            'EX',
+            24 * 60 * 60,
+          );
           // console.error("Error:", getResult.data.error);
           break;
         } else {
@@ -354,6 +408,24 @@ export class OmnihumenProcessor extends WorkerHost {
           status: 'failed',
         },
       });
+      const failedLog = await this.logrepo.findOne({
+        where: { taskId },
+      });
+      const updated = await this.generateHelperService.updateUsedCreditFail(
+        userId,
+        body.organizationId,
+        body.projectId,
+        'credit',
+        failedLog.usedCredit,
+      );
+      const usedCredit =
+        updated.usedCreditAllowance + updated.holdCreditAllowance;
+      await this.redis.set(
+        redisVideoCacheKey,
+        usedCredit.toString(),
+        'EX',
+        24 * 60 * 60,
+      );
       await this.galleryRepo.updateMany({
         where: { taskId },
         data: {
@@ -563,10 +635,7 @@ export class OmnihumenProcessor extends WorkerHost {
       .createHmac('sha256', secretKey)
       .update(short_date)
       .digest();
-    const kRegion = crypto
-      .createHmac('sha256', kDate)
-      .update(region)
-      .digest();
+    const kRegion = crypto.createHmac('sha256', kDate).update(region).digest();
     const kService = crypto
       .createHmac('sha256', kRegion)
       .update(service)

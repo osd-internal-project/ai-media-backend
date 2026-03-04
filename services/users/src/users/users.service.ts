@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { CreditBalance, Prisma } from '@prisma/client';
 import {
   Injectable,
   Logger,
@@ -18,6 +18,8 @@ import {
   PlanRepository,
   RegisterRepository,
   RequestChangePasswordRepository,
+  OrganizationSubscriptionRepository,
+  CreditBalanceRepository,
 } from '@ai-media/share';
 import { v4 as uuidv4 } from 'uuid';
 import * as dayjs from 'dayjs';
@@ -42,7 +44,9 @@ export class UsersService {
     private readonly httpService: HttpService,
     private readonly registerRepo: RegisterRepository,
     private readonly requestChangePasswordRepo: RequestChangePasswordRepository,
-  ) { }
+    private readonly organizationSubscriptionRepo: OrganizationSubscriptionRepository,
+    private readonly creditBalanceRepo: CreditBalanceRepository,
+  ) {}
 
   async create(createUserDto: any) {
     const { password, groups, ...userData } = createUserDto;
@@ -65,9 +69,7 @@ export class UsersService {
       createUserDto.email,
     );
     if (keycloakUsers.length > 0) {
-      Logger.error(
-        'User already exists in Keycloak (found by explicit check)',
-      );
+      Logger.error('User already exists in Keycloak (found by explicit check)');
       throw new ConflictException('User already exists');
     }
 
@@ -97,8 +99,9 @@ export class UsersService {
 
     // Mock Email Dispatch (Legacy)
     console.log(
-      `[Email Service] Sending invitation to ${createUserDto.email} with link: ${configs().frontendUrl
-      }/accept-invite?token=${token}`,
+      `[Email Service] Sending invitation to ${
+        createUserDto.email
+      } with link: ${configs().frontendUrl}/accept-invite?token=${token}`,
     );
 
     return this.userRepo.create({
@@ -110,7 +113,7 @@ export class UsersService {
             group: { connect: { groupId: gid } },
           })),
         },
-        status: 'verified'
+        status: 'verified',
       },
     });
   }
@@ -205,7 +208,8 @@ export class UsersService {
   async update(userId: string, updateUserDto: any) {
     // 1. Update in Keycloak
     // We assume userId is the Keycloak User ID
-    const { username, groups, password, confirmPassword, ...userData } = updateUserDto;
+    const { username, groups, password, confirmPassword, ...userData } =
+      updateUserDto;
 
     try {
       const { token } = await this.userRepo.findOne({ where: { userId } });
@@ -329,12 +333,6 @@ export class UsersService {
     });
 
     const userId = newUser.userId;
-    const freePlan = await this.planRepo.findOne({
-      where: { isDefault: true },
-    });
-    const freePlanDetails = freePlan.detailJson as any;
-    const maxDefaultImage = parseInt(freePlanDetails?.packageImageAmount) || 0;
-    const maxDefaultToken = parseInt(freePlanDetails?.packageTokenAmount) || 0;
     const personalOrg = await this.organizationRepo.create({
       data: {
         name: `${register.username} Personal`,
@@ -342,10 +340,11 @@ export class UsersService {
         type: 'personal',
         createdById: userId,
         status: true,
-        packageImageAmount: maxDefaultImage,
-        packageTokenAmount: maxDefaultToken,
-        remainImageAmount: maxDefaultImage,
-        remainTokenAmount: maxDefaultToken,
+        // packageImageAmount: maxDefaultImage,
+        // packageTokenAmount: maxDefaultToken,
+        // remainImageAmount: maxDefaultImage,
+        // remainTokenAmount: maxDefaultToken,
+
         maxUserAccess: 1,
       },
     });
@@ -358,16 +357,26 @@ export class UsersService {
           role: 'OWNER',
         },
       });
-
+      await this.creditBalanceRepo.create({
+        data: {
+          organizationId: personalOrg.organizationId,
+          packageCycleBalance: 0,
+          packageCycleImage: 0,
+          currentCycleBalance: 0,
+          currentCycleImage: 0,
+          onTopBalance: 50000,
+          onTopImage: 3,
+        },
+      });
       const personalProject = await this.projectRepo.create({
         data: {
           name: `${register.username} Project`,
           organizationId: personalOrg.organizationId,
           status: 'active',
-          remainImageAmount: maxDefaultImage,
-          remainTokenAmount: maxDefaultToken,
-          accessImageAmount: maxDefaultImage,
-          accessTokenAmount: maxDefaultToken,
+          limitCreditAllowance: 50000,
+          limitImageAllowance: 3,
+          usedCreditAllowance: 0,
+          usedImageAllowance: 0,
         },
       });
 
@@ -377,8 +386,10 @@ export class UsersService {
             projectId: personalProject.id,
             userId: userId,
             role: 'OWNER',
-            maxImages: maxDefaultImage,
-            maxToken: maxDefaultToken,
+            maxImages: 3,
+            maxToken: 50000,
+            limitCreditAllowance: 50000,
+            limitImageAllowance: 3,
           },
         });
       }
@@ -420,9 +431,7 @@ export class UsersService {
     );
 
     if (keycloakUsers.length > 0) {
-      Logger.error(
-        'User already exists in Keycloak (found by explicit check)',
-      );
+      Logger.error('User already exists in Keycloak (found by explicit check)');
       throw new ConflictException('User already exists');
     }
 
@@ -436,7 +445,6 @@ export class UsersService {
       Math.random().toString(36).substring(2, 15);
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 48);
-
 
     const register = await this.registerRepo.create({
       data: {
@@ -467,7 +475,8 @@ export class UsersService {
     }
 
     console.log(
-      `[Email Service] Sending welcome email to ${dto.email} with link: ${configs().frontendUrl
+      `[Email Service] Sending welcome email to ${dto.email} with link: ${
+        configs().frontendUrl
       }/verify-email?token=${token}`,
     );
     return register;
@@ -615,7 +624,8 @@ export class UsersService {
         }
       } else if (rule.startsWith('specialChars')) {
         const count = parseInt(rule.match(/\d+/)[0]);
-        const specialCharsCount = (password.match(/[^A-Za-z0-9]/g) || []).length;
+        const specialCharsCount = (password.match(/[^A-Za-z0-9]/g) || [])
+          .length;
         if (specialCharsCount < count) {
           throw new BadRequestException(
             `Password must contain at least ${count} special characters`,
@@ -628,4 +638,3 @@ export class UsersService {
     }
   }
 }
-

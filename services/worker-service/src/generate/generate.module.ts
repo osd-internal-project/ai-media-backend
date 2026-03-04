@@ -14,6 +14,7 @@ import { PrismaModule } from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { OmnihumenProcessor } from './omnihumen.service';
 import { DreamactorProcessor } from './dreamactor.service';
+import { GenerateHelperService } from './generate-helper.service';
 
 @Module({
   imports: [
@@ -42,12 +43,14 @@ import { DreamactorProcessor } from './dreamactor.service';
     VideoProcessor,
     OmnihumenProcessor,
     DreamactorProcessor,
+    GenerateHelperService,
   ], // อย่าลืมใส่ Processor
   exports: [
     ImageProcessor,
     VideoProcessor,
     OmnihumenProcessor,
     DreamactorProcessor,
+    GenerateHelperService,
   ],
 })
 export class GenerateModule {}

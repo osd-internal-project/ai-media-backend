@@ -29,7 +29,16 @@ export class OrganizationController {
   }
   @Post('system-admin')
   createBySystemAdmin(
-    @Body() createOrganizationDto: Prisma.OrganizationCreateInput,
+    @Body()
+    createOrganizationDto: {
+      name: string;
+      description: string;
+      planId: string;
+      priceId: string;
+      type: string;
+      createdById: string;
+      slug: string;
+    },
   ) {
     return this.organizationService.createBySystemAdmin(createOrganizationDto);
   }

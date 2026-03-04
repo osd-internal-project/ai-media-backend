@@ -15,6 +15,10 @@ import {
   ProjectRepository,
   UsersRepository,
   PlanRepository,
+  PlanPriceRepository,
+  OrganizationSubscriptionRepository,
+  CreditBalanceRepository,
+  PackageTransactionRepository,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
@@ -34,6 +38,10 @@ export class OrganizationService {
     private readonly keycloakService: KeycloakService,
     private readonly httpService: HttpService,
     private readonly planRepo: PlanRepository,
+    private readonly planPriceRepo: PlanPriceRepository,
+    private readonly packageTransactionRepo: PackageTransactionRepository,
+    private readonly creditBalanceRepo: CreditBalanceRepository,
+    private readonly organizationSubscriptionRepo: OrganizationSubscriptionRepository,
   ) {}
 
   create(createOrganizationDto: Prisma.OrganizationCreateInput) {
@@ -59,15 +67,101 @@ export class OrganizationService {
     }
     return data;
   }
-  async createBySystemAdmin(
-    createOrganizationDto: Prisma.OrganizationCreateInput,
-  ) {
-    console.log(createOrganizationDto);
-    const data = await this.organizationRepo.create({
-      data: createOrganizationDto,
+  async createBySystemAdmin(createOrganizationDto: {
+    name: string;
+    description: string;
+    planId: string;
+    priceId: string;
+    type: string;
+    createdById: string;
+    slug: string;
+  }) {
+    //Package Detail
+    const plan = await this.planRepo.findOne({
+      where: { id: createOrganizationDto.planId },
     });
-
-    return data;
+    const price = await this.planPriceRepo.findOne({
+      where: { id: createOrganizationDto.priceId },
+    });
+    //Calculate Date
+    const startDate = new Date(); //Start Date
+    const endDate = new Date(); //End used for check date
+    const billingDate = new Date(); //Billing Date
+    const planDetails = plan.detailJson as any;
+    const duration = +planDetails?.duration || 1;
+    const durationUnit = planDetails?.unit || 'month';
+    const imageAllowance = planDetails?.imageAllowance || 0;
+    const creditAllowance = planDetails?.creditAllowance || 0;
+    const maxUserAccess = planDetails?.maxUserAccess || 0;
+    const periodCount = price.periodCount || 1;
+    if (durationUnit === 'month') {
+      endDate.setMonth(endDate.getMonth() + duration);
+      billingDate.setMonth(billingDate.getMonth() + duration * periodCount);
+    } else if (durationUnit === 'year') {
+      endDate.setFullYear(endDate.getFullYear() + duration);
+      billingDate.setFullYear(
+        billingDate.getFullYear() + duration * periodCount,
+      );
+    }
+    const organization = await this.organizationRepo.create({
+      data: {
+        name: createOrganizationDto.name,
+        description: createOrganizationDto.description,
+        type: createOrganizationDto.type,
+        createdById: createOrganizationDto.createdById,
+        slug: createOrganizationDto.name + '-team',
+        status: true,
+        maxUserAccess: maxUserAccess,
+      },
+    });
+    const packageTransaction = await this.packageTransactionRepo.create({
+      data: {
+        organizationId: organization.organizationId,
+        planName: plan.name,
+        planInterval: price.interval,
+        amountPaid: price.price,
+        currency: price.currency,
+        status: 'complete',
+        paymentMethod: 'stripe',
+        paidAt: new Date(),
+        billingPeriodStart: startDate,
+        billingPeriodEnd: billingDate,
+      },
+    });
+    const organizationSubscription =
+      await this.organizationSubscriptionRepo.create({
+        data: {
+          organizationId: organization.organizationId,
+          planId: plan.id,
+          planName: plan.name,
+          price: price.price,
+          interval: price.interval,
+          creditAllowance: creditAllowance,
+          imageAllowance: imageAllowance,
+          currentPeriodStart: startDate,
+          currentPeriodEnd: endDate,
+          nextBillingDate: billingDate,
+          status: 'active',
+          periodCount: price.periodCount,
+          periodCurrent: 1,
+        },
+      });
+    const currentCreditBalance = await this.creditBalanceRepo.create({
+      data: {
+        organizationId: organization.organizationId,
+        currentCycleBalance: creditAllowance,
+        currentCycleImage: imageAllowance,
+        onTopBalance: 0,
+        onTopImage: 0,
+        holdBalance: 0,
+        holdImage: 0,
+      },
+    });
+    return {
+      packageTransaction,
+      organizationSubscription,
+      currentCreditBalance,
+    };
   }
   async createInvitation(dto: CreateInvitationDto) {
     // 1. Check if user already exists in Organization (via OrganizationMember check if we had userId, but here we only have email)
@@ -252,16 +346,6 @@ export class OrganizationService {
       });
       userId = newUser.userId;
 
-      // Auto-create Personal Organization & Project
-      const freePlan = await this.planRepo.findOne({
-        where: { isDefault: true },
-      });
-      const freePlanDetails = freePlan.detailJson as any;
-      const maxDefaultImage =
-        parseInt(freePlanDetails?.packageImageAmount) || 0;
-      const maxDefaultToken =
-        parseInt(freePlanDetails?.packageTokenAmount) || 0;
-
       const personalOrg = await this.organizationRepo.create({
         data: {
           name: `${dto.username} Personal`,
@@ -269,16 +353,19 @@ export class OrganizationService {
           type: 'personal',
           createdById: userId,
           status: true,
-          remainImageAmount: maxDefaultImage,
-          remainTokenAmount: maxDefaultToken,
-          packageImageAmount: maxDefaultImage,
-          packageTokenAmount: maxDefaultToken,
           maxUserAccess: 1,
         },
       });
 
       if (personalOrg) {
         // Add User as Owner of Personal Org
+        await this.creditBalanceRepo.create({
+          data: {
+            organizationId: personalOrg.organizationId,
+            onTopBalance: 50000,
+            onTopImage: 3,
+          },
+        });
         await this.organizationMemberRepo.create({
           data: {
             organizationId: personalOrg.organizationId,
@@ -293,10 +380,10 @@ export class OrganizationService {
             name: `${dto.username} Project`,
             organizationId: personalOrg.organizationId,
             status: 'active',
-            remainImageAmount: maxDefaultImage,
-            remainTokenAmount: maxDefaultToken,
-            accessImageAmount: maxDefaultImage,
-            accessTokenAmount: maxDefaultToken,
+            limitCreditAllowance: 50000,
+            limitImageAllowance: 3,
+            remainImageAmount: 0,
+            remainTokenAmount: 0,
           },
         });
 
@@ -307,8 +394,9 @@ export class OrganizationService {
               projectId: personalProject.id,
               userId: userId,
               role: 'OWNER',
-              maxImages: maxDefaultImage,
-              maxToken: maxDefaultToken,
+
+              limitCreditAllowance: 50000,
+              limitImageAllowance: 3,
             },
           });
         }
@@ -362,6 +450,10 @@ export class OrganizationService {
   findOne(id: string) {
     return this.organizationRepo.findOne({
       where: { organizationId: id },
+      include: {
+        subscription: true,
+        creditBalance: true,
+      },
     });
   }
 

@@ -20,6 +20,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as ffmpeg from 'fluent-ffmpeg';
 import { tosConfigs } from 'src/configs';
+import { GenerateHelperService } from './generate-helper.service';
 const ffmpegPath = require('ffmpeg-static');
 const ffprobePath = require('ffprobe-static');
 
@@ -74,6 +75,7 @@ export class DreamactorProcessor extends WorkerHost {
     private readonly refImageRepository: RefImageRepository,
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly tosService: TosService,
+    private readonly generateHelperService: GenerateHelperService,
   ) {
     super();
     this.agent = new https.Agent({
@@ -103,10 +105,12 @@ export class DreamactorProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId, reqKey, dreamactorTaskId } = job.data as DreamactorProcessJob;
+    const { taskId, clientId, body, userId, reqKey, dreamactorTaskId } =
+      job.data as DreamactorProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
+    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${userId}`;
 
     try {
       // 1. ส่ง event "started" ไปยัง Core Service
@@ -143,7 +147,10 @@ export class DreamactorProcessor extends WorkerHost {
           process.env.BYTEPLUS_SECRET_KEY ||
           'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
 
-        const queryParams = { Action: 'CVSync2AsyncGetResult', Version: '2024-06-06' };
+        const queryParams = {
+          Action: 'CVSync2AsyncGetResult',
+          Version: '2024-06-06',
+        };
         const bodyPayload = {
           req_key: reqKey,
           task_id: dreamactorTaskId,
@@ -238,22 +245,25 @@ export class DreamactorProcessor extends WorkerHost {
             mockFile,
             taskId,
           );
-          console.log('returngenerate');
 
-          await this.publishToCore(clientId, 'worker:dreamactor-upload-success', {
-            taskId,
-            videoUrl: await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              `organize/${body.organizationId}/${body.projectId}/dreamactor-generate/${result.file}`,
-            ),
-            thumbnailUrl: await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              `organize/${body.organizationId}/${body.projectId}/dreamactor-generate/${result.thumbnail}`,
-            ),
-            timestamp: new Date().toISOString(),
-            type: 'dreamactor',
-            projectId: body.projectId,
-          });
+          await this.publishToCore(
+            clientId,
+            'worker:dreamactor-upload-success',
+            {
+              taskId,
+              videoUrl: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                `organize/${body.organizationId}/${body.projectId}/dreamactor-generate/${result.file}`,
+              ),
+              thumbnailUrl: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                `organize/${body.organizationId}/${body.projectId}/dreamactor-generate/${result.thumbnail}`,
+              ),
+              timestamp: new Date().toISOString(),
+              type: 'dreamactor',
+              projectId: body.projectId,
+            },
+          );
           // await this.redis.set(
           //   redisVideoCacheKey,
           //   usage.total_tokens.toString(),
@@ -275,7 +285,30 @@ export class DreamactorProcessor extends WorkerHost {
           break;
         } else if (status === 'failed') {
           console.log('----- task failed -----');
-          // console.error("Error:", getResult.data.error);
+          await this.logrepo.updateMany({
+            where: { taskId },
+            data: {
+              status: 'failed',
+            },
+          });
+          const failedLog = await this.logrepo.findOne({
+            where: { taskId },
+          });
+          const updated = await this.generateHelperService.updateUsedCreditFail(
+            userId,
+            body.organizationId,
+            body.projectId,
+            'credit',
+            failedLog.usedCredit,
+          );
+          const usedCredit =
+            updated.usedCreditAllowance + updated.holdCreditAllowance;
+          await this.redis.set(
+            redisVideoCacheKey,
+            usedCredit.toString(),
+            'EX',
+            24 * 60 * 60,
+          );
           break;
         } else {
           console.log(
@@ -362,6 +395,24 @@ export class DreamactorProcessor extends WorkerHost {
         },
       });
 
+      const failedLog = await this.logrepo.findOne({
+        where: { taskId },
+      });
+      const updated = await this.generateHelperService.updateUsedCreditFail(
+        userId,
+        body.organizationId,
+        body.projectId,
+        'credit',
+        failedLog.usedCredit,
+      );
+      const usedCredit =
+        updated.usedCreditAllowance + updated.holdCreditAllowance;
+      await this.redis.set(
+        redisVideoCacheKey,
+        usedCredit.toString(),
+        'EX',
+        24 * 60 * 60,
+      );
       throw error; // Stop retrying by not throwing error
     }
   }
@@ -564,10 +615,7 @@ export class DreamactorProcessor extends WorkerHost {
       .createHmac('sha256', secretKey)
       .update(short_date)
       .digest();
-    const kRegion = crypto
-      .createHmac('sha256', kDate)
-      .update(region)
-      .digest();
+    const kRegion = crypto.createHmac('sha256', kDate).update(region).digest();
     const kService = crypto
       .createHmac('sha256', kRegion)
       .update(service)

@@ -25,6 +25,10 @@ import {
   RequestChangePasswordRepository,
   RefImageRepository,
   PromptGuideImageRepository,
+  PlanPriceRepository,
+  OrganizationSubscriptionRepository,
+  PackageTransactionRepository,
+  CreditBalanceRepository,
 } from 'src/repositories';
 
 const services = [
@@ -53,6 +57,10 @@ const services = [
   RequestChangePasswordRepository,
   RefImageRepository,
   PromptGuideImageRepository,
+  PlanPriceRepository,
+  OrganizationSubscriptionRepository,
+  PackageTransactionRepository,
+  CreditBalanceRepository,
 ];
 
 @Module({

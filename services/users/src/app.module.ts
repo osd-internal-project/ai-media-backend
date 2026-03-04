@@ -16,6 +16,9 @@ import { OrganizationModule } from './organization/organization.module';
 import { OrganizationMembersModule } from './organization-members/organization-members.module';
 import { KeycloakModule } from './keycloak/keycloak.module';
 import { AuthModule } from './auth/auth.module';
+import { OrganizationSubscriptionModule } from './organization-subscription/organization-subscription.module';
+import { PackageTransactionModule } from './package-transaction/package-transaction.module';
+import { CreditBalanceModule } from './credit-balance/credit-balance.module';
 @Module({
   imports: [
     PrismaModule,
@@ -29,6 +32,9 @@ import { AuthModule } from './auth/auth.module';
     OrganizationMembersModule,
     KeycloakModule,
     AuthModule,
+    OrganizationSubscriptionModule,
+    PackageTransactionModule,
+    CreditBalanceModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

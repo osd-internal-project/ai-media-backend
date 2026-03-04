@@ -18,6 +18,8 @@ import {
   ByteplusePayloadOmnihumen,
   ByteplusePayloadDreamactor,
   QUEUE_NAME_DREAMACTOR,
+  CreditBalanceRepository,
+  ProjectRepository,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -30,6 +32,7 @@ import {
 } from '@nestjs/common';
 import axios, { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
+import e from 'express';
 import * as https from 'https';
 import Redis from 'ioredis';
 import { tosConfigs } from 'src/configs';
@@ -40,13 +43,16 @@ export class GenerateService {
 
   constructor(
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
-    private readonly projectMemberRepository: ProjectMemberRepository,
+    private readonly projectRepo: ProjectRepository,
+    private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly userRepo: UsersRepository,
     private readonly errorLogRepo: ErrorLogRepository,
     private readonly auditLogRepo: AuditLogRepository,
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
+    private readonly creditBalanceRepo: CreditBalanceRepository,
+
     @InjectRedis() private readonly redis: Redis,
     @InjectQueue(QUEUE_NAME_IMAGE) private imageQueue: Queue,
     @InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue,
@@ -60,6 +66,7 @@ export class GenerateService {
    */
   async createGenerationTask(body: RequestImageGenerateDto, clientId: string) {
     const taskId = body.taskId;
+    let holdImageCount = 0;
     const redisImageCacheKey = `${body.organizationId}/${body.projectId}/image_used_${body.userId}`;
 
     try {
@@ -78,17 +85,18 @@ export class GenerateService {
       }
 
       // 2. Check Quota
-      const { isQuotaExceeded, currentImageUsed } =
-        await this.checkTokenImageQuota(
+      const { isQuotaExceeded, currentImageUsed, onholdImages } =
+        await this.checkCreditImageQuota(
           user.userId,
           body,
           projectMember,
           redisImageCacheKey,
         );
-
       if (isQuotaExceeded) {
         return { status: 400, data: 'Image limit exceeded' };
       }
+      // 2.1 Check Hold
+      holdImageCount = onholdImages;
 
       // 3. Get Config & Model
       const getConfigApi = await this.masterdataconfigapiRepo.findOne({
@@ -133,24 +141,6 @@ export class GenerateService {
         basePayload,
         axiosConfig,
       );
-
-      // data test
-      // const res = {
-      //     data: {
-      //         data: [
-      //             {
-      //                 url: 'https://www.aicave.ai/public/api/v1/s3/ai-media-image/80ecc909-bb73-4873-89d2-9605fc801be7/decae022-3b8a-4d4f-a2f1-4410d81b7cb1.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260202%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260202T155105Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=f6c44142b217fba0cbfe277ae6988538ca76e2dd41f1835822f31da7d3378bfe',
-      //                 size: '2048x2048'
-      //             }
-      //         ],
-      //         usage: {
-      //             generated_images: 1,
-      //             output_tokens: 16280,
-      //             total_tokens: 16280
-      //         }
-      //     }
-      // }
-
       // 6. อัพเดท cache
       await this.redis.set(
         redisImageCacheKey,
@@ -241,6 +231,7 @@ export class GenerateService {
       };
     } catch (error) {
       console.error('Error creating generation task:', error);
+      this.cancelHoldAmount(holdImageCount, body.userId, body.projectId);
       this.handleGenerationError(error, body.userId);
     }
   }
@@ -269,34 +260,37 @@ export class GenerateService {
       if (user) {
         await this.logAudit(user.userId, 'CREATE', body, taskId);
       }
-
-      // 2. Check Quota
-      const { isQuotaExceeded, currentTokenUsed, onhandToken } =
-        await this.checkTokenVideoQuota(
-          user.userId,
-          body,
-          projectMember,
-          redisVideoCacheKey,
-        );
-
-      if (isQuotaExceeded) {
-        return {
-          status: 400,
-          data: `Token used ${currentTokenUsed} exceed max token ${projectMember.maxToken}`,
-        };
-      }
-
-      // TODO: Implement Quota Check for Video if needed
+      // 2: Implement Quota Check for Video if needed
       const modelDetail = await this.modeltypeRepo.findOne({
         where: { modelType: body.model, type: 'video' },
       });
-
       const getConfigApi = await this.masterdataconfigapiRepo.findOne({
         where: { id: 1 },
       });
 
       if (!modelDetail) {
         return { status: 400, data: 'Model not found' };
+      }
+      // 3. Check Quota
+      const {
+        isQuotaExceeded,
+        incrementCredit,
+        limitAllowance,
+        usedCredit,
+        onhandToken,
+      } = await this.checkCreditVideoQuota(
+        user.userId,
+        body,
+        projectMember,
+        redisVideoCacheKey,
+        modelDetail.modelType,
+      );
+
+      if (isQuotaExceeded) {
+        return {
+          status: 400,
+          data: `Token used ${usedCredit} exceed max credit ${limitAllowance}`,
+        };
       }
 
       // 4. Prepare Payload
@@ -333,6 +327,7 @@ export class GenerateService {
           typeGenerate: 'video',
           genneratedStatus: 'PENDING',
           status: false,
+          usedCredit: incrementCredit,
           generateConfig: this.buildGenerateConfig({
             ratio: body.ratio,
             width: body.width,
@@ -348,7 +343,7 @@ export class GenerateService {
           }),
         },
       });
-      await this.logrepo.create({
+      const log = await this.logrepo.create({
         data: {
           taskId,
           projectId: body.projectId,
@@ -357,7 +352,9 @@ export class GenerateService {
           typeGenerate: 'video',
           status: 'pending',
           tokenUsed: onhandToken,
-          ImageUsed: 0,
+          usedCredit: incrementCredit,
+          usedImage: 1,
+          ImageUsed: 1,
           generateAudio: body.generateAudio,
           referenceImages:
             body.image.length > 0
@@ -380,11 +377,20 @@ export class GenerateService {
           }),
         },
       });
-
+      if (log) {
+        //Update Hold Image
+        await this.updateHoldCreditBalance(
+          user.userId,
+          body.organizationId,
+          body.projectId,
+          'credit',
+          incrementCredit,
+        );
+      }
       // 6. อัพเดท cache
       await this.redis.set(
         redisVideoCacheKey,
-        currentTokenUsed.toString(),
+        usedCredit.toString(),
         'EX',
         24 * 60 * 60,
       );
@@ -443,6 +449,7 @@ export class GenerateService {
           status: false,
           videoTaskId: res.data.id,
           message: 'Video generation queued',
+          usedCredit: incrementCredit,
           generateConfig: {
             ratio: body.ratio,
             width: body.width,
@@ -592,7 +599,7 @@ export class GenerateService {
       throw new BadRequestException('User not found');
     }
 
-    const projectMember = await this.projectMemberRepository.findOne({
+    const projectMember = await this.projectMemberRepo.findOne({
       where: {
         projectId: projectId,
         userId: user.userId,
@@ -602,7 +609,7 @@ export class GenerateService {
     return { user, projectMember };
   }
 
-  private async checkTokenImageQuota(
+  private async checkCreditImageQuota(
     userId: string,
     body: RequestImageGenerateDto,
     projectMember: any,
@@ -611,7 +618,7 @@ export class GenerateService {
     isQuotaExceeded: boolean;
     currentImageUsed: number;
     maxImageInPlan: number;
-    onhandToken: number;
+    onholdImages: number;
   }> {
     let currentImageUsed = 0;
     const maxImage = body.maxImages || 0;
@@ -625,285 +632,363 @@ export class GenerateService {
       currentImageUsed = parseInt(cachedImageUsed);
     } else {
       // Fallback to DB calculation
-      const aggregateResult = await this.logrepo.aggregate({
-        where: {
-          userId: userId,
-          typeGenerate: body.type,
-          projectId: body.projectId,
-          status: 'success',
-          createdAt: {
-            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-            lt: new Date(
-              new Date().getFullYear(),
-              new Date().getMonth() + 1,
-              1,
-            ),
-          },
-        },
-        _sum: {
-          ImageUsed: true,
-        },
-      });
-      currentImageUsed = aggregateResult._sum.ImageUsed || 0;
+      // const aggregateResult = await this.logrepo.aggregate({
+      //   where: {
+      //     userId: userId,
+      //     typeGenerate: body.type,
+      //     projectId: body.projectId,
+      //     status: 'success',
+      //     createdAt: {
+      //       gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+      //       lt: new Date(
+      //         new Date().getFullYear(),
+      //         new Date().getMonth() + 1,
+      //         1,
+      //       ),
+      //     },
+      //   },
+      //   _sum: {
+      //     ImageUsed: true,
+      //   },
+      // });
+      // currentImageUsed = aggregateResult._sum.ImageUsed || 0;
+      currentImageUsed =
+        projectMember.holdImageAllowance + projectMember.usedImageAllowance;
     }
 
-    const maxImageInPlan = projectMember?.maxImages || 0;
+    const maxImageInPlan = projectMember?.limitImageAllowance || 0;
     currentImageUsed = currentImageUsed + maxImage;
+
+    //Check Allowence :Member > Team >Organization
     if (currentImageUsed > maxImageInPlan) {
       Logger.error(
         `Image used ${
           currentImageUsed + maxImage
-        } exceed max image ${maxImageInPlan}`,
+        } exceed max user image ${maxImageInPlan}`,
       );
       return {
         isQuotaExceeded: true,
         currentImageUsed: currentImageUsed,
         maxImageInPlan: maxImageInPlan,
-        onhandToken: maxImage,
+        onholdImages: maxImage,
       };
     }
+    const project = await this.projectRepo.findOne({
+      where: { id: body.projectId },
+    });
+    if (
+      project.usedImageAllowance + project.holdImageAllowance >
+      project.limitImageAllowance
+    ) {
+      Logger.error(
+        `Image used ${
+          currentImageUsed + maxImage
+        } exceed max team image ${maxImageInPlan}`,
+      );
+      return {
+        isQuotaExceeded: true,
+        currentImageUsed: currentImageUsed,
+        maxImageInPlan: maxImageInPlan,
+        onholdImages: maxImage,
+      };
+    }
+    const creditBalance = await this.creditBalanceRepo.findOne({
+      where: { organizationId: body.organizationId },
+    });
+    if (
+      creditBalance.currentCycleImage +
+        creditBalance.onTopImage -
+        creditBalance.holdImage <
+      maxImage
+    ) {
+      Logger.error(
+        `Image used ${
+          currentImageUsed + maxImage
+        } exceed max organize image ${maxImageInPlan}`,
+      );
 
+      return {
+        isQuotaExceeded: true,
+        currentImageUsed: currentImageUsed,
+        maxImageInPlan: maxImageInPlan,
+        onholdImages: maxImage,
+      };
+    }
+    this.updateHoldCreditBalance(
+      userId,
+      body.organizationId,
+      body.projectId,
+      'image',
+      maxImage,
+    );
     return {
       isQuotaExceeded: false,
       currentImageUsed: currentImageUsed,
       maxImageInPlan: maxImageInPlan,
-      onhandToken: maxImage,
+      onholdImages: maxImage,
     };
   }
 
-  private async checkTokenVideoQuota(
+  // private async checkTokenVideoQuota(
+  //   userId: string,
+  //   body: RequestVideoGenerateDto,
+  //   projectMember: any,
+  //   cacheKey: string,
+  // ): Promise<{
+  //   isQuotaExceeded: boolean;
+  //   currentTokenUsed: number;
+  //   maxTokenInPlan: number;
+  //   onhandToken: number;
+  // }> {
+  //   const frameRate = 24;
+  //   let currentTokenUsed = 0;
+  //   // const maxToken = body.maxImages || 0;
+
+  //   let cachedTokenUsed: string | null = null;
+  //   if (cacheKey) {
+  //     cachedTokenUsed = await this.redis.get(cacheKey);
+  //   }
+
+  //   if (cachedTokenUsed) {
+  //     currentTokenUsed = parseInt(cachedTokenUsed);
+  //   } else {
+  //     // Fallback to DB calculation
+  //     // const aggregateResult = await this.logrepo.aggregate({
+  //     //   where: {
+  //     //     userId: userId,
+  //     //     typeGenerate: body.typeGenerate,
+  //     //     projectId: body.projectId,
+  //     //     status: 'success',
+  //     //     createdAt: {
+  //     //       gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+  //     //       lt: new Date(
+  //     //         new Date().getFullYear(),
+  //     //         new Date().getMonth() + 1,
+  //     //         1,
+  //     //       ),
+  //     //     },
+  //     //   },
+  //     //   _sum: {
+  //     //     tokenUsed: true,
+  //     //   },
+  //     // });
+
+  //     // currentTokenUsed = aggregateResult._sum.tokenUsed || 0;
+  //     const cachedTokenUsed =
+  //       projectMember.holdTokenAllowance + projectMember.usedTokenAllowance;
+  //   }
+  //   const onhandToken =
+  //     (body.width * body.height * body.duration * frameRate) / 1024;
+  //   currentTokenUsed = currentTokenUsed + onhandToken || 0;
+  //   const maxTokenInPlan = projectMember.maxToken || 0;
+  //   // currentTokenUsed = currentTokenUsed ;
+  //   if (currentTokenUsed > maxTokenInPlan) {
+  //     Logger.error(
+  //       `Token used ${currentTokenUsed} exceed max token ${maxTokenInPlan}`,
+  //     );
+  //     return {
+  //       isQuotaExceeded: true,
+  //       currentTokenUsed: currentTokenUsed,
+  //       maxTokenInPlan: maxTokenInPlan,
+  //       onhandToken: onhandToken,
+  //     };
+  //   }
+
+  //   return {
+  //     isQuotaExceeded: false,
+  //     currentTokenUsed: currentTokenUsed,
+  //     maxTokenInPlan: maxTokenInPlan,
+  //     onhandToken: onhandToken,
+  //   };
+  // }
+
+  private async checkCreditVideoQuota(
     userId: string,
     body: RequestVideoGenerateDto,
-    projectMember: {
-      id: string;
-      projectId: string;
-      userId: string;
-      role: string;
-      joinedAt: Date;
-      maxToken: number;
-      maxImages: number;
-    },
+    projectMember: any,
     cacheKey: string,
+    modelname: string,
   ): Promise<{
     isQuotaExceeded: boolean;
-    currentTokenUsed: number;
-    maxTokenInPlan: number;
+    incrementCredit: number;
+    limitAllowance: number;
+    usedCredit: number;
     onhandToken: number;
   }> {
     const frameRate = 24;
-    let currentTokenUsed = 0;
+    let currentCreditUsed = 0;
     // const maxToken = body.maxImages || 0;
 
-    let cachedTokenUsed: string | null = null;
+    let cachedCreditUsed: string | null = null;
     if (cacheKey) {
-      cachedTokenUsed = await this.redis.get(cacheKey);
+      cachedCreditUsed = await this.redis.get(cacheKey);
     }
 
-    if (cachedTokenUsed) {
-      currentTokenUsed = parseInt(cachedTokenUsed);
+    if (cachedCreditUsed) {
+      currentCreditUsed = parseInt(cachedCreditUsed);
     } else {
       // Fallback to DB calculation
-      const aggregateResult = await this.logrepo.aggregate({
-        where: {
-          userId: userId,
-          typeGenerate: body.typeGenerate,
-          projectId: body.projectId,
-          status: 'success',
-          createdAt: {
-            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-            lt: new Date(
-              new Date().getFullYear(),
-              new Date().getMonth() + 1,
-              1,
-            ),
-          },
-        },
-        _sum: {
-          tokenUsed: true,
-        },
-      });
+      // const aggregateResult = await this.logrepo.aggregate({
+      //   where: {
+      //     userId: userId,
+      //     typeGenerate: body.typeGenerate,
+      //     projectId: body.projectId,
+      //     status: 'success',
+      //     createdAt: {
+      //       gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+      //       lt: new Date(
+      //         new Date().getFullYear(),
+      //         new Date().getMonth() + 1,
+      //         1,
+      //       ),
+      //     },
+      //   },
+      //   _sum: {
+      //     tokenUsed: true,
+      //   },
+      // });
 
-      currentTokenUsed = aggregateResult._sum.tokenUsed || 0;
+      // currentTokenUsed = aggregateResult._sum.tokenUsed || 0;
+      currentCreditUsed =
+        projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
     const onhandToken =
       (body.width * body.height * body.duration * frameRate) / 1024;
-    currentTokenUsed = currentTokenUsed + onhandToken || 0;
-    const maxTokenInPlan = projectMember.maxToken || 0;
+    const onhandCredit = await this.getUsedCredit(onhandToken, {}, modelname);
+    const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
+    const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
-    if (currentTokenUsed > maxTokenInPlan) {
+    if (usedCredit > limitAllowance) {
       Logger.error(
-        `Token used ${currentTokenUsed} exceed max token ${maxTokenInPlan}`,
+        `Token used ${usedCredit} exceed max token ${limitAllowance}`,
       );
       return {
         isQuotaExceeded: true,
-        currentTokenUsed: currentTokenUsed,
-        maxTokenInPlan: maxTokenInPlan,
-        onhandToken: onhandToken,
+        incrementCredit: onhandCredit.credit,
+        limitAllowance: limitAllowance,
+        usedCredit: usedCredit,
+        onhandToken: onhandCredit.token,
       };
     }
 
     return {
       isQuotaExceeded: false,
-      currentTokenUsed: currentTokenUsed,
-      maxTokenInPlan: maxTokenInPlan,
-      onhandToken: onhandToken,
+      incrementCredit: onhandCredit.credit,
+      limitAllowance: limitAllowance,
+      usedCredit: usedCredit,
+      onhandToken: onhandCredit.token,
     };
   }
-  private async checkTokenOmnihumenQuota(
+  private async checkCreditOmnihumenQuota(
     userId: string,
     body: RequestVideoGenerateDto,
-    projectMember: {
-      id: string;
-      projectId: string;
-      userId: string;
-      role: string;
-      joinedAt: Date;
-      maxToken: number;
-      maxImages: number;
-    },
+    projectMember: any,
     cacheKey: string,
+    modelname: string,
   ): Promise<{
     isQuotaExceeded: boolean;
-    currentTokenUsed: number;
-    maxTokenInPlan: number;
+    incrementCredit: number;
+    limitAllowance: number;
+    usedCredit: number;
     onhandToken: number;
   }> {
-    // const frameRate = 24;
-    let currentTokenUsed = 0;
-    // const maxToken = body.maxImages || 0;
+    let currentCreditUsed = 0;
 
-    let cachedTokenUsed: string | null = null;
+    let cachedCreditUsed: string | null = null;
     if (cacheKey) {
-      cachedTokenUsed = await this.redis.get(cacheKey);
+      cachedCreditUsed = await this.redis.get(cacheKey);
     }
 
-    if (cachedTokenUsed) {
-      currentTokenUsed = parseInt(cachedTokenUsed);
+    if (cachedCreditUsed) {
+      currentCreditUsed = parseInt(cachedCreditUsed);
     } else {
-      // Fallback to DB calculation
-      const aggregateResult = await this.logrepo.aggregate({
-        where: {
-          userId: userId,
-          typeGenerate: body.typeGenerate,
-          projectId: body.projectId,
-          status: 'success',
-          createdAt: {
-            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-            lt: new Date(
-              new Date().getFullYear(),
-              new Date().getMonth() + 1,
-              1,
-            ),
-          },
-        },
-        _sum: {
-          tokenUsed: true,
-        },
-      });
-
-      currentTokenUsed = aggregateResult._sum.tokenUsed || 0;
+      currentCreditUsed =
+        projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
-    const onhandToken = body.duration * 49846.15385;
-    currentTokenUsed = currentTokenUsed + onhandToken || 0;
-    const maxTokenInPlan = projectMember.maxToken || 0;
+
+    const onhandCredit = await this.getUsedCredit(
+      0,
+      { duration: body.duration },
+      modelname,
+    );
+    const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
+    const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
-    if (currentTokenUsed > maxTokenInPlan) {
+    if (usedCredit > limitAllowance) {
       Logger.error(
-        `Token used ${currentTokenUsed} exceed max token ${maxTokenInPlan}`,
+        `Token used ${usedCredit} exceed max token ${limitAllowance}`,
       );
       return {
         isQuotaExceeded: true,
-        currentTokenUsed: currentTokenUsed,
-        maxTokenInPlan: maxTokenInPlan,
-        onhandToken: onhandToken,
+        incrementCredit: onhandCredit.credit,
+        limitAllowance: limitAllowance,
+        usedCredit: usedCredit,
+        onhandToken: onhandCredit.token,
       };
     }
 
     return {
       isQuotaExceeded: false,
-      currentTokenUsed: currentTokenUsed,
-      maxTokenInPlan: maxTokenInPlan,
-      onhandToken: onhandToken,
+      incrementCredit: onhandCredit.credit,
+      limitAllowance: limitAllowance,
+      usedCredit: usedCredit,
+      onhandToken: onhandCredit.token,
     };
   }
-  private async checkTokenDreamactorQuota(
+  private async checkCreditDreamactorQuota(
     userId: string,
     body: RequestVideoGenerateDto,
-    projectMember: {
-      id: string;
-      projectId: string;
-      userId: string;
-      role: string;
-      joinedAt: Date;
-      maxToken: number;
-      maxImages: number;
-    },
+    projectMember: any,
     cacheKey: string,
+    modelname: string,
   ): Promise<{
     isQuotaExceeded: boolean;
-    currentTokenUsed: number;
-    maxTokenInPlan: number;
+    incrementCredit: number;
+    limitAllowance: number;
+    usedCredit: number;
     onhandToken: number;
   }> {
-    // const frameRate = 24;
-    let currentTokenUsed = 0;
-    const maxToken = body.maxImages || 0;
+    let currentCreditUsed = 0;
 
-    let cachedTokenUsed: string | null = null;
+    let cachedCreditUsed: string | null = null;
     if (cacheKey) {
-      cachedTokenUsed = await this.redis.get(cacheKey);
+      cachedCreditUsed = await this.redis.get(cacheKey);
     }
 
-    if (cachedTokenUsed) {
-      currentTokenUsed = parseInt(cachedTokenUsed);
+    if (cachedCreditUsed) {
+      currentCreditUsed = parseInt(cachedCreditUsed);
     } else {
-      // Fallback to DB calculation
-      const aggregateResult = await this.logrepo.aggregate({
-        where: {
-          userId: userId,
-          typeGenerate: body.typeGenerate,
-          projectId: body.projectId,
-          status: 'success',
-          createdAt: {
-            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-            lt: new Date(
-              new Date().getFullYear(),
-              new Date().getMonth() + 1,
-              1,
-            ),
-          },
-        },
-        _sum: {
-          tokenUsed: true,
-        },
-      });
-
-      currentTokenUsed = aggregateResult._sum.tokenUsed || 0;
+      currentCreditUsed =
+        projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
-    const onhandToken = body.duration * 20769.23077;
 
-    currentTokenUsed = currentTokenUsed + onhandToken || 0;
-    const maxTokenInPlan = projectMember.maxToken || 0;
-    currentTokenUsed = currentTokenUsed + maxToken;
-    if (currentTokenUsed > maxTokenInPlan) {
+    const onhandCredit = await this.getUsedCredit(
+      0,
+      { duration: body.duration },
+      modelname,
+    );
+    const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
+    const limitAllowance = projectMember.limitCreditAllowance || 0;
+    // currentTokenUsed = currentTokenUsed ;
+    if (usedCredit > limitAllowance) {
       Logger.error(
-        `Token used ${
-          currentTokenUsed + maxToken
-        } exceed max token ${maxTokenInPlan}`,
+        `Token used ${usedCredit} exceed max token ${limitAllowance}`,
       );
       return {
         isQuotaExceeded: true,
-        currentTokenUsed: currentTokenUsed,
-        maxTokenInPlan: maxTokenInPlan,
-        onhandToken,
+        incrementCredit: onhandCredit.credit,
+        limitAllowance: limitAllowance,
+        usedCredit: usedCredit,
+        onhandToken: onhandCredit.token,
       };
     }
 
     return {
       isQuotaExceeded: false,
-      currentTokenUsed: currentTokenUsed,
-      maxTokenInPlan: maxTokenInPlan,
-      onhandToken: onhandToken,
+      incrementCredit: onhandCredit.credit,
+      limitAllowance: limitAllowance,
+      usedCredit: usedCredit,
+      onhandToken: onhandCredit.token,
     };
   }
   private async prepareGenerationPayloadImage(
@@ -1048,27 +1133,11 @@ export class GenerateService {
       if (user) {
         await this.logAudit(user.userId, 'CREATE', body, taskId);
       }
-      // 2. Check Quota
-      const { isQuotaExceeded, currentTokenUsed, onhandToken } =
-        await this.checkTokenOmnihumenQuota(
-          user.userId,
-          body,
-          projectMember,
-          redisOmnihumenCacheKey,
-        );
 
-      if (isQuotaExceeded) {
-        return {
-          status: 400,
-          data: `Token used ${currentTokenUsed} exceed max token ${projectMember.maxToken}`,
-        };
-      }
-
-      // TODO: Implement Quota Check for Video if needed
+      // 2. Implement Quota Check for Video if needed
       const modelDetail = await this.modeltypeRepo.findOne({
         where: { modelType: body.model, type: 'omnihumen' },
       });
-
       const getConfigApi = await this.masterdataconfigapiRepo.findOne({
         where: { id: 2 },
       });
@@ -1077,6 +1146,28 @@ export class GenerateService {
       if (!modelDetail) {
         return { status: 400, data: 'Model not found' };
       }
+      // 3. Check Quota
+      const {
+        isQuotaExceeded,
+        incrementCredit,
+        limitAllowance,
+        usedCredit,
+        onhandToken,
+      } = await this.checkCreditOmnihumenQuota(
+        user.userId,
+        body,
+        projectMember,
+        redisOmnihumenCacheKey,
+        modelDetail.modelType,
+      );
+
+      if (isQuotaExceeded) {
+        return {
+          status: 400,
+          data: `Token used ${usedCredit} exceed max token ${limitAllowance}`,
+        };
+      }
+
       // 4. Prepare Payload
       const resolution = body.resolution
         ? parseInt(body.resolution.replace('p', ''))
@@ -1131,6 +1222,8 @@ export class GenerateService {
           typeGenerate: 'omnihumen',
           genneratedStatus: 'PENDING',
           status: false,
+          usedCredit: incrementCredit,
+          usedImage: 1,
           generateConfig: this.buildGenerateConfig({
             resolution: body.resolution,
             seed: body.seed,
@@ -1146,7 +1239,7 @@ export class GenerateService {
           }),
         },
       });
-      await this.logrepo.create({
+      const log = await this.logrepo.create({
         data: {
           taskId,
           projectId: body.projectId,
@@ -1154,8 +1247,10 @@ export class GenerateService {
           prompt: body.prompt || '',
           typeGenerate: 'omnihumen',
           status: 'pending',
-          tokenUsed: 0,
-          ImageUsed: onhandToken,
+          tokenUsed: onhandToken,
+          usedCredit: incrementCredit,
+          usedImage: 1,
+          ImageUsed: 1,
           generateAudio: body.generateAudio,
           referenceImages:
             body.image.length > 0
@@ -1178,11 +1273,20 @@ export class GenerateService {
           }),
         },
       });
-
+      if (log) {
+        //Update Hold Image
+        await this.updateHoldCreditBalance(
+          user.userId,
+          body.organizationId,
+          body.projectId,
+          'credit',
+          incrementCredit,
+        );
+      }
       // 6. อัพเดท cache
       await this.redis.set(
         redisOmnihumenCacheKey,
-        currentTokenUsed.toString(),
+        usedCredit.toString(),
         'EX',
         24 * 60 * 60,
       );
@@ -1345,22 +1449,8 @@ export class GenerateService {
       if (user) {
         await this.logAudit(user.userId, 'CREATE', body, taskId);
       }
-      // 2. Check Quota
-      const { isQuotaExceeded, currentTokenUsed, onhandToken } =
-        await this.checkTokenDreamactorQuota(
-          user.userId,
-          body,
-          projectMember,
-          redisDreamactorCacheKey,
-        );
 
-      if (isQuotaExceeded) {
-        return {
-          status: 400,
-          data: `Token used ${currentTokenUsed} exceed max token ${projectMember.maxToken}`,
-        };
-      }
-      // TODO: Implement Quota Check for Video if needed
+      // 2. Implement Quota Check for Video if needed
       const modelDetail = await this.modeltypeRepo.findOne({
         where: { modelType: body.model, type: 'dreamactor' },
       });
@@ -1373,6 +1463,29 @@ export class GenerateService {
       if (!modelDetail) {
         return { status: 400, data: 'Model not found' };
       }
+
+      // 3. Check Quota
+      const {
+        isQuotaExceeded,
+        incrementCredit,
+        limitAllowance,
+        usedCredit,
+        onhandToken,
+      } = await this.checkCreditDreamactorQuota(
+        user.userId,
+        body,
+        projectMember,
+        redisDreamactorCacheKey,
+        modelDetail.modelType,
+      );
+
+      if (isQuotaExceeded) {
+        return {
+          status: 400,
+          data: `Token used ${usedCredit} exceed max token ${limitAllowance}`,
+        };
+      }
+
       // 4. Prepare Payload
       // const resolution = body.resolution ? parseInt(body.resolution.replace('p', '')) : 720;
       const { basePayload, axiosConfig } =
@@ -1405,6 +1518,8 @@ export class GenerateService {
           typeGenerate: 'dreamactor',
           genneratedStatus: 'PENDING',
           status: false,
+          usedCredit: incrementCredit,
+
           generateConfig: this.buildGenerateConfig({
             ratio: '',
             width: 0,
@@ -1418,7 +1533,7 @@ export class GenerateService {
           }),
         },
       });
-      await this.logrepo.create({
+      const log = await this.logrepo.create({
         data: {
           taskId,
           projectId: body.projectId,
@@ -1427,7 +1542,9 @@ export class GenerateService {
           typeGenerate: 'dreamactor',
           status: 'pending',
           tokenUsed: onhandToken,
-          ImageUsed: 0,
+          usedCredit: incrementCredit,
+          usedImage: 1,
+          ImageUsed: 1,
           generateAudio: body.generateAudio,
           referenceImages:
             body.image.length > 0
@@ -1448,11 +1565,20 @@ export class GenerateService {
           }),
         },
       });
-
+      if (log) {
+        //Update Hold Image
+        await this.updateHoldCreditBalance(
+          user.userId,
+          body.organizationId,
+          body.projectId,
+          'credit',
+          incrementCredit,
+        );
+      }
       // 6. อัพเดท cache
       await this.redis.set(
         redisDreamactorCacheKey,
-        currentTokenUsed.toString(),
+        usedCredit.toString(),
         'EX',
         24 * 60 * 60,
       );
@@ -1777,5 +1903,64 @@ export class GenerateService {
       'X-Date': x_date,
       Authorization: authorization,
     };
+  }
+
+  async updateHoldCreditBalance(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    unitType: 'image' | 'credit',
+    amount: number,
+  ) {
+    try {
+      await this.projectMemberRepo.updateMany({
+        where: { userId: userId, projectId: projectId },
+        data:
+          unitType === 'image'
+            ? { holdImageAllowance: { increment: amount } }
+            : { holdCreditAllowance: { increment: amount } },
+      });
+      // console.log('projectMember update data', data);
+
+      // const creditBalanceData = await this.creditBalanceRepo.update({
+      //   where: { organizationId: organizationId },
+      //   data:
+      //     unitType === 'image'
+      //       ? { holdImage: { increment: amount } }
+      //       : { holdBalance: { increment: amount } },
+      // });
+    } catch (error) {
+      Logger.error(`Failed to update hold credit balance: ${error}`);
+    }
+  }
+  async getUsedCredit(
+    token: number,
+    body: any,
+    model: string,
+  ): Promise<{ token: number; credit: number }> {
+    try {
+      if (model === 'seedance-1-5-pro-251215') {
+        const perCredit = 1186.813;
+        return { token, credit: Math.round(token / perCredit) };
+      } else if (model === 'realman_avatar_picture_omni15_cv') {
+        const credit = body.duration * 42;
+        const token = body.duration * 49846.15385;
+        return { token, credit };
+      } else if (model === 'dreamactor_m20_gen_video_cvtob') {
+        const credit = body.duration * 17.5;
+        const token = body.duration * 20769.23077;
+        return { token, credit };
+      }
+    } catch (err) {
+      return err;
+    }
+  }
+
+  //ลบ hold image allowance ถ้า fail
+  cancelHoldAmount(holdImageCount: number, userId: string, projectId: string) {
+    this.projectMemberRepo.updateMany({
+      where: { userId: userId, projectId: projectId },
+      data: { holdImageAllowance: { decrement: holdImageCount } },
+    });
   }
 }

@@ -20,6 +20,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as ffmpeg from 'fluent-ffmpeg';
 import { tosConfigs } from 'src/configs';
+import { GenerateHelperService } from './generate-helper.service';
 const ffmpegPath = require('ffmpeg-static');
 const ffprobePath = require('ffprobe-static');
 
@@ -73,6 +74,7 @@ export class VideoProcessor extends WorkerHost {
     private readonly refImageRepository: RefImageRepository,
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly tosService: TosService,
+    private readonly generateHelperService: GenerateHelperService,
   ) {
     super();
     this.agent = new https.Agent({
@@ -104,6 +106,7 @@ export class VideoProcessor extends WorkerHost {
   async process(job: any, token?: string): Promise<any> {
     const { taskId, clientId, body, userId } = job.data as VideoProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
+    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${userId}`;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
 
@@ -186,7 +189,6 @@ export class VideoProcessor extends WorkerHost {
             type: 'video',
             projectId: body.projectId,
           });
-          const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
           const videoRes = await axios.get(content.video_url, {
             responseType: 'arraybuffer',
             httpsAgent: this.agent,
@@ -216,7 +218,6 @@ export class VideoProcessor extends WorkerHost {
           );
           console.log('returngenerate');
 
-
           await this.publishToCore(clientId, 'worker:video-upload-success', {
             taskId,
             videoUrl: await this.tosService.getPreSignedUrl(
@@ -237,21 +238,81 @@ export class VideoProcessor extends WorkerHost {
           //   'EX',
           //   24 * 60 * 60,
           // );
+          const log = await this.logrepo.findOne({
+            where: { taskId: taskId },
+          });
+          const realCredit = await this.generateHelperService.getUsedCredit(
+            usage.total_tokens,
+            body,
+            body.model,
+          );
           await this.galleryRepo.updateMany({
             where: { taskId: taskId },
             data: {
               imageUrl: result.file,
               thumbnailUrl: result.thumbnail,
               genneratedStatus: 'SUCCESS',
+              usedCredit: realCredit.credit,
             },
           });
+
           await this.logrepo.updateMany({
             where: { taskId: taskId },
-            data: { status: 'success', tokenUsed: usage.total_tokens },
+            data: {
+              status: 'success',
+              tokenUsed: usage.total_tokens,
+              usedCredit: realCredit.credit,
+            },
           });
+
+          //Update used credit
+          if (log) {
+            const updated =
+              await this.generateHelperService.updateUsedCreditSuccess(
+                userId,
+                body.organizationId,
+                body.projectId,
+                'credit',
+                realCredit.credit,
+                log.usedCredit,
+              );
+            const usedCredit =
+              updated.usedCreditAllowance + updated.holdCreditAllowance;
+            await this.redis.set(
+              redisVideoCacheKey,
+              usedCredit.toString(),
+              'EX',
+              24 * 60 * 60,
+            );
+          }
           break;
         } else if (status === 'failed') {
           console.log('----- task failed -----');
+          await this.logrepo.updateMany({
+            where: { taskId },
+            data: {
+              status: 'failed',
+            },
+          });
+          const failedLog = await this.logrepo.findOne({
+            where: { taskId },
+          });
+          const updated = await this.generateHelperService.updateUsedCreditFail(
+            userId,
+            body.organizationId,
+            body.projectId,
+            'credit',
+            failedLog.usedCredit,
+          );
+
+          const usedCredit =
+            updated.usedCreditAllowance + updated.holdCreditAllowance;
+          await this.redis.set(
+            redisVideoCacheKey,
+            usedCredit.toString(),
+            'EX',
+            24 * 60 * 60,
+          );
           // console.error("Error:", getResult.data.error);
           break;
         } else {
@@ -332,6 +393,25 @@ export class VideoProcessor extends WorkerHost {
           status: 'failed',
         },
       });
+      const failedLog = await this.logrepo.findOne({
+        where: { taskId },
+      });
+      const updated = await this.generateHelperService.updateUsedCreditFail(
+        userId,
+        body.organizationId,
+        body.projectId,
+        'credit',
+        failedLog.usedCredit,
+      );
+
+      const usedCredit =
+        updated.usedCreditAllowance + updated.holdCreditAllowance;
+      await this.redis.set(
+        redisVideoCacheKey,
+        usedCredit.toString(),
+        'EX',
+        24 * 60 * 60,
+      );
       await this.galleryRepo.updateMany({
         where: { taskId },
         data: {

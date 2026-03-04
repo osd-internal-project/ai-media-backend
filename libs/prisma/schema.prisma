@@ -53,21 +53,30 @@ model users {
 }
 
 model Project {
-  id             String          @id @default(uuid())
-  name           String
-  description    String?
-  createdAt      DateTime        @default(now())
-  status         String?         @default("active") @db.VarChar(10)
+  id                   String          @id @default(uuid())
+  name                 String
+  description          String?
+  createdAt            DateTime        @default(now())
+  status               String?         @default("active") @db.VarChar(10)
   // Relations
-  members        ProjectMember[]
-  galleries      Gallery[]
-  logs           Log[]
-  organizationId String?         @map("organization_id") @db.VarChar(50)
-
-  accessTokenAmount Int? @default(0) @map("access_token_amount")
-  accessImageAmount Int? @default(0) @map("access_image_amount")
-  remainTokenAmount Int? @default(0) @map("remain_token_amount")
-  remainImageAmount Int? @default(0) @map("remain_image_amount")
+  members              ProjectMember[]
+  galleries            Gallery[]
+  logs                 Log[]
+  organizationId       String?         @map("organization_id") @db.VarChar(50)
+  // ยอดจำกัด ของ Project
+  limitImageAllowance  Int             @default(0) @map("limit_image_allowance")
+  limitCreditAllowance Float           @default(0) @map("limit_credit_allowance")
+  // ยอดใช้ของ Project
+  usedImageAllowance   Int             @default(0) @map("used_image_allowance")
+  usedCreditAllowance  Float           @default(0) @map("used_credit_allowance")
+  // ยอดจัดเก็บของ Project
+  holdImageAllowance   Int             @default(0) @map("hold_image_allowance")
+  holdCreditAllowance  Float           @default(0) @map("hold_credit_allowance")
+  //ตัวเก่า
+  accessTokenAmount    Int?            @default(0) @map("access_token_amount")
+  accessImageAmount    Int?            @default(0) @map("access_image_amount")
+  remainTokenAmount    Int?            @default(0) @map("remain_token_amount")
+  remainImageAmount    Int?            @default(0) @map("remain_image_amount")
 
   @@map("project")
 }
@@ -79,11 +88,20 @@ model ProjectMember {
   role      String?
   joinedAt  DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id])
-  users   users   @relation(fields: [userId], references: [userId])
-
-  maxToken  Int? @default(0) @map("max_token")
-  maxImages Int? @default(0) @map("max_images")
+  project              Project @relation(fields: [projectId], references: [id])
+  users                users   @relation(fields: [userId], references: [userId])
+  // ยอดจำกัด ของ ProjectMember
+  limitImageAllowance  Int?    @default(0) @map("limit_image_allowance")
+  limitCreditAllowance Float?  @default(0) @map("limit_credit_allowance")
+  // ยอดใช้ของ ProjectMember
+  usedImageAllowance   Int     @default(0) @map("used_image_allowance")
+  usedCreditAllowance  Float   @default(0) @map("used_credit_allowance")
+  // ยอดจัดเก็บของ ProjectMember
+  holdImageAllowance   Int     @default(0) @map("hold_image_allowance")
+  holdCreditAllowance  Float   @default(0) @map("hold_credit_allowance")
+  // ตัวเก่า
+  maxToken             Int?    @default(0) @map("max_token")
+  maxImages            Int?    @default(0) @map("max_images")
 
   @@unique([projectId, userId]) // ห้ามซ้ำ
   @@map("project_member")
@@ -104,6 +122,8 @@ model Gallery {
   users            users    @relation(fields: [userId], references: [userId])
   genneratedStatus String?  @default("PENDING") @db.VarChar(50)
   generateConfig   Json?    @map("generate_config") @db.JsonB
+  usedCredit       Float?   @default(0) @map("used_credit")
+  usedImage        Int?     @default(0) @map("used_image")
 
   @@map("gallery")
 }
@@ -127,6 +147,8 @@ model Log {
   project         Project  @relation(fields: [projectId], references: [id])
   users           users    @relation(fields: [userId], references: [userId])
   galleryId       String?  @map("gallary_id") @db.VarChar(100)
+  usedCredit      Float?   @default(0) @map("used_credit")
+  usedImage       Int?     @default(0) @map("used_image")
 
   @@map("log")
 }
@@ -321,13 +343,42 @@ model Organization {
   updatedById        String?              @map("updated_by") @db.VarChar(50)
   invitations        Invitation[]
 
-  packageTokenAmount Int? @map("package_token_amount")
-  packageImageAmount Int? @map("package_image_amount")
-  remainTokenAmount  Int? @default(0) @map("remain_token_amount")
-  remainImageAmount  Int? @default(0) @map("remain_image_amount")
-  maxUserAccess      Int? @map("max_user_access")
+  packageTokenAmount  Int?                      @map("package_token_amount")
+  packageImageAmount  Int?                      @map("package_image_amount")
+  remainTokenAmount   Int?                      @default(0) @map("remain_token_amount")
+  remainImageAmount   Int?                      @default(0) @map("remain_image_amount")
+  maxUserAccess       Int?                      @map("max_user_access")
+  subscription        OrganizationSubscription?
+  creditBalance       CreditBalance?
+  packageTransactions PackageTransaction[]
 
   @@map("organization")
+}
+
+model OrganizationSubscription {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @unique @map("organization_id") @db.VarChar(50)
+  organization   Organization @relation(fields: [organizationId], references: [organizationId])
+
+  planId             String   @map("plan_id") @db.Uuid
+  plan               Plan     @relation(fields: [planId], references: [id])
+  // --- Snapshot ข้อมูล Package ณ รอบปัจจุบัน ---
+  planName           String   @default("") @map("plan_name") // เช่น "Pro Plan"
+  price              Decimal  @default(0) @map("price") @db.Decimal(10, 2)
+  interval           String?  @map("interval") @db.VarChar(50)
+  creditAllowance    Float    @default(0) @map("credit_allowance") // โควตาของรอบนี้
+  imageAllowance     Float    @default(0) @map("image_allowance")
+  // จัดการรอบบิล: เมื่อถึง End Date คือวันที่ต้อง Reset Credit (Use-it-or-lose-it)
+  currentPeriodStart DateTime @map("current_period_start")
+  currentPeriodEnd   DateTime @map("current_period_end")
+  nextBillingDate    DateTime @map("next_billing_date")
+  status             String   @default("active") @map("status")
+  period             String   @default("monthly") @map("period")
+  periodCount        Int      @default(1) @map("period_count")
+  periodCurrent      Int      @default(1) @map("period_current")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("organization_subscriptions")
 }
 
 model OrganizationMember {
@@ -343,7 +394,28 @@ model OrganizationMember {
   maxToken  Int?
   maxImages Int?    @default(0) @map("max_images")
 
+  @@unique([organizationId, userId])
   @@map("organization_member")
+}
+
+model CreditBalance {
+  id                  String       @id @default(uuid()) @db.Uuid
+  organizationId      String       @unique @map("organization_id") @db.VarChar(50)
+  organization        Organization @relation(fields: [organizationId], references: [organizationId])
+  // ยอด hold กรณี task ยังไม่ success
+  holdBalance         Float        @default(0) @map("hold_balance")
+  holdImage           Float        @default(0) @map("hold_image")
+  // ยอดเครดิตประจำรอบปัจจุบัน (จะ Reset เมื่อเปลี่ยนรอบบิล) 
+  currentCycleBalance Float        @default(0) @map("current_cycle_balance")
+  currentCycleImage   Float        @default(0) @map("current_cycle_image")
+
+  // เครดิตที่ซื้อเพิ่ม (On-top) ไม่หายเมื่อขึ้นรอบใหม่
+  onTopBalance Float @default(0) @map("on_top_balance")
+  onTopImage   Float @default(0) @map("on_top_image")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("credit_balances")
 }
 
 model Invitation {
@@ -423,25 +495,57 @@ model Plan {
   isDefault   Boolean @default(false) @map("is_default")
   detailJson  Json?   @map("detail_json") @db.JsonB
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  prices   PlanPrice[]
-  features PlanFeature[]
+  createdAt     DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  subscriptions OrganizationSubscription[]
+  prices        PlanPrice[]
+  features      PlanFeature[]
+  status        Boolean                    @default(false)
+  orderIndex    Int                        @default(0) @map("order_index")
 
   @@map("plans")
 }
 
 model PlanPrice {
-  id     String @id @default(uuid()) @db.Uuid
-  planId String @map("plan_id") @db.Uuid
-  plan   Plan   @relation(fields: [planId], references: [id])
+  id              String  @id @default(uuid()) @db.Uuid
+  planId          String  @map("plan_id") @db.Uuid
+  plan            Plan    @relation(fields: [planId], references: [id])
+  interval        String  @default("MONTH") @db.VarChar(20) // MONTH | YEAR
+  price           Decimal @db.Decimal(10, 2)
+  duration        Int     @default(0) @map("duration")
+  creditAllowance Float   @default(0.00) @map("credit_allowance")
+  imageAllowance  Float   @default(0.00) @map("image_allowance")
+  currency        String  @default("THB") @db.VarChar(3)
+  isDefault       Boolean @default(false) @map("is_default")
+  orderIndex      Int     @default(0) @map("order_index")
+  detail          Json?   @map("detail") @db.JsonB
+  periodCount     Int     @default(1) @map("period_count")
+  periodUnit      String? @db.VarChar(20)
 
-  period String  @db.VarChar(20)
-  price  Decimal @db.Decimal(10, 2)
-
-  @@unique([planId, period])
+  // @@unique([])
   @@map("plan_prices")
+}
+
+model PackageTransaction {
+  id                 String       @id @default(uuid()) @db.Uuid
+  organizationId     String       @map("organization_id") @db.VarChar(50)
+  organization       Organization @relation(fields: [organizationId], references: [organizationId])
+  amountPaid         Decimal      @db.Decimal(10, 2)
+  currency           String       @default("THB")
+  status             String       @default("WAIT")
+  paymentMethod      String?      @map("payment_method")
+  paidAt             DateTime?    @map("paid_at") // วันที่จ่ายเงินจริง 
+  expiredPaymentAt   DateTime?    @map("expired_payment_at") // วันที่หมดอายุ 
+  // --- ข้อมูล Package ที่ซื้อใน Transaction นี้ ---
+  planName           String       @map("plan_name")
+  planInterval       String       @map("plan_interval")
+  // บันทึกว่าการจ่ายเงินนี้ครอบคลุมช่วงเวลาไหน
+  billingPeriodStart DateTime     @map("billing_period_start")
+  billingPeriodEnd   DateTime     @map("billing_period_end")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("package_transactions")
 }
 
 model Feature {

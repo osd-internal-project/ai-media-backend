@@ -511,34 +511,32 @@ export class WebsocketGatewayService
     const projectId = data.projectId;
     const organizationId = data.organizationId;
     const token = data.userId;
-    // const type = data.type;
     const type = data.type === 'image' ? 'image' : 'video';
     const usedCreditKey = `${organizationId}/${projectId}/${type}_used_${token}`;
     const totalCreditKey = `${organizationId}/${projectId}/${type}_total_${token}`;
-    // await this.redis.del(totalCreditKey); 
     try {
-      const redisUsedCredit = await this.redis.get(usedCreditKey);
-      const redisTotalCredit = await this.redis.get(totalCreditKey); 
-      if (redisUsedCredit && redisTotalCredit) { 
-        client.emit('chat:used-credit', {
-          success: true,
-          data: { usedCredit: redisUsedCredit, totalCredit: redisTotalCredit },
-        });
-      } else {
+      // const redisUsedCredit = await this.redis.get(usedCreditKey);
+      // const redisTotalCredit = await this.redis.get(totalCreditKey); 
+      // if (redisUsedCredit && redisTotalCredit) { 
+      //   client.emit('chat:used-credit', {
+      //     success: true,
+      //     data: { usedCredit: redisUsedCredit, totalCredit: redisTotalCredit },
+      //   });
+      // } else {
         const { usedCredit, totalCredit } =
           await this.logsService.findUsedCredit(
             projectId,
             organizationId,
             token,
             type,
-          ); 
+          );
         await this.redis.set(usedCreditKey, usedCredit);
         await this.redis.set(totalCreditKey, totalCredit);
         client.emit('chat:used-credit', {
           success: true,
           data: { usedCredit, totalCredit },
         });
-      }
+      // }
     } catch (error) {
       client.emit('chat:error', {
         message: error.message,
@@ -586,6 +584,7 @@ export class WebsocketGatewayService
     try {
       const { projectId, type } = data;
       const roomName = `${projectId}:${type}`;
+      Logger.log(`connecting : ${roomName}`)
       await client.join(roomName);
       this.logger.log(`Client ${client.id} joined room ${roomName}`);
       client.emit('room:joined', {
