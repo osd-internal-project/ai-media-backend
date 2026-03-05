@@ -418,6 +418,7 @@ model CreditBalance {
   @@map("credit_balances")
 }
 
+
 model Invitation {
   id             String   @id @default(uuid())
   email          String   @db.VarChar(200)
@@ -537,8 +538,9 @@ model PackageTransaction {
   paidAt             DateTime?    @map("paid_at") // วันที่จ่ายเงินจริง 
   expiredPaymentAt   DateTime?    @map("expired_payment_at") // วันที่หมดอายุ 
   // --- ข้อมูล Package ที่ซื้อใน Transaction นี้ ---
-  planName           String       @map("plan_name")
-  planInterval       String       @map("plan_interval")
+  planId             String?      @map("plan_id") @db.VarChar(50)
+  planName           String       @map("plan_name") @db.VarChar(50)
+  planInterval       String       @map("plan_interval") @db.VarChar(20)
   // บันทึกว่าการจ่ายเงินนี้ครอบคลุมช่วงเวลาไหน
   billingPeriodStart DateTime     @map("billing_period_start")
   billingPeriodEnd   DateTime     @map("billing_period_end")

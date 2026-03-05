@@ -18,34 +18,22 @@ export class DashboardService {
     private readonly userRepo: UsersRepository,
     private readonly prismaService: PrismaService,
     private readonly projectMemberRepo: ProjectMemberRepository,
-    private readonly orgMemberRepo: OrganizationMemberRepository,
+    private readonly organizationMemberRepo: OrganizationMemberRepository,
     private readonly projectRepo: ProjectRepository,
   ) {}
   async summaryOrganization(organizationId: string, query: any) {
     const { createdAt } = query || {};
-    const sql = ` select o.id as "organizationId", o.name as "organizationName",o.package_image_amount::int as "packageImageAmount"
-    ,o.package_token_amount::int as "packageTokenAmount", o.remain_image_amount::int as "remainImageAmount",o.remain_token_amount::int as "remainTokenAmount"
-    ,image_used::int as "imageUsed",token_used::int as "tokenUsed" from organization o 
-    left join  (select  p2.organization_id  as "organization_id" ,SUM(COALESCE(image_used,0)) as image_used, SUM(COALESCE(token_used,0)) as token_used from  project p2 
-    left join ( select
-        log."projectId",
-        SUM(CASE WHEN log."typeGenerate" = 'image' THEN log."ImageUsed" ELSE 0 END)::int as image_used,
-        SUM(CASE WHEN log."typeGenerate" = 'video' THEN log."tokenUsed" ELSE 0 END)::int as token_used
-    from
-        log where  log.status='success'  ${
-          createdAt
-            ? `and log."createdAt" between '${dayjs(createdAt)
-                .startOf('month')
-                .toISOString()}' and '${dayjs(createdAt)
-                .endOf('month')
-                .toISOString()}'`
-            : ''
-        } group by log."projectId" ) l on l."projectId" = p2.id  where ${
-      organizationId ? `p2.organization_id  = '${organizationId}'` : ''
-    } 
-        group by p2.organization_id ) cal on o.organization_id = cal.organization_id where ${
-          organizationId ? `o.organization_id  = '${organizationId}'` : ''
-        } `;
+    const sql = ` select o.id as "organizationId", o.name as "organizationName",
+      (COALESCE(sub.image_allowance, 0) + COALESCE(cb.on_top_image, 0))::int as "packageImageAmount",
+      (COALESCE(sub.credit_allowance, 0) + COALESCE(cb.on_top_balance, 0))::int as "packageTokenAmount", 
+      (COALESCE(cb.current_cycle_image, 0) + COALESCE(cb.on_top_image, 0))::int as "remainImageAmount",
+      (COALESCE(cb.current_cycle_balance, 0) + COALESCE(cb.on_top_balance, 0))::int as "remainTokenAmount" from organization o 
+    left join organization_subscriptions sub on o.organization_id = sub.organization_id
+    left join credit_balances cb on o.organization_id = cb.organization_id
+     where ${
+       organizationId ? `o.organization_id  = '${organizationId}'` : ''
+     } `;
+    console.log(sql);
     const result: any = await this.prismaService.$queryRawUnsafe(sql);
     if (result && result.length > 0) {
       return result[0];
@@ -87,7 +75,11 @@ export class DashboardService {
             }),
             // typeGenerate: { in: ['vdo'] },
           },
-          select: { tokenUsed: true, ImageUsed: true, typeGenerate: true },
+          select: {
+            typeGenerate: true,
+            usedCredit: true,
+            usedImage: true,
+          },
         },
         members: {
           where: {
@@ -113,8 +105,8 @@ export class DashboardService {
                     }),
                   },
                   select: {
-                    tokenUsed: true,
-                    ImageUsed: true,
+                    // usedCredit: true,
+                    // usedImage: true,
                     projectId: true,
                     typeGenerate: true,
                   },
@@ -131,16 +123,16 @@ export class DashboardService {
 
     return projects.map((project) => ({
       ...project,
-      tokenUsed: project.logs
-        .filter((log) => log.typeGenerate === 'vdo')
+      usedCredit: project.logs
+        .filter((log) => log.typeGenerate !== 'image')
         .reduce(
-          (sum, logs) => sum + (logs.tokenUsed ? Number(logs.tokenUsed) : 0),
+          (sum, logs) => sum + (logs.usedCredit ? Number(logs.usedCredit) : 0),
           0,
         ),
       imageUsed: project.logs
         .filter((log) => log.typeGenerate === 'image')
         .reduce(
-          (sum, logs) => sum + (logs.ImageUsed ? Number(logs.ImageUsed) : 0),
+          (sum, logs) => sum + (logs.usedImage ? Number(logs.usedImage) : 0),
           0,
         ),
       members: project.members.map((member) => {
@@ -152,16 +144,16 @@ export class DashboardService {
           project: {
             logs: memberLogs,
           },
-          tokenUsed: memberLogs
-            .filter((log) => log.typeGenerate === 'viedo')
+          usedCredit: memberLogs
+            .filter((log) => log.typeGenerate !== 'image')
             .reduce(
-              (sum, log) => sum + (log.tokenUsed ? Number(log.tokenUsed) : 0),
+              (sum, log) => sum + (log.usedCredit ? Number(log.usedCredit) : 0),
               0,
             ),
           imageUsed: memberLogs
             .filter((log) => log.typeGenerate === 'image')
             .reduce(
-              (sum, log) => sum + (log.ImageUsed ? Number(log.ImageUsed) : 0),
+              (sum, log) => sum + (log.usedImage ? Number(log.usedImage) : 0),
               0,
             ),
           users: {
@@ -178,8 +170,8 @@ export class DashboardService {
 select
 	om.user_id,
 	om.role,fullname,username,
-	COALESCE(lg.image_used,0) as "imageUsed",
-	COALESCE(lg.token_used,0) as "tokenUsed"
+	COALESCE(lg.used_image,0) as "usedImage",
+	COALESCE(lg.used_credit,0) as "usedCredit"
 from
 	(
 	select
@@ -195,8 +187,8 @@ left join
 	(
 	select
 		log."userId"  as user_id ,
-		SUM(CASE WHEN log."typeGenerate" = 'image' THEN log."ImageUsed" ELSE 0 END) as image_used,
-		SUM(CASE WHEN log."typeGenerate" = 'vdo' THEN log."tokenUsed" ELSE 0 END) as token_used
+		SUM(CASE WHEN log."typeGenerate" = 'image' THEN log.used_image ELSE 0 END) as used_image,
+		SUM(CASE WHEN log."typeGenerate" != 'image' THEN log.used_credit ELSE 0 END) as used_credit
 	from
 		log
 	left join project on
@@ -212,7 +204,7 @@ left join
         : ''
     } group by log."userId" ) lg on
 	om.user_id = lg.user_id order by fullname`;
-    // console.log(sql);
+    console.log(sql);
     const result = await this.prismaService.$queryRawUnsafe(sql);
 
     return result || [];
@@ -278,15 +270,15 @@ left join
     }
     const totalTokenUsed = sumBy(
       dataLogs.filter((log) => log.typeGenerate === 'video'),
-      'tokenUsed',
+      'usedCredit',
     );
-    const totalImageUsed = sumBy(
+    const totalusedImage = sumBy(
       dataLogs.filter((log) => log.typeGenerate === 'image'),
-      'ImageUsed',
+      'usedImage',
     );
-    const summarPriceImageUsed = totalImageUsed * initialPriceImage;
+    const summarPriceusedImage = totalusedImage * initialPriceImage;
     const summarPriceTokenUsed = (totalTokenUsed / 1000) * initialPriceVideo;
-    const summaryUsed = summarPriceImageUsed + summarPriceTokenUsed;
+    const summaryUsed = summarPriceusedImage + summarPriceTokenUsed;
     const todayRange = betweenDates(
       dayjs().startOf('month'),
       dayjs().endOf('month'),
@@ -314,24 +306,24 @@ left join
         },
       }),
     ]);
-    const totalImageUsedDateNow = sumBy(dataLogsDateNow, 'ImageUsed');
+    const totalusedImageDateNow = sumBy(dataLogsDateNow, 'usedImage');
     const totalTokenUsedDateNow = sumBy(
       dataLogsDateNow.filter((log) => log.typeGenerate === 'video'),
-      'tokenUsed',
+      'usedCredit',
     );
     const totalPriceUsedImageDateNow =
-      totalImageUsedDateNow * initialPriceImage;
+      totalusedImageDateNow * initialPriceImage;
     const totalPriceUsedVdoDateNow =
       (totalTokenUsedDateNow / 1000) * initialPriceVideo;
     const sumPriceTokenUsedDateNow =
       totalPriceUsedImageDateNow + totalPriceUsedVdoDateNow;
-    const totalImageUsedDateLast = sumBy(dataLogsDateLast, 'ImageUsed');
+    const totalusedImageDateLast = sumBy(dataLogsDateLast, 'usedImage');
     const totalTokenUsedDateLast = sumBy(
       dataLogsDateLast.filter((log) => log.typeGenerate === 'video'),
-      'tokenUsed',
+      'usedCredit',
     );
     const totalPriceUsedImageDateLast =
-      totalImageUsedDateLast * initialPriceImage;
+      totalusedImageDateLast * initialPriceImage;
     const totalPriceUsedVdoDateLast =
       (totalTokenUsedDateLast / 1000) * initialPriceVideo;
     const sumPriceTokenUsedDateLast =
@@ -400,7 +392,7 @@ left join
         if (!owners[ownerName].products[product]) {
           owners[ownerName].products[product] = {
             type: product, // เปลี่ยนจาก product เป็น type
-            totalImageUsed: 0,
+            totalusedImage: 0,
             totalTokenUsed: 0,
             unitPrice:
               product === 'image' ? 0.03 : product === 'video' ? 0.0025 : null,
@@ -410,10 +402,10 @@ left join
         const group = owners[ownerName].products[product];
 
         if (product === 'image') {
-          group.totalImageUsed += log.ImageUsed ?? 0;
+          group.totalusedImage += log.usedImage ?? 0;
         }
         if (product === 'video') {
-          group.totalTokenUsed += log.tokenUsed ?? 0;
+          group.totalTokenUsed += log.usedCredit ?? 0;
         }
         return owners;
       }, {}),
@@ -469,7 +461,7 @@ left join
         if (!products[product]) {
           products[product] = {
             type: product,
-            totalImageUsed: 0,
+            totalusedImage: 0,
             totalTokenUsed: 0,
             unitPrice:
               product === 'image' ? 0.03 : product === 'video' ? 0.0025 : null,
@@ -477,10 +469,10 @@ left join
         }
         const group = products[product];
         if (product === 'image') {
-          group.totalImageUsed += log.ImageUsed ?? 0;
+          group.totalusedImage += log.usedImage ?? 0;
         }
         if (product === 'video') {
-          group.totalTokenUsed += log.tokenUsed ?? 0;
+          group.totalTokenUsed += log.usedCredit ?? 0;
         }
         return products;
       }, {}),

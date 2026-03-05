@@ -77,4 +77,12 @@ export class OrganizationMemberRepository {
     const prisma = option?.prisma ?? this.prisma;
     return prisma.organizationMember.count(condition);
   }
+
+  async aggregate(
+    condition: Prisma.OrganizationMemberAggregateArgs,
+    option?: { prisma?: TQueryClient },
+  ) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.organizationMember.aggregate(condition);
+  }
 }
