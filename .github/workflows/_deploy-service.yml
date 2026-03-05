@@ -1,5 +1,9 @@
 name: Deploy Service (Reusable)
 
+concurrency:
+  group: deploy-${{ inputs.namespace }}-${{ inputs.image_name }}
+  cancel-in-progress: true
+
 on:
   workflow_call:
     inputs:
@@ -103,6 +107,22 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ---------------------------------------------------------------------
+      # Fix stuck Helm release (pending-install / pending-upgrade / pending-rollback)
+      # ---------------------------------------------------------------------
+      - name: Fix Stuck Helm Release
+        run: |
+          CHART="${{ inputs.chart_dir }}"
+          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+          RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
+          NS="aicave-${DEPLOY_ENV}"
+          STATUS=$(helm status ${RELEASE} -n ${NS} -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo "not-found")
+          echo "Current Helm release status: ${STATUS}"
+          if [ "$STATUS" = "pending-install" ] || [ "$STATUS" = "pending-upgrade" ] || [ "$STATUS" = "pending-rollback" ]; then
+            echo "Release ${RELEASE} is stuck (${STATUS}), rolling back..."
+            helm rollback ${RELEASE} 0 -n ${NS} || helm uninstall ${RELEASE} -n ${NS} || true
+          fi
+
+      # ---------------------------------------------------------------------
       # Helm upgrade (runs on self-hosted runner which has kubectl + helm)
       # ---------------------------------------------------------------------
       - name: Helm Upgrade
@@ -123,7 +143,8 @@ jobs:
             --namespace aicave-${DEPLOY_ENV} \
             --wait \
             --timeout 5m \
-            --atomic
+            --atomic \
+            --history-max 10
 
           echo "Deployment completed: ${IMAGE}:${VER} (env: ${DEPLOY_ENV})"
 
