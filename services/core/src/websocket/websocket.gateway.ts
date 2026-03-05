@@ -182,7 +182,7 @@ export class WebsocketGatewayService
 
       // เรียก service เพื่อสร้าง task
       // Broadcast to room
-      const result = await this.generateService.createGenerationTask(
+      const result = await this.generateService.createImageGenerationTask(
         data,
         client.id,
       );

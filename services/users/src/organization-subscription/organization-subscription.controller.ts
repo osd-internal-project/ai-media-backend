@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Post } from '@nestjs/common';
 import { OrganizationSubscriptionService } from './organization-subscription.service';
 
 @Controller('organization-subscription')
@@ -15,5 +15,10 @@ export class OrganizationSubscriptionController {
   @Get('organization/:organizationId')
   findByOrganizationId(@Param('organizationId') organizationId: string) {
     return this.organizationSubscriptionService.findByOrganizationId(organizationId);
+  }
+
+  @Post('renew/:organizationId')
+  renewSubscription(@Param('organizationId') organizationId: string) {
+    return this.organizationSubscriptionService.renewSubscription(organizationId);
   }
 }

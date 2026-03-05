@@ -218,7 +218,7 @@ export class ImageProcessor extends WorkerHost {
           tokenUsed: usage.total_tokens || 0,
           ImageUsed: usage.generated_images || 0,
           referenceImages: body.image.length > 0 ? body.image : [],
-          usedImage: body.image ? body.image.length : 0,
+          usedImage: usage.generated_images || 0,
           generateConfig: this.buildGenerateConfig({
             ratio: body.ratio,
             width: body.width,

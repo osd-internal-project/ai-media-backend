@@ -360,8 +360,6 @@ export class UsersService {
       await this.creditBalanceRepo.create({
         data: {
           organizationId: personalOrg.organizationId,
-          packageCycleBalance: 0,
-          packageCycleImage: 0,
           currentCycleBalance: 0,
           currentCycleImage: 0,
           onTopBalance: 50000,

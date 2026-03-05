@@ -64,7 +64,7 @@ export class GenerateService {
   /**
    * สร้าง Generation Task และส่งเข้า Queue
    */
-  async createGenerationTask(body: RequestImageGenerateDto, clientId: string) {
+  async createImageGenerationTask(body: RequestImageGenerateDto, clientId: string) {
     const taskId = body.taskId;
     let holdImageCount = 0;
     const redisImageCacheKey = `${body.organizationId}/${body.projectId}/image_used_${body.userId}`;

@@ -19,10 +19,13 @@ import { AuthModule } from './auth/auth.module';
 import { OrganizationSubscriptionModule } from './organization-subscription/organization-subscription.module';
 import { PackageTransactionModule } from './package-transaction/package-transaction.module';
 import { CreditBalanceModule } from './credit-balance/credit-balance.module';
+import { ScheduleModule } from '@nestjs/schedule';
+
 @Module({
   imports: [
     PrismaModule,
     HttpModule,
+    ScheduleModule.forRoot(),
     UsersModule,
     GroupsModule,
     RolesModule,
