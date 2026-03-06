@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { OrganizationSubscriptionService } from './organization-subscription.service';
 
 @Controller('organization-subscription')
@@ -14,11 +14,37 @@ export class OrganizationSubscriptionController {
 
   @Get('organization/:organizationId')
   findByOrganizationId(@Param('organizationId') organizationId: string) {
-    return this.organizationSubscriptionService.findByOrganizationId(organizationId);
+    return this.organizationSubscriptionService.findByOrganizationId(
+      organizationId,
+    );
   }
 
-  @Post('renew/:organizationId')
-  renewSubscription(@Param('organizationId') organizationId: string) {
-    return this.organizationSubscriptionService.renewSubscription(organizationId);
+  @Post('restart/:organizationId')
+  restartSubscription(@Param('organizationId') organizationId: string) {
+    return this.organizationSubscriptionService.restartSubscription(
+      organizationId,
+    );
+  }
+
+  @Post('downgrade/:organizationId')
+  downgradeSubscription(
+    @Param('organizationId') organizationId: string,
+    @Body() body: { priceId: string },
+  ) {
+    return this.organizationSubscriptionService.downgradeSubscription(
+      organizationId,
+      body.priceId,
+    );
+  }
+
+  @Post('upgrade/:organizationId')
+  upgradeSubscription(
+    @Param('organizationId') organizationId: string,
+    @Body() body: { priceId: string },
+  ) {
+    return this.organizationSubscriptionService.downgradeSubscription(
+      organizationId,
+      body.priceId,
+    );
   }
 }

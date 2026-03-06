@@ -25,6 +25,7 @@ import { KeycloakService } from 'src/keycloak/keycloak.service';
 import { HttpService } from '@nestjs/axios';
 import configs from 'src/configs';
 import { firstValueFrom } from 'rxjs';
+import dayjs from 'dayjs';
 
 @Injectable()
 export class OrganizationService {
@@ -85,24 +86,14 @@ export class OrganizationService {
     });
     //Calculate Date
     const startDate = new Date(); //Start Date
-    const endDate = new Date(); //End used for check date
-    const billingDate = new Date(); //Billing Date
+
     const planDetails = plan.detailJson as any;
-    const duration = +planDetails?.duration || 1;
-    const durationUnit = planDetails?.unit || 'month';
     const imageAllowance = planDetails?.imageAllowance || 0;
     const creditAllowance = planDetails?.creditAllowance || 0;
     const maxUserAccess = planDetails?.maxUserAccess || 0;
     const periodCount = price.periodCount || 1;
-    if (durationUnit === 'month') {
-      endDate.setMonth(endDate.getMonth() + duration);
-      billingDate.setMonth(billingDate.getMonth() + duration * periodCount);
-    } else if (durationUnit === 'year') {
-      endDate.setFullYear(endDate.getFullYear() + duration);
-      billingDate.setFullYear(
-        billingDate.getFullYear() + duration * periodCount,
-      );
-    }
+    const endDate = dayjs(startDate).add(1, 'month').add(-1, 'day').toDate(); //End used for check date
+    const billingDate = dayjs(startDate).add(periodCount, 'month').add(-1, 'day').toDate(); //Billing Date
     const organization = await this.organizationRepo.create({
       data: {
         name: createOrganizationDto.name,
@@ -144,6 +135,9 @@ export class OrganizationService {
           status: 'active',
           periodCount: price.periodCount,
           periodCurrent: 1,
+          nextPlanId: plan.id,
+          nextPlanPriceId: price.id,
+          autoRenew: true,
         },
       });
     const currentCreditBalance = await this.creditBalanceRepo.create({

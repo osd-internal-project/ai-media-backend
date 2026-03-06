@@ -33,7 +33,7 @@ export class DashboardService {
      where ${
        organizationId ? `o.organization_id  = '${organizationId}'` : ''
      } `;
-    console.log(sql);
+    // console.log(sql);
     const result: any = await this.prismaService.$queryRawUnsafe(sql);
     if (result && result.length > 0) {
       return result[0];
@@ -204,7 +204,7 @@ left join
         : ''
     } group by log."userId" ) lg on
 	om.user_id = lg.user_id order by fullname`;
-    console.log(sql);
+    // console.log(sql);
     const result = await this.prismaService.$queryRawUnsafe(sql);
 
     return result || [];

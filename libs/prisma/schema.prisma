@@ -372,6 +372,9 @@ model OrganizationSubscription {
   currentPeriodStart DateTime @map("current_period_start")
   currentPeriodEnd   DateTime @map("current_period_end")
   nextBillingDate    DateTime @map("next_billing_date")
+  nextPlanId         String?  @map("next_plan_id") @db.Uuid
+  nextPlanPriceId    String?  @map("next_plan_price_id") @db.Uuid
+  autoRenew          Boolean  @default(true) @map("auto_renew")
   status             String   @default("active") @map("status")
   period             String   @default("monthly") @map("period")
   periodCount        Int      @default(1) @map("period_count")
@@ -417,7 +420,6 @@ model CreditBalance {
 
   @@map("credit_balances")
 }
-
 
 model Invitation {
   id             String   @id @default(uuid())
