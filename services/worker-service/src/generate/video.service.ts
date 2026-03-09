@@ -243,7 +243,7 @@ export class VideoProcessor extends WorkerHost {
           });
           const realCredit = await this.generateHelperService.getUsedCredit(
             usage.total_tokens,
-            body,
+            log,
             body.model,
           );
           await this.galleryRepo.updateMany({

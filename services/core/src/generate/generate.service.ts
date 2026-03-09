@@ -64,7 +64,10 @@ export class GenerateService {
   /**
    * สร้าง Generation Task และส่งเข้า Queue
    */
-  async createImageGenerationTask(body: RequestImageGenerateDto, clientId: string) {
+  async createImageGenerationTask(
+    body: RequestImageGenerateDto,
+    clientId: string,
+  ) {
     const taskId = body.taskId;
     let holdImageCount = 0;
     const redisImageCacheKey = `${body.organizationId}/${body.projectId}/image_used_${body.userId}`;
@@ -854,7 +857,7 @@ export class GenerateService {
     }
     const onhandToken =
       (body.width * body.height * body.duration * frameRate) / 1024;
-    const onhandCredit = await this.getUsedCredit(onhandToken, {}, modelname);
+    const onhandCredit = await this.getUsedCredit(onhandToken, body, modelname);
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
@@ -906,11 +909,7 @@ export class GenerateService {
         projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
 
-    const onhandCredit = await this.getUsedCredit(
-      0,
-      { duration: body.duration },
-      modelname,
-    );
+    const onhandCredit = await this.getUsedCredit(0, body, modelname);
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
@@ -962,11 +961,7 @@ export class GenerateService {
         projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
 
-    const onhandCredit = await this.getUsedCredit(
-      0,
-      { duration: body.duration },
-      modelname,
-    );
+    const onhandCredit = await this.getUsedCredit(0, body, modelname);
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
@@ -1933,6 +1928,7 @@ export class GenerateService {
       Logger.error(`Failed to update hold credit balance: ${error}`);
     }
   }
+
   async getUsedCredit(
     token: number,
     body: any,
@@ -1940,14 +1936,34 @@ export class GenerateService {
   ): Promise<{ token: number; credit: number }> {
     try {
       if (model === 'seedance-1-5-pro-251215') {
-        const perCredit = 1186.813;
-        return { token, credit: Math.round(token / perCredit) };
+        // const perCredit = 1186.813;
+        const pixels = body.width * body.height;
+        let creditPerSec = 0;
+        const hasAudio =
+          body.generateAudio === true || body.generateAudio === 'Yes'; // เช็กว่ามีเสียงไหม
+
+        // คำนวณ Resolution ตามพื้นที่ (Size px) อ้างอิงจากตาราง Excel
+        if (pixels <= 450000) {
+          // ครอบคลุมกลุ่ม 480p (เช่น 864x496 = 428,544)
+          creditPerSec = hasAudio ? 15 : 10;
+        } else if (pixels <= 950000) {
+          // ครอบคลุมกลุ่ม 720p (เช่น 1280x720 = 921,600)
+          creditPerSec = hasAudio ? 25 : 20;
+        } else {
+          // ครอบคลุมกลุ่ม 1080p (เช่น 1920x1080 = 2,073,600)
+          creditPerSec = hasAudio ? 45 : 40;
+        }
+        return {
+          token,
+          credit: creditPerSec * body.duration,
+          // credit: Math.round(token / perCredit)
+        };
       } else if (model === 'realman_avatar_picture_omni15_cv') {
-        const credit = body.duration * 42;
+        const credit = body.duration * 45;
         const token = body.duration * 49846.15385;
         return { token, credit };
       } else if (model === 'dreamactor_m20_gen_video_cvtob') {
-        const credit = body.duration * 17.5;
+        const credit = body.duration * 30;
         const token = body.duration * 20769.23077;
         return { token, credit };
       }
@@ -1955,8 +1971,50 @@ export class GenerateService {
       return err;
     }
   }
+  // async getUsedCredit(
+  //   token: number,
+  //   body: any,
+  //   model: string,
+  // ): Promise<{ token: number; credit: number }> {
+  //   try {
+  //     if (model === 'seedance-1-5-pro-251215') {
+  //       // const perCredit = 1186.813;
+  //       const pixels = body.width * body.height;
+  //       let creditPerSec = 0;
+  //       const hasAudio = body.generateAudio === true || body.generateAudio === 'Yes'; // เช็กว่ามีเสียงไหม
+
+  //       // คำนวณ Resolution ตามพื้นที่ (Size px) อ้างอิงจากตาราง Excel
+  //       if (pixels <= 450000) {
+  //         // ครอบคลุมกลุ่ม 480p (เช่น 864x496 = 428,544)
+  //         creditPerSec = hasAudio ? 15 : 10;
+  //       } else if (pixels <= 950000) {
+  //         // ครอบคลุมกลุ่ม 720p (เช่น 1280x720 = 921,600)
+  //         creditPerSec = hasAudio ? 25 : 20;
+  //       } else {
+  //         // ครอบคลุมกลุ่ม 1080p (เช่น 1920x1080 = 2,073,600)
+  //         creditPerSec = hasAudio ? 45 : 40;
+  //       }
+  //       return {
+  //         token,
+  //         credit: creditPerSec * body.duration,
+  //         // credit: Math.round(token / perCredit)
+  //       };
+  //     } else if (model === 'realman_avatar_picture_omni15_cv') {
+  //       const credit = body.duration * 45;
+  //       const token = body.duration * 49846.15385;
+  //       return { token, credit };
+  //     } else if (model === 'dreamactor_m20_gen_video_cvtob') {
+  //       const credit = body.duration * 30;
+  //       const token = body.duration * 20769.23077;
+  //       return { token, credit };
+  //     }
+  //   } catch (err) {
+  //     return err;
+  //   }
+  // }
 
   //ลบ hold image allowance ถ้า fail
+
   cancelHoldAmount(holdImageCount: number, userId: string, projectId: string) {
     this.projectMemberRepo.updateMany({
       where: { userId: userId, projectId: projectId },
