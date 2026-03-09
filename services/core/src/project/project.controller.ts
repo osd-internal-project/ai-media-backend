@@ -29,8 +29,14 @@ export class ProjectController {
   findByOrganizationId(
     @Param('organizationId') organizationId: string,
     @Query('token') token: string,
+    @Query('name') name?: string,
   ) {
-    return this.projectService.findByOrganizationId(organizationId, token);
+    const search = { name };
+    return this.projectService.findByOrganizationId(
+      organizationId,
+      token,
+      search,
+    );
   }
 
   @Get('manage/:id')

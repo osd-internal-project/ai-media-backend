@@ -164,7 +164,12 @@ export class ProjectService {
   async findById(id: string) {
     return this.projectRepo.findOne({ where: { id } });
   }
-  async findByOrganizationId(organizationId: string, token: string) {
+  async findByOrganizationId(
+    organizationId: string,
+    token: string,
+    search: { name?: string },
+  ) {
+    const { name } = search;
     const user = await this.usersRepo.findOne({ where: { token } });
 
     if (!user) {
@@ -182,6 +187,7 @@ export class ProjectService {
     const isShowAll = isOwner || isAdmin || isSuperAdmin;
     const data = await this.projectRepo.findMany({
       where: {
+        ...(name && { name: { contains: name, mode: 'insensitive' } }),
         organizationId,
         ...(!isSuperAdmin && { status: { not: 'deleted' } }),
         ...(!isShowAll && {
@@ -222,9 +228,13 @@ export class ProjectService {
                       },
                       role: typeof member === 'object' ? member.role : 'USER', // Default to USER role
                       limitCreditAllowance:
-                        typeof member === 'object' ? member.limitCreditAllowance || 0 : 0,
+                        typeof member === 'object'
+                          ? member.limitCreditAllowance || 0
+                          : 0,
                       limitImageAllowance:
-                        typeof member === 'object' ? member.limitImageAllowance || 0 : 0,
+                        typeof member === 'object'
+                          ? member.limitImageAllowance || 0
+                          : 0,
                     }),
                   ),
                 }),
