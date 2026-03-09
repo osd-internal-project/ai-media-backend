@@ -166,10 +166,9 @@ export class ProjectService {
   }
   async findByOrganizationId(
     organizationId: string,
-    token: string,
-    search: { name?: string },
+    query: { name?: string; token: string },
   ) {
-    const { name } = search;
+    const { name, token } = query;
     const user = await this.usersRepo.findOne({ where: { token } });
 
     if (!user) {
