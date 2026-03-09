@@ -22,6 +22,7 @@ import { PlanModule } from './plan/plan.module';
 import { GenerateModule } from './generate/generate.module';
 import { BullModule } from '@nestjs/bullmq';
 import { WebsocketModule } from './websocket/websocket.module';
+import { MasterModelTypeModule } from './master-model-type/master-model-type.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { WebsocketModule } from './websocket/websocket.module';
     GalleryModule,
     ProjectMemberModule,
     MasteradataConfigApiModule,
+    MasterModelTypeModule,
     DashboardModule,
     PromptGuideModule,
     PromptGuideTypeModule,
