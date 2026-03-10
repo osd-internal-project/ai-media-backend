@@ -20,6 +20,7 @@ import {
   QUEUE_NAME_DREAMACTOR,
   CreditBalanceRepository,
   ProjectRepository,
+  MasterModelTypeDto,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -69,8 +70,9 @@ export class GenerateService {
     clientId: string,
   ) {
     const taskId = body.taskId;
-    let holdImageCount = 0;
-    const redisImageCacheKey = `${body.organizationId}/${body.projectId}/image_used_${body.userId}`;
+    let holdCreditCount = 0;
+    // const redisImageCacheKey = `${body.organizationId}/${body.projectId}/image_used_${body.userId}`;
+    const redisImageCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
 
     try {
       // 1. Validate User & Project
@@ -86,33 +88,32 @@ export class GenerateService {
       if (user) {
         await this.logAudit(user.userId, 'CREATE', body, taskId);
       }
-
-      // 2. Check Quota
-      const { isQuotaExceeded, currentImageUsed, onholdImages } =
-        await this.checkCreditImageQuota(
-          user.userId,
-          body,
-          projectMember,
-          redisImageCacheKey,
-        );
-      if (isQuotaExceeded) {
-        return { status: 400, data: 'Image limit exceeded' };
-      }
-      // 2.1 Check Hold
-      holdImageCount = onholdImages;
-
-      // 3. Get Config & Model
-      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-        where: { id: 1 },
-      });
+      // 2. Get Config & Model
 
       const modelDetail = await this.modeltypeRepo.findOne({
-        where: { modelType: body.model, type: body.type },
+        where: { modelType: body.model, type: 'image' },
       });
 
       if (!modelDetail) {
         return { status: 400, data: 'Model not found' };
       }
+      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+        where: { id: 1 },
+      });
+      // 3. Check Quota
+      const { isQuotaExceeded, currentCreditUsed, onholdCredits } =
+        await this.checkCreditImageQuota(
+          user.userId,
+          body,
+          projectMember,
+          redisImageCacheKey,
+          modelDetail,
+        );
+      if (isQuotaExceeded) {
+        return { status: 400, data: 'Image limit exceeded' };
+      }
+      // 3.1 Check Hold
+      holdCreditCount = onholdCredits;
 
       let imageUrls: string[] = [];
       if (body.image && body.image.length > 0) {
@@ -147,7 +148,7 @@ export class GenerateService {
       // 6. อัพเดท cache
       await this.redis.set(
         redisImageCacheKey,
-        currentImageUsed.toString(),
+        currentCreditUsed.toString(),
         'EX',
         24 * 60 * 60,
       );
@@ -234,7 +235,7 @@ export class GenerateService {
       };
     } catch (error) {
       console.error('Error creating generation task:', error);
-      this.cancelHoldAmount(holdImageCount, body.userId, body.projectId);
+      this.cancelHoldAmount(holdCreditCount, body.userId, body.projectId);
       this.handleGenerationError(error, body.userId);
     }
   }
@@ -286,7 +287,7 @@ export class GenerateService {
         body,
         projectMember,
         redisVideoCacheKey,
-        modelDetail.modelType,
+        modelDetail,
       );
 
       if (isQuotaExceeded) {
@@ -617,22 +618,22 @@ export class GenerateService {
     body: RequestImageGenerateDto,
     projectMember: any,
     cacheKey: string,
+    model: MasterModelTypeDto,
   ): Promise<{
     isQuotaExceeded: boolean;
-    currentImageUsed: number;
-    maxImageInPlan: number;
-    onholdImages: number;
+    currentCreditUsed: number;
+    maxCreditInPlan: number;
+    onholdCredits: number;
   }> {
-    let currentImageUsed = 0;
-    const maxImage = body.maxImages || 0;
+    let currentCreditUsed = 0;
 
-    let cachedImageUsed: string | null = null;
+    let cachedCreditUsed: string | null = null;
     if (cacheKey) {
-      cachedImageUsed = await this.redis.get(cacheKey);
+      cachedCreditUsed = await this.redis.get(cacheKey);
     }
 
-    if (cachedImageUsed) {
-      currentImageUsed = parseInt(cachedImageUsed);
+    if (cachedCreditUsed) {
+      currentCreditUsed = parseInt(cachedCreditUsed);
     } else {
       // Fallback to DB calculation
       // const aggregateResult = await this.logrepo.aggregate({
@@ -655,80 +656,80 @@ export class GenerateService {
       //   },
       // });
       // currentImageUsed = aggregateResult._sum.ImageUsed || 0;
-      currentImageUsed =
-        projectMember.holdImageAllowance + projectMember.usedImageAllowance;
+      currentCreditUsed =
+        // projectMember.holdImageAllowance + projectMember.usedImageAllowance;
+        projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
+    const credit = await this.getUsedCredit(undefined, body, model);
 
-    const maxImageInPlan = projectMember?.limitImageAllowance || 0;
-    currentImageUsed = currentImageUsed + maxImage;
-
+    const maxCreditInPlan = projectMember?.limitCreditAllowance || 0;
+    currentCreditUsed = currentCreditUsed + credit.credit;
     //Check Allowence :Member > Team >Organization
-    if (currentImageUsed > maxImageInPlan) {
+    if (currentCreditUsed > maxCreditInPlan) {
       Logger.error(
-        `Image used ${
-          currentImageUsed + maxImage
-        } exceed max user image ${maxImageInPlan}`,
+        `Credit used ${
+          currentCreditUsed + credit.credit
+        } exceed max credit ${maxCreditInPlan}`,
       );
       return {
         isQuotaExceeded: true,
-        currentImageUsed: currentImageUsed,
-        maxImageInPlan: maxImageInPlan,
-        onholdImages: maxImage,
+        currentCreditUsed: currentCreditUsed,
+        maxCreditInPlan: maxCreditInPlan,
+        onholdCredits: credit.credit,
       };
     }
+
     const project = await this.projectRepo.findOne({
       where: { id: body.projectId },
     });
     if (
-      project.usedImageAllowance + project.holdImageAllowance >
-      project.limitImageAllowance
+      project.usedCreditAllowance + project.holdCreditAllowance >
+      project.limitCreditAllowance
     ) {
       Logger.error(
-        `Image used ${
-          currentImageUsed + maxImage
-        } exceed max team image ${maxImageInPlan}`,
+        `Credit used ${
+          currentCreditUsed + credit.credit
+        } exceed max credit ${maxCreditInPlan}`,
       );
       return {
         isQuotaExceeded: true,
-        currentImageUsed: currentImageUsed,
-        maxImageInPlan: maxImageInPlan,
-        onholdImages: maxImage,
+        currentCreditUsed: currentCreditUsed,
+        maxCreditInPlan: maxCreditInPlan,
+        onholdCredits: credit.credit,
       };
     }
     const creditBalance = await this.creditBalanceRepo.findOne({
       where: { organizationId: body.organizationId },
     });
     if (
-      creditBalance.currentCycleImage +
-        creditBalance.onTopImage -
-        creditBalance.holdImage <
-      maxImage
+      creditBalance.currentCycleImage + creditBalance.onTopImage <
+      credit.credit
     ) {
       Logger.error(
-        `Image used ${
-          currentImageUsed + maxImage
-        } exceed max organize image ${maxImageInPlan}`,
+        `Credit used ${
+          currentCreditUsed + credit.credit
+        } exceed max organize credit ${maxCreditInPlan}`,
       );
 
       return {
         isQuotaExceeded: true,
-        currentImageUsed: currentImageUsed,
-        maxImageInPlan: maxImageInPlan,
-        onholdImages: maxImage,
+        currentCreditUsed: currentCreditUsed,
+        maxCreditInPlan: maxCreditInPlan,
+        onholdCredits: credit.credit,
       };
     }
     this.updateHoldCreditBalance(
       userId,
       body.organizationId,
       body.projectId,
-      'image',
-      maxImage,
+      'credit',
+      credit.credit,
     );
     return {
       isQuotaExceeded: false,
-      currentImageUsed: currentImageUsed,
-      maxImageInPlan: maxImageInPlan,
-      onholdImages: maxImage,
+      currentCreditUsed: currentCreditUsed,
+      maxCreditInPlan: maxCreditInPlan,
+      onholdCredits: credit.credit,
     };
   }
 
@@ -810,7 +811,7 @@ export class GenerateService {
     body: RequestVideoGenerateDto,
     projectMember: any,
     cacheKey: string,
-    modelname: string,
+    model: MasterModelTypeDto,
   ): Promise<{
     isQuotaExceeded: boolean;
     incrementCredit: number;
@@ -857,7 +858,7 @@ export class GenerateService {
     }
     const onhandToken =
       (body.width * body.height * body.duration * frameRate) / 1024;
-    const onhandCredit = await this.getUsedCredit(onhandToken, body, modelname);
+    const onhandCredit = await this.getUsedCredit(onhandToken, body, model);
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
@@ -887,7 +888,7 @@ export class GenerateService {
     body: RequestVideoGenerateDto,
     projectMember: any,
     cacheKey: string,
-    modelname: string,
+    model: MasterModelTypeDto,
   ): Promise<{
     isQuotaExceeded: boolean;
     incrementCredit: number;
@@ -909,7 +910,7 @@ export class GenerateService {
         projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
 
-    const onhandCredit = await this.getUsedCredit(0, body, modelname);
+    const onhandCredit = await this.getUsedCredit(0, body, model);
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
@@ -939,7 +940,7 @@ export class GenerateService {
     body: RequestVideoGenerateDto,
     projectMember: any,
     cacheKey: string,
-    modelname: string,
+    model: MasterModelTypeDto,
   ): Promise<{
     isQuotaExceeded: boolean;
     incrementCredit: number;
@@ -961,7 +962,7 @@ export class GenerateService {
         projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
 
-    const onhandCredit = await this.getUsedCredit(0, body, modelname);
+    const onhandCredit = await this.getUsedCredit(0, body, model);
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
@@ -1153,7 +1154,7 @@ export class GenerateService {
         body,
         projectMember,
         redisOmnihumenCacheKey,
-        modelDetail.modelType,
+        modelDetail,
       );
 
       if (isQuotaExceeded) {
@@ -1471,7 +1472,7 @@ export class GenerateService {
         body,
         projectMember,
         redisDreamactorCacheKey,
-        modelDetail.modelType,
+        modelDetail,
       );
 
       if (isQuotaExceeded) {
@@ -1932,10 +1933,14 @@ export class GenerateService {
   async getUsedCredit(
     token: number,
     body: any,
-    model: string,
+    model: MasterModelTypeDto,
   ): Promise<{ token: number; credit: number }> {
     try {
-      if (model === 'seedance-1-5-pro-251215') {
+      if (model.type === 'image') {
+        const credit = body.images * 10;
+        const token = 0;
+        return { token, credit };
+      } else if (model.type ==='video') {
         // const perCredit = 1186.813;
         const pixels = body.width * body.height;
         let creditPerSec = 0;
@@ -1958,11 +1963,11 @@ export class GenerateService {
           credit: creditPerSec * body.duration,
           // credit: Math.round(token / perCredit)
         };
-      } else if (model === 'realman_avatar_picture_omni15_cv') {
+      } else if (model.type === 'omnihumen') {
         const credit = body.duration * 45;
         const token = body.duration * 49846.15385;
         return { token, credit };
-      } else if (model === 'dreamactor_m20_gen_video_cvtob') {
+      } else if (model.type === 'dreamactor') {
         const credit = body.duration * 30;
         const token = body.duration * 20769.23077;
         return { token, credit };
@@ -2015,10 +2020,14 @@ export class GenerateService {
 
   //ลบ hold image allowance ถ้า fail
 
-  cancelHoldAmount(holdImageCount: number, userId: string, projectId: string) {
+  cancelHoldAmount(
+    holdCreditAllowance: number,
+    userId: string,
+    projectId: string,
+  ) {
     this.projectMemberRepo.updateMany({
       where: { userId: userId, projectId: projectId },
-      data: { holdImageAllowance: { decrement: holdImageCount } },
+      data: { holdCreditAllowance: { decrement: holdCreditAllowance } },
     });
   }
 }
