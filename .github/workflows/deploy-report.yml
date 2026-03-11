@@ -14,5 +14,5 @@ jobs:
     with:
       service_path: services/report
       image_name: ai-report-be
-      chart_dir: aicave-report-chart
+      chart_dir: charts/aicave-report-chart
     secrets: inherit

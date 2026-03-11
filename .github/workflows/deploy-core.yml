@@ -14,5 +14,5 @@ jobs:
     with:
       service_path: services/core
       image_name: ai-core-be
-      chart_dir: aicave-core-chart
+      chart_dir: charts/aicave-core-chart
     secrets: inherit

@@ -8,14 +8,16 @@ replicaCount: 3
 
 image:
   repository: docker.io/library/ai-users-be
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   tag: "v1.0.4"
+
+imagePullSecretName: huawei-swr-secret
 
 service:
   type: ClusterIP
   port: 8972
   targetPort: 4000
-  containerPort: 8972
+  containerPort: 4000
 
 ingress:
   enabled: true
@@ -34,7 +36,7 @@ ingress:
     secretName: aicave-console-tls
 
 env:
-  nodeEnv: "production"
+  nodeEnv: "development"
   port: "4000"
   nodeTlsRejectUnauthorized: "0"
   databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
@@ -46,6 +48,7 @@ env:
   keycloakRealm: "eportal"
   keycloakClientId: "eportal-client-id"
   keycloakClientSecret: "kovdYL3AAs9v6e3zxNw4o3CbaBwZiCId"
+  keycloakRedirectUri: "https://www.aicave.ai/callback"
 
 resources:
   requests:

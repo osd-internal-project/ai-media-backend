@@ -17,6 +17,8 @@ spec:
       labels:
         app: {{ .Values.appName }}
     spec:
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecretName }}
       containers:
       - name: {{ .Values.appName }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -29,12 +31,28 @@ spec:
           value: {{ .Values.env.nodeEnv | quote }}
         - name: PORT
           value: {{ .Values.env.port | quote }}
+        - name: NODE_TLS_REJECT_UNAUTHORIZED
+          value: {{ .Values.env.nodeTlsRejectUnauthorized | quote }}
         - name: DATABASE_URL
           value: {{ .Values.env.databaseUrl | quote }}
         - name: PATH_MOUNTDIR_UPLOAD
           value: {{ .Values.env.pathMountdirUpload | quote }}
         - name: PATH_DOMAIN
           value: {{ .Values.env.pathDomain | quote }}
+        - name: EMAIL_API_URL
+          value: {{ .Values.env.emailApiUrl | quote }}
+        - name: FRONTEND_URL
+          value: {{ .Values.env.frontendUrl | quote }}
+        - name: KEYCLOAK_URL
+          value: {{ .Values.env.keycloakUrl | quote }}
+        - name: KEYCLOAK_REALM
+          value: {{ .Values.env.keycloakRealm | quote }}
+        - name: KEYCLOAK_CLIENT_ID
+          value: {{ .Values.env.keycloakClientId | quote }}
+        - name: KEYCLOAK_CLIENT_SECRET
+          value: {{ .Values.env.keycloakClientSecret | quote }}
+        - name: KEYCLOAK_REDIRECT_URI
+          value: {{ .Values.env.keycloakRedirectUri | quote }}
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

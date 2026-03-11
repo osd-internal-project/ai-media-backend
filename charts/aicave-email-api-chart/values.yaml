@@ -1,33 +1,30 @@
-# Default values for aicave-email-worker-service
+# Default values for aicave-email-api-service
 # This is a YAML-formatted file.
 # Internal service only - no ingress.
+# Accessed via: aicave-email-api-service.<namespace>.svc.cluster.local:8974
 
-appName: aicave-email-worker-service
+appName: aicave-email-api-service
 namespace: aicave-prod
 replicaCount: 3
 
 image:
-  repository: docker.io/library/ai-cave-email-worker
-  pullPolicy: IfNotPresent
-  tag: "v1.0.3"
+  repository: docker.io/library/ai-cave-email-api
+  pullPolicy: Always
+  tag: "v1.0.1"
+
+imagePullSecretName: huawei-swr-secret
 
 service:
   type: ClusterIP
-  port: 8975
-  targetPort: 5001
-  containerPort: 8975
+  port: 8974
+  targetPort: 5000
+  containerPort: 5000
 
 env:
   nodeEnv: "Production"
-  port: "5001"
+  port: "5000"
   redisHost: "my-redis-master"
   redisPort: "6379"
-  smtpHost: "smtp.office365.com"
-  smtpPort: "587"
-  smtpUser: "internalsupport@osd.co.th"
-  smtpPassword: "Internal-support@osd1234."
-  smtpFrom: "internalsupport@osd.co.th"
-  smtpService: "outlook"
 
 resources:
   requests:

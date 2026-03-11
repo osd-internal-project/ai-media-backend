@@ -14,5 +14,5 @@ jobs:
     with:
       service_path: services/email-worker
       image_name: ai-cave-email-worker
-      chart_dir: aicave-email-worker-chart
+      chart_dir: charts/aicave-email-worker-chart
     secrets: inherit

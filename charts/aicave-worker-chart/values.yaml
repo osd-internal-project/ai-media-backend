@@ -1,21 +1,23 @@
-# Default values for aicave-core-service
+# Default values for aicave-worker-service
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-appName: aicave-core-service
+appName: aicave-worker-service
 namespace: aicave-prod
 replicaCount: 3
 
 image:
-  repository: docker.io/library/ai-core-be
-  pullPolicy: IfNotPresent
-  tag: "v1.0.30"
+  repository: docker.io/library/ai-cave-worker-service
+  pullPolicy: Always
+  tag: "v1.0.2"
+
+imagePullSecretName: huawei-swr-secret
 
 service:
   type: ClusterIP
-  port: 8971
-  targetPort: 4002
-  containerPort: 8971
+  port: 8976
+  targetPort: 4000
+  containerPort: 4000
 
 ingress:
   enabled: true
@@ -23,6 +25,7 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
     nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
     nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
     nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "32k"
@@ -31,27 +34,24 @@ ingress:
   hosts:
     - host: www.aicave.ai
       paths:
-        - path: /public/api/v1/core(/|$)(.*)
+        - path: /public/api/v1/worker(/|$)(.*)
           pathType: ImplementationSpecific
   tls:
     enabled: true
     secretName: aicave-console-tls
 
 env:
-  nodeEnv: "Production"
-  port: "4002"
+  nodeEnv: "Development"
+  port: "4000"
   databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
-  pathMountdirUpload: "./uploads"
+  redisHost: "my-redis-master.aicave-prod.svc.cluster.local"
+  redisPort: "6379"
   storagePath: "https://www.aicave.ai/public/api/v1/s3"
-  byteplusAccessKey: "AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM"
-  byteplusSecretKey: "T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ=="
   tosBucket: "ai-cave"
   tosAccessKey: "AKAPYjgyZmRiNzcwOGUzNGQzMWEzOTljMmJlMGMxZmIxN2M"
   tosSecretKey: "WW1aaU5URTVNV1ptWmpKak5HWTJNbUpoTTJJeU1HWmlaak0zTlRRMVpUVQ=="
   tosRegion: "ap-southeast-3"
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
-  redisHost: "my-redis-master"
-  redisPort: "6379"
 
 resources:
   requests:
