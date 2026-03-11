@@ -166,9 +166,9 @@ export class ProjectService {
   }
   async findByOrganizationId(
     organizationId: string,
-    query: { name?: string; token: string },
+    query: { name?: string; token: string; status?: string },
   ) {
-    const { name, token } = query;
+    const { name, token, status } = query;
     const user = await this.usersRepo.findOne({ where: { token } });
 
     if (!user) {
@@ -187,6 +187,7 @@ export class ProjectService {
     const data = await this.projectRepo.findMany({
       where: {
         ...(name && { name: { contains: name, mode: 'insensitive' } }),
+        ...(status && { status }),
         organizationId,
         ...(!isSuperAdmin && { status: { not: 'deleted' } }),
         ...(!isShowAll && {

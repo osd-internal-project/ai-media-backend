@@ -110,7 +110,7 @@ export class DreamactorProcessor extends WorkerHost {
     console.log(`taskId`, taskId, clientId, body, userId);
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
-    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${userId}`;
+    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
     try {
       // 1. ส่ง event "started" ไปยัง Core Service

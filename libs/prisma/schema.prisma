@@ -524,6 +524,7 @@ model PlanPrice {
   detail          Json?   @map("detail") @db.JsonB
   periodCount     Int     @default(1) @map("period_count")
   periodUnit      String? @db.VarChar(20)
+  // priceLevel      Int     @default(0) @map("price_level") @db.Integer()
 
   // @@unique([])
   @@map("plan_prices")

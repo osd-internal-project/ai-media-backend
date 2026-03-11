@@ -72,7 +72,7 @@ export class GenerateService {
     const taskId = body.taskId;
     let holdCreditCount = 0;
     // const redisImageCacheKey = `${body.organizationId}/${body.projectId}/image_used_${body.userId}`;
-    const redisImageCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
+    const redisImageCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${body.userId}`;
 
     try {
       // 1. Validate User & Project
@@ -660,7 +660,7 @@ export class GenerateService {
         // projectMember.holdImageAllowance + projectMember.usedImageAllowance;
         projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
-    const credit = await this.getUsedCredit(undefined, body, model);
+    const credit = await this.getUsedCredit(0, body, model);
 
     const maxCreditInPlan = projectMember?.limitCreditAllowance || 0;
     currentCreditUsed = currentCreditUsed + credit.credit;
@@ -1113,7 +1113,7 @@ export class GenerateService {
   async createOmnihumenGenerationTask(body: any, clientId: string) {
     let taskId = body.taskId;
     // const redisOmnihumenCacheKey = `${body.organizationId}/${body.projectId}/omnihumen_used_${body.userId}`;
-    const redisOmnihumenCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
+    const redisOmnihumenCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${body.userId}`;
 
     try {
       // 1. Validate User & Project
@@ -1430,7 +1430,7 @@ export class GenerateService {
   async createDreamactorGenerationTask(body: any, clientId: string) {
     let taskId = body.taskId;
     // const redisDreamactorCacheKey = `${body.organizationId}/${body.projectId}/dreamactor_used_${body.userId}`;
-    const redisDreamactorCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
+    const redisDreamactorCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${body.userId}`;
     try {
       // 1. Validate User & Project
       const { user, projectMember } = await this.validateUserAndProject(
@@ -1936,10 +1936,56 @@ export class GenerateService {
     model: MasterModelTypeDto,
   ): Promise<{ token: number; credit: number }> {
     try {
+      // 1. Dynamic Formula Check
+      if (
+        model?.modelDetails &&
+        (model.modelDetails.calculationType === 'FORMULA' ||
+         model.modelDetails.calculationType === 'USE_TOKEN' ||
+         model.modelDetails.calculationType === 'NOT_USE_TOKEN')
+      ) {
+        try {
+          const { calculationType, tokenFormula, creditFormula, formula } = model.modelDetails;
+          let calculatedToken = token;
+          let calculatedCredit = 0;
+
+          const evaluate = (expr: string, t: number, b: any) => {
+            if (!expr) return 0;
+            const isExpr = !expr.includes(';') && !expr.includes('return ');
+            const code = isExpr ? `return ${expr};` : expr;
+            const evalFn = new Function('token', 'body', `"use strict"; ${code}`);
+            return evalFn(t, b);
+          };
+
+          if (calculationType === 'NOT_USE_TOKEN') {
+            calculatedToken = 0;
+            calculatedCredit = evaluate(creditFormula || formula, calculatedToken, body);
+          } else if (calculationType === 'USE_TOKEN') {
+            if (token > 0) {
+              calculatedToken = token;
+            } else if (tokenFormula) {
+              calculatedToken = evaluate(tokenFormula, token, body);
+            } else {
+              calculatedToken = 0;
+            }
+            calculatedCredit = evaluate(creditFormula || formula, calculatedToken, body);
+          } else if (calculationType === 'FORMULA') {
+            calculatedCredit = evaluate(formula, token, body);
+            if (model.type === 'image') calculatedToken = 0;
+          }
+
+          if (typeof calculatedCredit === 'number' && !isNaN(calculatedCredit)) {
+            return { token: calculatedToken, credit: calculatedCredit };
+          }
+        } catch (err) {
+          console.error('Error evaluating dynamic formula, falling back to default logic:', err);
+        }
+      }
+
+      // 2. Existing Hardcoded Logic (Fallback)
       if (model.type === 'image') {
         const credit = body.images * 10;
-        const token = 0;
-        return { token, credit };
+        const outToken = 0;
+        return { token: outToken, credit };
       } else if (model.type ==='video') {
         // const perCredit = 1186.813;
         const pixels = body.width * body.height;
@@ -1965,12 +2011,12 @@ export class GenerateService {
         };
       } else if (model.type === 'omnihumen') {
         const credit = body.duration * 45;
-        const token = body.duration * 49846.15385;
-        return { token, credit };
+        const outToken = body.duration * 49846.15385;
+        return { token: outToken, credit };
       } else if (model.type === 'dreamactor') {
         const credit = body.duration * 30;
-        const token = body.duration * 20769.23077;
-        return { token, credit };
+        const outToken = body.duration * 20769.23077;
+        return { token: outToken, credit };
       }
     } catch (err) {
       return err;
@@ -2019,7 +2065,52 @@ export class GenerateService {
   // }
 
   //ลบ hold image allowance ถ้า fail
+ async getUsedCreditBak(
+    token: number,
+    body: any,
+    model: MasterModelTypeDto,
+  ): Promise<{ token: number; credit: number }> {
+    try {
+      if (model.type === 'image') {
+        const credit = body.images * 10;
+        const token = 0;
+        return { token, credit };
+      } else if (model.type ==='video') {
+        // const perCredit = 1186.813;
+        const pixels = body.width * body.height;
+        let creditPerSec = 0;
+        const hasAudio =
+          body.generateAudio === true || body.generateAudio === 'Yes'; // เช็กว่ามีเสียงไหม
 
+        // คำนวณ Resolution ตามพื้นที่ (Size px) อ้างอิงจากตาราง Excel
+        if (pixels <= 450000) {
+          // ครอบคลุมกลุ่ม 480p (เช่น 864x496 = 428,544)
+          creditPerSec = hasAudio ? 15 : 10;
+        } else if (pixels <= 950000) {
+          // ครอบคลุมกลุ่ม 720p (เช่น 1280x720 = 921,600)
+          creditPerSec = hasAudio ? 25 : 20;
+        } else {
+          // ครอบคลุมกลุ่ม 1080p (เช่น 1920x1080 = 2,073,600)
+          creditPerSec = hasAudio ? 45 : 40;
+        }
+        return {
+          token,
+          credit: creditPerSec * body.duration,
+          // credit: Math.round(token / perCredit)
+        };
+      } else if (model.type === 'omnihumen') {
+        const credit = body.duration * 45;
+        const token = body.duration * 49846.15385;
+        return { token, credit };
+      } else if (model.type === 'dreamactor') {
+        const credit = body.duration * 30;
+        const token = body.duration * 20769.23077;
+        return { token, credit };
+      }
+    } catch (err) {
+      return err;
+    }
+  }
   cancelHoldAmount(
     holdCreditAllowance: number,
     userId: string,

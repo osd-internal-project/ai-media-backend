@@ -1,17 +1,19 @@
 import { MasterdataModelTypeRepository } from '@ai-media/share';
-import { Injectable } from '@nestjs/common'; 
+import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class MasterModelTypeService {
-  constructor(private readonly masterModelTypeRepo: MasterdataModelTypeRepository) {}
+  constructor(
+    private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
+  ) {}
 
   async create(data: Prisma.MasterModelTypeCreateInput) {
     return this.masterModelTypeRepo.create({ data });
   }
 
   async findAll() {
-    return this.masterModelTypeRepo.findAll({});
+    return this.masterModelTypeRepo.findAll({ orderBy: { id: 'asc' } });
   }
 
   async findOne(id: number) {

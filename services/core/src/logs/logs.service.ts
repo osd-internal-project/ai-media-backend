@@ -969,16 +969,19 @@ export class LogsService {
         userId: findUser.userId,
       },
     });
-    const currentCredit =
-      type === 'image'
-        ? projectMember.holdImageAllowance + projectMember.usedImageAllowance ||
-          0
-        : projectMember.holdCreditAllowance +
-            projectMember.usedCreditAllowance || 0;
-    const totalCredit =
-      type === 'image'
-        ? projectMember.limitImageAllowance || 0
-        : projectMember.limitCreditAllowance || 0;
+    // const currentCredit =
+    //   type === 'image'
+    //     ? projectMember.holdImageAllowance + projectMember.usedImageAllowance ||
+    //       0
+    //     : projectMember.holdCreditAllowance +
+    //         projectMember.usedCreditAllowance || 0;
+    // const totalCredit =
+    //   type === 'image'
+    //     ? projectMember.limitImageAllowance || 0
+    //     : projectMember.limitCreditAllowance || 0;
+
+    const currentCredit =projectMember.holdCreditAllowance + projectMember.usedCreditAllowance || 0;
+    const totalCredit = projectMember.limitCreditAllowance || 0;
 
     return {
       usedCredit: currentCredit,

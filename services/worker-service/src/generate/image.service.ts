@@ -84,7 +84,7 @@ export class ImageProcessor extends WorkerHost {
       job.data as ImageProcessJob;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
-    const redisImageCacheKey = `${body.organizationId}/${body.projectId}/image_used_${userId}`;
+    const redisImageCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
     try {
       const totalImages = dataImage.length;

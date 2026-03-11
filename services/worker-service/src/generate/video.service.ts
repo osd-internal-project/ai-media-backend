@@ -106,7 +106,7 @@ export class VideoProcessor extends WorkerHost {
   async process(job: any, token?: string): Promise<any> {
     const { taskId, clientId, body, userId } = job.data as VideoProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
-    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${userId}`;
+    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
 
@@ -243,7 +243,7 @@ export class VideoProcessor extends WorkerHost {
           });
           const realCredit = await this.generateHelperService.getUsedCredit(
             usage.total_tokens,
-            log,
+            body,
             body.model,
           );
           await this.galleryRepo.updateMany({

@@ -108,7 +108,7 @@ export class OmnihumenProcessor extends WorkerHost {
     const { taskId, clientId, body, userId, reqKey, omnihumenTaskId } =
       job.data as OmnihumenProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
-    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${userId}`;
+    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
 
@@ -213,7 +213,7 @@ export class OmnihumenProcessor extends WorkerHost {
             type: 'omnihumen',
             projectId: body.projectId,
           });
-          const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/omnihumen_used_${body.userId}`;
+          const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${body.userId}`;
           const videoRes = await axios.get(videoUrl, {
             responseType: 'arraybuffer',
             httpsAgent: this.agent,

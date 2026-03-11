@@ -17,6 +17,7 @@ import {
   ProjectRepository,
   ProjectMemberRepository,
   CreditBalanceRepository,
+  MasterdataModelTypeRepository,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
 
@@ -30,6 +31,7 @@ export class GenerateHelperService {
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
+    private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
   ) {}
 
   //Update Credit When Generate Fail
@@ -75,11 +77,15 @@ export class GenerateHelperService {
         data:
           unitType === 'image'
             ? {
-                holdImageAllowance: { decrement: calculateAmount || trueAmount },
+                holdImageAllowance: {
+                  decrement: calculateAmount || trueAmount,
+                },
                 usedImageAllowance: { increment: trueAmount },
               }
             : {
-                holdCreditAllowance: { decrement: calculateAmount || trueAmount },
+                holdCreditAllowance: {
+                  decrement: calculateAmount || trueAmount,
+                },
                 usedCreditAllowance: { increment: trueAmount },
               },
       });
@@ -165,20 +171,90 @@ export class GenerateHelperService {
   async getUsedCredit(
     token: number,
     body: any,
-    model: string,
+    modelName: string,
   ): Promise<{ token: number; credit: number }> {
     try {
-      if (model === 'seedance-1-5-pro-251215') {
+      const model = await this.masterModelTypeRepo.findOne({
+        where: { modelType: modelName },
+      });
+
+      // 1. Dynamic Formula Check
+      const modelDetails = model?.modelDetails as any;
+
+      if (
+        modelDetails &&
+        (modelDetails.calculationType === 'FORMULA' ||
+          modelDetails.calculationType === 'USE_TOKEN' ||
+          modelDetails.calculationType === 'NOT_USE_TOKEN')
+      ) {
+        try {
+          const { calculationType, tokenFormula, creditFormula, formula } =
+            modelDetails;
+          let calculatedToken = token;
+          let calculatedCredit = 0;
+
+          const evaluate = (expr: string, t: number, b: any) => {
+            if (!expr) return 0;
+            const isExpr = !expr.includes(';') && !expr.includes('return ');
+            const code = isExpr ? `return ${expr};` : expr;
+            const evalFn = new Function(
+              'token',
+              'body',
+              `"use strict"; ${code}`,
+            );
+            return evalFn(t, b);
+          };
+
+          if (calculationType === 'NOT_USE_TOKEN') {
+            calculatedToken = 0;
+            calculatedCredit = evaluate(
+              creditFormula || formula,
+              calculatedToken,
+              body,
+            );
+          } else if (calculationType === 'USE_TOKEN') {
+            if (token > 0) {
+              calculatedToken = token;
+            } else if (tokenFormula) {
+              calculatedToken = evaluate(tokenFormula, token, body);
+            } else {
+              calculatedToken = 0;
+            }
+            calculatedCredit = evaluate(
+              creditFormula || formula,
+              calculatedToken,
+              body,
+            );
+          } else if (calculationType === 'FORMULA') {
+            calculatedCredit = evaluate(formula, token, body);
+            if (model.type === 'image') calculatedToken = 0;
+          }
+
+          if (
+            typeof calculatedCredit === 'number' &&
+            !isNaN(calculatedCredit)
+          ) {
+            return { token: calculatedToken, credit: calculatedCredit };
+          }
+        } catch (err) {
+          console.error(
+            'Error evaluating dynamic formula, falling back to default logic:',
+            err,
+          );
+        }
+      }
+
+      if (modelName === 'seedance-1-5-pro-251215') {
         const perCredit = 1186.813;
         return { token, credit: Math.round(token / perCredit) };
-      } else if (model === 'realman_avatar_picture_omni15_cv') {
+      } else if (modelName === 'realman_avatar_picture_omni15_cv') {
         const credit = body.duration * 42;
-        const token = body.duration * 49846.15385;
-        return { token, credit };
-      } else if (model === 'dreamactor_m20_gen_video_cvtob') {
+        const outToken = body.duration * 49846.15385;
+        return { token: outToken, credit };
+      } else if (modelName === 'dreamactor_m20_gen_video_cvtob') {
         const credit = body.duration * 17.5;
-        const token = body.duration * 20769.23077;
-        return { token, credit };
+        const outToken = body.duration * 20769.23077;
+        return { token: outToken, credit };
       }
     } catch (err) {
       return err;
