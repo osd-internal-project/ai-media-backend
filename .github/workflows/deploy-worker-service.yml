@@ -14,5 +14,5 @@ jobs:
     with:
       service_path: services/worker-service
       image_name: ai-cave-worker-service
-      chart_dir: aicave-worker-chart
+      chart_dir: charts/aicave-worker-chart
     secrets: inherit
