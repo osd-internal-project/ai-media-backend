@@ -54,7 +54,9 @@ export class WebsocketGatewayService
     this.redisSubscriber = new Redis({
       host: redisConf.redisHost,
       port: redisConf.redisPort,
-      password: redisConf.redisPassword,
+      ...(redisConf.redisPassword && {
+        password: redisConf.redisPassword,
+      }),
       retryStrategy: (times) => {
         return Math.min(times * 50, 2000);
       },

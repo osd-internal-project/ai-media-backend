@@ -21,6 +21,11 @@ import { LogsService } from 'src/logs/logs.service';
     RedisModule.forRoot({
       type: 'single',
       url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
+      ...(process.env.REDIS_PASSWORD && {
+        options: {
+          password: process.env.REDIS_PASSWORD,
+        },
+      }),
     }),
     BullModule.registerQueue({
       name: QUEUE_NAME_IMAGE,
