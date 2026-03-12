@@ -22,11 +22,11 @@ ingress:
 env:
   nodeEnv: "Development"
   port: "4000"
-  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave_sit?schema=public"
+  databaseUrl: "postgresql://ai_cave_sit:osd@1234@10.134.2.3:5432/ai_cave_sit?schema=public"
   redisHost: "my-redis-master.redis.svc.cluster.local"
   redisPort: "6379"
   storagePath: "https://sit.aicave.ai/public/api/v1/s3"
-  tosBucket: "ai-cave"
+  tosBucket: "ai-cave-sit"
   tosAccessKey: "AKAPYjgyZmRiNzcwOGUzNGQzMWEzOTljMmJlMGMxZmIxN2M"
   tosSecretKey: "WW1aaU5URTVNV1ptWmpKak5HWTJNbUpoTTJJeU1HWmlaak0zTlRRMVpUVQ=="
   tosRegion: "ap-southeast-3"
