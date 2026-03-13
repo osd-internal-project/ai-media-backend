@@ -1,12 +1,22 @@
 name: Deploy Email API Service
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "services/email-api/**"
-      - "libs/**"
+  # push:
+    # branches: [main]
+    # paths:
+    #   - "services/email-api/**"
+    #   - "libs/**"
   workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: 'Deploy env'
+        required: true
+        type: choice
+        default: sit
+        options:
+          - sit
+          - uat
+          - prod
 
 jobs:
   deploy:
@@ -15,4 +25,5 @@ jobs:
       service_path: services/email-api
       image_name: ai-cave-email-api
       chart_dir: charts/aicave-email-api-chart
+      deploy_env: ${{ inputs.deploy_env || 'sit' }}
     secrets: inherit

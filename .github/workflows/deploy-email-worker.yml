@@ -1,12 +1,22 @@
 name: Deploy Email Worker Service
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "services/email-worker/**"
-      - "libs/**"
+  # push:
+    # branches: [main]
+    # paths:
+    #   - "services/email-worker/**"
+    #   - "libs/**"
   workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: 'Deploy env'
+        required: true
+        type: choice
+        default: sit
+        options:
+          - sit
+          - uat
+          - prod
 
 jobs:
   deploy:
@@ -15,4 +25,5 @@ jobs:
       service_path: services/email-worker
       image_name: ai-cave-email-worker
       chart_dir: charts/aicave-email-worker-chart
+      deploy_env: ${{ inputs.deploy_env || 'sit' }}
     secrets: inherit

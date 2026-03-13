@@ -1,12 +1,22 @@
 name: Deploy Report Service
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "services/report/**"
-      - "libs/**"
+  # push:
+    # branches: [main]
+    # paths:
+    #   - "services/report/**"
+    #   - "libs/**"
   workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: 'Deploy env'
+        required: true
+        type: choice
+        default: sit
+        options:
+          - sit
+          - uat
+          - prod
 
 jobs:
   deploy:
@@ -15,4 +25,5 @@ jobs:
       service_path: services/report
       image_name: ai-report-be
       chart_dir: charts/aicave-report-chart
+      deploy_env: ${{ inputs.deploy_env || 'sit' }}
     secrets: inherit

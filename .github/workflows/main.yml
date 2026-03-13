@@ -1,9 +1,22 @@
 name: CI Workflow
 
 on:
-  push:
-    branches: [main]
+  # push:
+  #   branches: [main]
   workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: 'Deploy env'
+        required: true
+        type: choice
+        default: sit
+        options:
+          - sit
+          - uat
+          - prod
+
+env:
+  DEPLOY_ENV: ${{ inputs.deploy_env || 'sit' }}
 
 jobs:
   build-and-deploy:
@@ -26,7 +39,7 @@ jobs:
           echo "ver=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
           echo "📦 Package: $(jq -r .name package.json)"
           echo "📦 Version: $(jq -r .version package.json)"
-          echo "🌍 Deploy Env: ${{ secrets.DEPLOY_ENV }}"
+          echo "🌍 Deploy Env: ${{ env.DEPLOY_ENV }}"
 
       # ---------------------------------------------------------------------
       # Build Docker image
@@ -132,7 +145,7 @@ jobs:
       #   run: |
       #     set -e
 
-      #     DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+      #     DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
       #     NAME="${{ steps.pkg.outputs.name }}"
       #     VER="${{ steps.pkg.outputs.ver }}"
 
@@ -155,6 +168,6 @@ jobs:
       # - name: Verify Deployment
       #   run: |
       #     kubectl rollout status deployment/aicave-console \
-      #       -n aicave-${{ secrets.DEPLOY_ENV }}
-      #     kubectl get pods -n aicave-${{ secrets.DEPLOY_ENV }} \
+      #       -n aicave-${{ env.DEPLOY_ENV }}
+      #     kubectl get pods -n aicave-${{ env.DEPLOY_ENV }} \
       #       -l app=aicave-console
