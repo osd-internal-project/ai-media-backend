@@ -7,6 +7,16 @@ on:
       - "services/core/**"
       - "libs/**"
   workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: 'Deploy env'
+        required: true
+        type: choice
+        default: sit
+        options:
+          - sit
+          - uat
+          - prod
 
 jobs:
   deploy:
@@ -15,4 +25,5 @@ jobs:
       service_path: services/core
       image_name: ai-core-be
       chart_dir: charts/aicave-core-chart
+      deploy_env: ${{ inputs.deploy_env || 'sit' }}
     secrets: inherit

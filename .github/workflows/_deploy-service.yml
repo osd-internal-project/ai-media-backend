@@ -19,6 +19,10 @@ on:
         description: "Helm chart directory name (e.g. aicave-core-chart)"
         required: true
         type: string
+      deploy_env:
+        description: "Deploy env (sit, uat, prod)"
+        required: true
+        type: string
 
 jobs:
   build-and-deploy:
@@ -43,7 +47,7 @@ jobs:
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
           echo "Package: ${{ inputs.image_name }}"
           echo "Version: ${VER}"
-          echo "Deploy Env: ${{ secrets.DEPLOY_ENV }}"
+          echo "Deploy Env: ${{ inputs.deploy_env }}"
 
       # ---------------------------------------------------------------------
       # Build Docker image (build context is root for Turbo monorepo)
@@ -103,7 +107,7 @@ jobs:
             --docker-server=swr.ap-southeast-2.myhuaweicloud.com \
             --docker-username=ap-southeast-2@HPUAGIPPWFA7YCNYJIGE \
             --docker-password=${{ secrets.HUAWEI_REGISTRY_PASSWORD }} \
-            --namespace=aicave-${{ secrets.DEPLOY_ENV }} \
+            --namespace=aicave-${{ inputs.deploy_env }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ---------------------------------------------------------------------
@@ -112,7 +116,7 @@ jobs:
       - name: Fix Stuck Helm Release
         run: |
           CHART="${{ inputs.chart_dir }}"
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+          DEPLOY_ENV="${{ inputs.deploy_env }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
           NS="aicave-${DEPLOY_ENV}"
           STATUS=$(helm status ${RELEASE} -n ${NS} -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo "not-found")
@@ -123,12 +127,22 @@ jobs:
           fi
 
       # ---------------------------------------------------------------------
+      # Set Chart appVersion from package.json
+      # ---------------------------------------------------------------------
+      - name: Set Chart appVersion
+        run: |
+          VER="${{ needs.build-and-deploy.outputs.ver }}"
+          CHART="${{ inputs.chart_dir }}"
+          sed -i "s/^appVersion:.*/appVersion: \"${VER}\"/" ${CHART}/Chart.yaml
+          echo "Set appVersion to ${VER} in ${CHART}/Chart.yaml"
+
+      # ---------------------------------------------------------------------
       # Helm upgrade (runs on self-hosted runner which has kubectl + helm)
       # ---------------------------------------------------------------------
       - name: Helm Upgrade
         run: |
           set -e
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+          DEPLOY_ENV="${{ inputs.deploy_env }}"
           IMAGE="${{ inputs.image_name }}"
           VER="${{ needs.build-and-deploy.outputs.ver }}"
           CHART="${{ inputs.chart_dir }}"
@@ -153,7 +167,7 @@ jobs:
       # ---------------------------------------------------------------------
       - name: Verify Deployment
         run: |
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+          DEPLOY_ENV="${{ inputs.deploy_env }}"
           CHART="${{ inputs.chart_dir }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
           kubectl rollout status deployment/${RELEASE} -n aicave-${DEPLOY_ENV}
@@ -165,7 +179,7 @@ jobs:
       - name: Debug on Failure
         if: failure()
         run: |
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+          DEPLOY_ENV="${{ inputs.deploy_env }}"
           NS="aicave-${DEPLOY_ENV}"
           CHART="${{ inputs.chart_dir }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
