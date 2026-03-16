@@ -17,13 +17,44 @@ on:
           - sit
           - uat
           - prod
+      image_ver:
+        description: 'Image version to deploy (skip build)'
+        required: false
+        type: string
 
 jobs:
-  deploy:
-    uses: ./.github/workflows/_deploy-service.yml
+  build:
+    if: inputs.image_ver == ''
+    uses: ./.github/workflows/_build-service.yml
     with:
       service_path: services/report
       image_name: ai-report-be
+    secrets: inherit
+
+  resolve-version:
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: always()
+    outputs:
+      image_ver: ${{ steps.resolve.outputs.image_ver }}
+    steps:
+      - name: Resolve Image Version
+        id: resolve
+        run: |
+          if [ -n "${{ inputs.image_ver }}" ]; then
+            echo "image_ver=${{ inputs.image_ver }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_ver=${{ needs.build.outputs.image_ver }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: [resolve-version]
+    if: always() && needs.resolve-version.result == 'success'
+    uses: ./.github/workflows/_deploy-service.yml
+    with:
+      image_name: ai-report-be
+      image_ver: ${{ needs.resolve-version.outputs.image_ver }}
       chart_dir: charts/aicave-report-chart
+      namespace: aicave
       deploy_env: ${{ inputs.deploy_env || 'sit' }}
     secrets: inherit
