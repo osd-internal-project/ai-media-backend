@@ -134,7 +134,7 @@ jobs:
           IMAGE="${{ inputs.image_name }}"
           VER="${{ inputs.image_ver }}"
           DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
-          TAG="${IMAGE}/${DEPLOY_ENV}/v${VER}"
+          TAG="${IMAGE}/${DEPLOY_ENV}/${VER}"
 
           echo "Tagging deployment: ${TAG}"
           git tag -f "${TAG}" -m "Deployed ${IMAGE}:${VER} to ${DEPLOY_ENV}"
