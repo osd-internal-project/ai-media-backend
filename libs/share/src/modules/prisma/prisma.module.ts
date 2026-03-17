@@ -29,6 +29,9 @@ import {
   OrganizationSubscriptionRepository,
   PackageTransactionRepository,
   CreditBalanceRepository,
+  BrandKitRepository,
+  BrandKitDetailRepository,
+  BrandKitDetailTypeRepository,
 } from 'src/repositories';
 
 const services = [
@@ -61,6 +64,9 @@ const services = [
   OrganizationSubscriptionRepository,
   PackageTransactionRepository,
   CreditBalanceRepository,
+  BrandKitRepository,
+  BrandKitDetailRepository,
+  BrandKitDetailTypeRepository,
 ];
 
 @Module({
