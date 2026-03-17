@@ -1,0 +1,79 @@
+name: Build Service (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      service_path:
+        description: "Path to the service (e.g. services/core)"
+        required: true
+        type: string
+      image_name:
+        description: "Docker image name (e.g. ai-core-be)"
+        required: true
+        type: string
+    outputs:
+      image_ver:
+        description: "The built image version from package.json"
+        value: ${{ jobs.build.outputs.image_ver }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image_ver: ${{ steps.pkg.outputs.ver }}
+
+    steps:
+      # ---------------------------------------------------------------------
+      # Checkout
+      # ---------------------------------------------------------------------
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------------
+      # Read version from the service's own package.json
+      # ---------------------------------------------------------------------
+      - name: Read Package Version
+        id: pkg
+        run: |
+          VER=$(jq -r .version ${{ inputs.service_path }}/package.json)
+          echo "ver=${VER}" >> "$GITHUB_OUTPUT"
+          echo "Package: ${{ inputs.image_name }}"
+          echo "Version: ${VER}"
+
+      # ---------------------------------------------------------------------
+      # Build Docker image (build context is root for Turbo monorepo)
+      # ---------------------------------------------------------------------
+      - name: Build Docker Image
+        run: |
+          docker build --no-cache --platform linux/amd64 \
+            -t ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} \
+            -f ${{ inputs.service_path }}/Dockerfile .
+
+      # ---------------------------------------------------------------------
+      # Login to Huawei Cloud Container Registry
+      # ---------------------------------------------------------------------
+      - name: Login to Huawei Cloud SWR
+        run: |
+          docker login -u ap-southeast-2@HPUAGIPPWFA7YCNYJIGE \
+            -p ${{ secrets.HUAWEI_REGISTRY_PASSWORD }} \
+            swr.ap-southeast-2.myhuaweicloud.com
+
+      # ---------------------------------------------------------------------
+      # Tag and Push Docker image to Registry
+      # ---------------------------------------------------------------------
+      - name: Tag and Push Docker Image
+        run: |
+          docker tag ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} \
+            swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
+          docker push swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
+
+      # ---------------------------------------------------------------------
+      # Cleanup local Docker images
+      # ---------------------------------------------------------------------
+      - name: Cleanup Docker Images
+        if: always()
+        run: |
+          docker rmi ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} || true
+          docker rmi swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} || true
+          docker image prune -f
+          docker builder prune -f

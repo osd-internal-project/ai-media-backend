@@ -1,91 +1,40 @@
 name: Deploy Service (Reusable)
 
-concurrency:
-  group: deploy-${{ inputs.namespace }}-${{ inputs.image_name }}
-  cancel-in-progress: true
-
 on:
   workflow_call:
     inputs:
-      service_path:
-        description: "Path to the service (e.g. services/core)"
-        required: true
-        type: string
       image_name:
         description: "Docker image name (e.g. ai-core-be)"
         required: true
         type: string
-      chart_dir:
-        description: "Helm chart directory name (e.g. aicave-core-chart)"
+      image_ver:
+        description: "Docker image version/tag to deploy"
         required: true
         type: string
+      chart_dir:
+        description: "Helm chart directory path (e.g. charts/aicave-core-chart)"
+        required: true
+        type: string
+      namespace:
+        description: "Kubernetes namespace"
+        required: true
+        type: string
+      deploy_env:
+        description: "Environment to deploy (sit, uat, prod)"
+        required: true
+        type: string
+        default: sit
+
+env:
+  DEPLOY_ENV: ${{ inputs.deploy_env }}
+
+concurrency:
+  group: deploy-${{ inputs.namespace }}-${{ inputs.image_name }}-${{ inputs.deploy_env }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    outputs:
-      ver: ${{ steps.pkg.outputs.ver }}
-
-    steps:
-      # ---------------------------------------------------------------------
-      # Checkout
-      # ---------------------------------------------------------------------
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # ---------------------------------------------------------------------
-      # Read version from the service's own package.json
-      # ---------------------------------------------------------------------
-      - name: Read Package Version
-        id: pkg
-        run: |
-          VER=$(jq -r .version ${{ inputs.service_path }}/package.json)
-          echo "ver=${VER}" >> "$GITHUB_OUTPUT"
-          echo "Package: ${{ inputs.image_name }}"
-          echo "Version: ${VER}"
-          echo "Deploy Env: ${{ secrets.DEPLOY_ENV }}"
-
-      # ---------------------------------------------------------------------
-      # Build Docker image (build context is root for Turbo monorepo)
-      # ---------------------------------------------------------------------
-      - name: Build Docker Image
-        run: |
-          docker build --no-cache --platform linux/amd64 \
-            -t ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} \
-            -f ${{ inputs.service_path }}/Dockerfile .
-
-      # ---------------------------------------------------------------------
-      # Login to Huawei Cloud Container Registry
-      # ---------------------------------------------------------------------
-      - name: Login to Huawei Cloud SWR
-        run: |
-          docker login -u ap-southeast-2@HPUAGIPPWFA7YCNYJIGE \
-            -p ${{ secrets.HUAWEI_REGISTRY_PASSWORD }} \
-            swr.ap-southeast-2.myhuaweicloud.com
-
-      # ---------------------------------------------------------------------
-      # Tag and Push Docker image to Registry
-      # ---------------------------------------------------------------------
-      - name: Tag and Push Docker Image
-        run: |
-          docker tag ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} \
-            swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
-          docker push swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
-
-      # ---------------------------------------------------------------------
-      # Cleanup local Docker images
-      # ---------------------------------------------------------------------
-      - name: Cleanup Docker Images
-        if: always()
-        run: |
-          docker rmi ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} || true
-          docker rmi swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} || true
-          docker image prune -f
-          docker builder prune -f
-
   deploy:
     runs-on: [self-hosted, k8s]
-    needs: build-and-deploy
 
     steps:
       # ---------------------------------------------------------------------
@@ -103,24 +52,39 @@ jobs:
             --docker-server=swr.ap-southeast-2.myhuaweicloud.com \
             --docker-username=ap-southeast-2@HPUAGIPPWFA7YCNYJIGE \
             --docker-password=${{ secrets.HUAWEI_REGISTRY_PASSWORD }} \
-            --namespace=aicave-${{ secrets.DEPLOY_ENV }} \
+            --namespace=${{ inputs.namespace }}-${{ env.DEPLOY_ENV }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ---------------------------------------------------------------------
-      # Fix stuck Helm release (pending-install / pending-upgrade / pending-rollback)
+      # Fix stuck Helm release (pending-install / pending-upgrade)
       # ---------------------------------------------------------------------
       - name: Fix Stuck Helm Release
         run: |
+          set -e
+          DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
           CHART="${{ inputs.chart_dir }}"
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
-          NS="aicave-${DEPLOY_ENV}"
+          NS="${{ inputs.namespace }}-${DEPLOY_ENV}"
+
           STATUS=$(helm status ${RELEASE} -n ${NS} -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo "not-found")
-          echo "Current Helm release status: ${STATUS}"
-          if [ "$STATUS" = "pending-install" ] || [ "$STATUS" = "pending-upgrade" ] || [ "$STATUS" = "pending-rollback" ]; then
-            echo "Release ${RELEASE} is stuck (${STATUS}), rolling back..."
-            helm rollback ${RELEASE} 0 -n ${NS} || helm uninstall ${RELEASE} -n ${NS} || true
+          echo "Current Helm status for ${RELEASE}: ${STATUS}"
+
+          if [[ "${STATUS}" == "pending-install" || "${STATUS}" == "pending-upgrade" || "${STATUS}" == "pending-rollback" ]]; then
+            echo "Release is stuck in ${STATUS}, rolling back..."
+            helm rollback ${RELEASE} 0 -n ${NS} --wait --timeout 2m || \
+              helm uninstall ${RELEASE} -n ${NS} --no-hooks || true
+            echo "Stuck release resolved"
           fi
+
+      # ---------------------------------------------------------------------
+      # Set Chart appVersion from image_ver
+      # ---------------------------------------------------------------------
+      - name: Set Chart appVersion
+        run: |
+          VER="${{ inputs.image_ver }}"
+          CHART="${{ inputs.chart_dir }}"
+          sed -i "s/^appVersion:.*/appVersion: \"${VER}\"/" ${CHART}/Chart.yaml
+          echo "Set appVersion to ${VER} in ${CHART}/Chart.yaml"
 
       # ---------------------------------------------------------------------
       # Helm upgrade (runs on self-hosted runner which has kubectl + helm)
@@ -128,9 +92,9 @@ jobs:
       - name: Helm Upgrade
         run: |
           set -e
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+          DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
           IMAGE="${{ inputs.image_name }}"
-          VER="${{ needs.build-and-deploy.outputs.ver }}"
+          VER="${{ inputs.image_ver }}"
           CHART="${{ inputs.chart_dir }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
 
@@ -140,7 +104,7 @@ jobs:
             -f ./${CHART}/values-${DEPLOY_ENV}.yaml \
             --set image.repository=swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${IMAGE} \
             --set image.tag=${VER} \
-            --namespace aicave-${DEPLOY_ENV} \
+            --namespace ${{ inputs.namespace }}-${DEPLOY_ENV} \
             --wait \
             --timeout 5m \
             --atomic \
@@ -153,11 +117,11 @@ jobs:
       # ---------------------------------------------------------------------
       - name: Verify Deployment
         run: |
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
+          DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
           CHART="${{ inputs.chart_dir }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
-          kubectl rollout status deployment/${RELEASE} -n aicave-${DEPLOY_ENV}
-          kubectl get pods -n aicave-${DEPLOY_ENV} -l app=${RELEASE}
+          kubectl rollout status deployment/${RELEASE} -n ${{ inputs.namespace }}-${DEPLOY_ENV}
+          kubectl get pods -n ${{ inputs.namespace }}-${DEPLOY_ENV} -l app=${RELEASE}
 
       # ---------------------------------------------------------------------
       # Debug on failure — capture pod state before rollback cleans up
@@ -165,8 +129,8 @@ jobs:
       - name: Debug on Failure
         if: failure()
         run: |
-          DEPLOY_ENV="${{ secrets.DEPLOY_ENV }}"
-          NS="aicave-${DEPLOY_ENV}"
+          DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
+          NS="${{ inputs.namespace }}-${DEPLOY_ENV}"
           CHART="${{ inputs.chart_dir }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
 
@@ -186,5 +150,3 @@ jobs:
             echo "--- Logs: ${pod} ---"
             kubectl logs -n ${NS} ${pod} --tail=50 2>/dev/null || echo "(no logs)"
           done
-
-
