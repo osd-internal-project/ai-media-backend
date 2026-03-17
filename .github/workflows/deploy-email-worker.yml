@@ -22,6 +22,9 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   build:
     if: inputs.image_ver == ''
