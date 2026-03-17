@@ -26,3 +26,6 @@ export * from './promptGuideImage.repository';
 export * from './organizationSubscription.repository';
 export * from './creditBalance.repository';
 export * from './packageTransaction.repository';
+export * from './brandKit.repository';
+export * from './brandKitDetail.repository';
+export * from './brandKitDetailType.repository';
