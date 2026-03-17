@@ -25,6 +25,9 @@ on:
         type: string
         default: sit
 
+permissions:
+  contents: write
+
 env:
   DEPLOY_ENV: ${{ inputs.deploy_env }}
 
