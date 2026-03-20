@@ -39,7 +39,7 @@ export class LogsService {
         ...(fristsql && { seq: { lt: fristsql } }),
         ...(lastsql && { seq: { gt: lastsql } }),
       },
-      // distinct: ['taskId'],
+      distinct: ['taskId'],
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
@@ -182,6 +182,8 @@ export class LogsService {
         ...(fristseq && { seq: { lt: fristseq } }),
         ...(lastseq && { seq: { gt: lastseq } }),
       },
+      distinct: ['taskId'],
+
       // include: { users: true },
       // distinct: ['taskId'],
       select: {
@@ -346,7 +348,7 @@ export class LogsService {
         ...(fristseq && { seq: { lt: fristseq } }),
         ...(lastseq && { seq: { gt: lastseq } }),
       },
-      // distinct: ['taskId'],
+      distinct: ['taskId'],
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
@@ -501,6 +503,7 @@ export class LogsService {
         ...(fristseq && { seq: { lt: fristseq } }),
         ...(lastseq && { seq: { gt: lastseq } }),
       },
+      distinct: ['taskId'],
       include: { users: true },
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),

@@ -362,7 +362,29 @@ export class ImageProcessor extends WorkerHost {
         projectId: body.projectId,
         type: 'image',
       });
-
+await this.galleryRepo.create({
+          data: {
+            taskId,
+            projectId: body.projectId,
+            userId,
+            prompt: body.prompt,
+            imageUrl:"",
+            typeGenerate: 'image',
+            genneratedStatus: 'FAILED',
+            status: false,
+            generateConfig: this.buildGenerateConfig({
+              ratio: body.ratio,
+              width: body.width,
+              height: body.height,
+              prompt: body.prompt,
+              duration: 0,
+              modelName: body.model,
+              imageCount: body.maxImages,
+              resolution: body.size,
+              generateAudio: false,
+            }),
+          },
+        });
       // บันทึก error log
       await this.logrepo.create({
         data: {

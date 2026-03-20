@@ -192,7 +192,7 @@ export class GenerateService {
         'EX',
         24 * 60 * 60,
       );
-
+       
       console.log(`✅ Task created: ${taskId}, Job ID: ${job.id}`);
       return {
         status: 200,
