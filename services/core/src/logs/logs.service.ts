@@ -26,11 +26,17 @@ export class LogsService {
   async findProjectImageByPage(
     projectId: string,
     organizationId: string,
+    userId: string,
     skip?: number,
     take?: number,
     fristsql?: number,
     lastsql?: number,
   ) {
+    const user = userId
+      ? await this.userRepo.findOne({
+          where: { token: userId },
+        })
+      : null;
     const tasks = await this.logrepo.findMany({
       where: {
         projectId: projectId,
@@ -38,6 +44,7 @@ export class LogsService {
         typeGenerate: 'image',
         ...(fristsql && { seq: { lt: fristsql } }),
         ...(lastsql && { seq: { gt: lastsql } }),
+        ...(user && { userId: user.userId }),
       },
       distinct: ['taskId'],
       orderBy: { createdAt: 'desc' },
@@ -169,11 +176,17 @@ export class LogsService {
   async findProjectVideoByPage(
     projectId: string,
     organizationId: string,
+    userId: string,
     skip?: number,
     take?: number,
     fristseq?: number,
     lastseq?: number,
   ) {
+    const user = userId
+      ? await this.userRepo.findOne({
+          where: { token: userId },
+        })
+      : null;
     const tasks = await this.logrepo.findMany({
       where: {
         projectId: projectId,
@@ -181,6 +194,8 @@ export class LogsService {
         typeGenerate: 'video',
         ...(fristseq && { seq: { lt: fristseq } }),
         ...(lastseq && { seq: { gt: lastseq } }),
+        ...(userId && { userId: userId }),
+        ...(user && { userId: user.userId }),
       },
       distinct: ['taskId'],
 
@@ -335,11 +350,17 @@ export class LogsService {
   async findProjectOmniHumenByPage(
     projectId: string,
     organizationId: string,
+    userId: string,
     skip?: number,
     take?: number,
     fristseq?: number,
     lastseq?: number,
   ) {
+    const user = userId
+      ? await this.userRepo.findOne({
+          where: { token: userId },
+        })
+      : null;
     const tasks = await this.logrepo.findMany({
       where: {
         projectId: projectId,
@@ -347,6 +368,8 @@ export class LogsService {
         typeGenerate: 'omnihumen',
         ...(fristseq && { seq: { lt: fristseq } }),
         ...(lastseq && { seq: { gt: lastseq } }),
+        ...(userId && { userId: userId }),
+        ...(user && { userId: user.userId }),
       },
       distinct: ['taskId'],
       orderBy: { createdAt: 'desc' },
@@ -490,11 +513,17 @@ export class LogsService {
   async findProjectDreamactorByPage(
     projectId: string,
     organizationId: string,
+    userId: string,
     skip?: number,
     take?: number,
     fristseq?: number,
     lastseq?: number,
   ) {
+    const user = userId
+      ? await this.userRepo.findOne({
+          where: { token: userId },
+        })
+      : null;
     const tasks = await this.logrepo.findMany({
       where: {
         projectId: projectId,
@@ -502,6 +531,8 @@ export class LogsService {
         typeGenerate: 'dreamactor',
         ...(fristseq && { seq: { lt: fristseq } }),
         ...(lastseq && { seq: { gt: lastseq } }),
+        ...(userId && { userId: userId }),
+        ...(user && { userId: user.userId }),
       },
       distinct: ['taskId'],
       include: { users: true },

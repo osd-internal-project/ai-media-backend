@@ -22,12 +22,14 @@ export class LogsController {
   findProjectImageByPage(
     @Param('projectId') projectId: string,
     @Query('organizationId') organizationId: string,
+    @Query('userId') userId: string,
     @Query('skip') skip?: number,
     @Query('take') take?: number,
   ) {
     return this.logsService.findProjectImageByPage(
       projectId,
       organizationId,
+      userId,
       +skip,
       +take,
     );
@@ -48,12 +50,14 @@ export class LogsController {
   findProjectVideoByPage(
     @Param('projectId') projectId: string,
     @Query('organizationId') organizationId: string,
+    @Query('userId') userId: string,
     @Query('skip') skip?: number,
     @Query('take') take?: number,
   ) {
     return this.logsService.findProjectVideoByPage(
       projectId,
       organizationId,
+      userId, 
       +skip,
       +take,
     );
@@ -74,6 +78,7 @@ export class LogsController {
   async findProjectTaskByPage(
     @Param('projectId') projectId: string,
     @Query('organizationId') organizationId: string,
+    @Query('userId') userId: string,
     @Query('skip') skip: number,
     @Query('take') take: number,
     @Query('type') type: 'image' | 'video' | 'omnihumen' | 'dreamactor',
@@ -89,6 +94,7 @@ export class LogsController {
           ? await this.logsService.findProjectImageByPage(
               projectId,
               organizationId,
+              userId,
               skip,
               take,
               fristsql,
@@ -98,6 +104,7 @@ export class LogsController {
           ? await this.logsService.findProjectVideoByPage(
               projectId,
               organizationId,
+              userId,
               skip,
               take,
               fristsql,
@@ -107,6 +114,7 @@ export class LogsController {
           ? await this.logsService.findProjectOmniHumenByPage(
               projectId,
               organizationId,
+              userId,
               skip,
               take,
               fristsql,
@@ -116,6 +124,7 @@ export class LogsController {
           ? await this.logsService.findProjectDreamactorByPage(
               projectId,
               organizationId,
+              userId,
               skip,
               take,
               fristsql,
