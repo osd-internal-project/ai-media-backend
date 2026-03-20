@@ -124,6 +124,23 @@ jobs:
           kubectl get pods -n ${{ inputs.namespace }}-${DEPLOY_ENV} -l app=${RELEASE}
 
       # ---------------------------------------------------------------------
+      # Tag deployment for rollback reference
+      # ---------------------------------------------------------------------
+      - name: Tag Deployment
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          IMAGE="${{ inputs.image_name }}"
+          VER="${{ inputs.image_ver }}"
+          DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
+          TAG="${IMAGE}/${DEPLOY_ENV}/${VER}"
+
+          echo "Tagging deployment: ${TAG}"
+          git tag -f "${TAG}" -m "Deployed ${IMAGE}:${VER} to ${DEPLOY_ENV}"
+          git push origin "${TAG}" --force
+
+      # ---------------------------------------------------------------------
       # Debug on failure — capture pod state before rollback cleans up
       # ---------------------------------------------------------------------
       - name: Debug on Failure

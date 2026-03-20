@@ -18,7 +18,7 @@ ingress:
     secretName: aicave-console-tls-sit
 
 env:
-  nodeEnv: "Development"
+  nodeEnv: "development"
   port: "4000"
   nodeTlsRejectUnauthorized: "0"
   databaseUrl: "postgresql://ai_cave_sit:osd@1234@10.134.2.3:5432/ai_cave_sit?schema=public"
@@ -28,8 +28,8 @@ env:
   frontendUrl: "https://sit.aicave.ai"
   keycloakUrl: "https://id24.aicave.ai"
   keycloakRealm: "eportal"
-  keycloakClientId: "eportal-client-id"
-  keycloakClientSecret: "kovdYL3AAs9v6e3zxNw4o3CbaBwZiCId"
+  keycloakClientId: "aicave-sit"
+  keycloakClientSecret: "ZMoXR3jY8xism21PO51zOQu2fgSVEpU2"
 
 resources:
   requests:
