@@ -93,7 +93,11 @@ export class ImageProcessor extends WorkerHost {
       const totalImages = dataImage.length;
       const uploadedImages: string[] = [];
       const bytepluseUrl = [];
-
+      const credit = await this.generateHelperService.getUsedCredit(
+        0,
+        body,
+        body.model,
+      );
       // 1. ส่ง event "started" ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:started', {
         taskId,
@@ -171,6 +175,7 @@ export class ImageProcessor extends WorkerHost {
             typeGenerate: 'image',
             genneratedStatus: 'SUCCESS',
             status: false,
+            usedCredit: credit.credit,
             generateConfig: this.buildGenerateConfig({
               ratio: body.ratio,
               width: body.width,
@@ -194,8 +199,7 @@ export class ImageProcessor extends WorkerHost {
         });
 
         this.logger.log(`✅ Finished image ${index + 1}/${totalImages}`);
-
-        // ส่ง event แต่ละรูปที่เสร็จ
+        //event แต่ละรูปที่เสร็จ
         await this.publishToCore(clientId, 'worker:image-complete', {
           taskId,
           imageUrl: bytepluseUrl,
@@ -206,6 +210,7 @@ export class ImageProcessor extends WorkerHost {
         });
       }
 
+      // ส่
       // 3. Save Log
       const imagelog = await this.logrepo.create({
         data: {
@@ -222,6 +227,7 @@ export class ImageProcessor extends WorkerHost {
           ImageUsed: usage.generated_images || 0,
           referenceImages: body.image.length > 0 ? body.image : [],
           usedImage: usage.generated_images || 0,
+          usedCredit: credit.credit,
           generateConfig: this.buildGenerateConfig({
             ratio: body.ratio,
             width: body.width,
@@ -241,8 +247,8 @@ export class ImageProcessor extends WorkerHost {
             userId,
             body.organizationId,
             body.projectId,
-            'image',
-            body.maxImages,
+            'credit',
+            credit.credit,
           );
         const usedCredit =
           updated.usedCreditAllowance + updated.holdCreditAllowance;
@@ -362,29 +368,29 @@ export class ImageProcessor extends WorkerHost {
         projectId: body.projectId,
         type: 'image',
       });
-await this.galleryRepo.create({
-          data: {
-            taskId,
-            projectId: body.projectId,
-            userId,
+      await this.galleryRepo.create({
+        data: {
+          taskId,
+          projectId: body.projectId,
+          userId,
+          prompt: body.prompt,
+          imageUrl: '',
+          typeGenerate: 'image',
+          genneratedStatus: 'FAILED',
+          status: false,
+          generateConfig: this.buildGenerateConfig({
+            ratio: body.ratio,
+            width: body.width,
+            height: body.height,
             prompt: body.prompt,
-            imageUrl:"",
-            typeGenerate: 'image',
-            genneratedStatus: 'FAILED',
-            status: false,
-            generateConfig: this.buildGenerateConfig({
-              ratio: body.ratio,
-              width: body.width,
-              height: body.height,
-              prompt: body.prompt,
-              duration: 0,
-              modelName: body.model,
-              imageCount: body.maxImages,
-              resolution: body.size,
-              generateAudio: false,
-            }),
-          },
-        });
+            duration: 0,
+            modelName: body.model,
+            imageCount: body.maxImages,
+            resolution: body.size,
+            generateAudio: false,
+          }),
+        },
+      });
       // บันทึก error log
       await this.logrepo.create({
         data: {
