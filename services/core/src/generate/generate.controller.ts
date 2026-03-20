@@ -49,4 +49,9 @@ export class GenerateController {
     await this.omnihumenQueue.add(QUEUE_NAME_OMNIHUMEN, body);
     return { status: 'queued' };
   }
+
+  @Post('get-credit-pre-send')
+  async getCreditPreSend(@Body('body') body: any) {
+    return await this.generateService.getCreditPreSend(body);
+  }
 }

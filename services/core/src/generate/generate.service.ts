@@ -1945,9 +1945,10 @@ export class GenerateService {
   async getUsedCredit(
     token: number,
     body: any,
-    model: MasterModelTypeDto,
+    model?: MasterModelTypeDto,
   ): Promise<{ token: number; credit: number }> {
     try {
+
       // 1. Dynamic Formula Check
       if (
         model?.modelDetails &&
@@ -2053,49 +2054,7 @@ export class GenerateService {
       return err;
     }
   }
-  // async getUsedCredit(
-  //   token: number,
-  //   body: any,
-  //   model: string,
-  // ): Promise<{ token: number; credit: number }> {
-  //   try {
-  //     if (model === 'seedance-1-5-pro-251215') {
-  //       // const perCredit = 1186.813;
-  //       const pixels = body.width * body.height;
-  //       let creditPerSec = 0;
-  //       const hasAudio = body.generateAudio === true || body.generateAudio === 'Yes'; // เช็กว่ามีเสียงไหม
 
-  //       // คำนวณ Resolution ตามพื้นที่ (Size px) อ้างอิงจากตาราง Excel
-  //       if (pixels <= 450000) {
-  //         // ครอบคลุมกลุ่ม 480p (เช่น 864x496 = 428,544)
-  //         creditPerSec = hasAudio ? 15 : 10;
-  //       } else if (pixels <= 950000) {
-  //         // ครอบคลุมกลุ่ม 720p (เช่น 1280x720 = 921,600)
-  //         creditPerSec = hasAudio ? 25 : 20;
-  //       } else {
-  //         // ครอบคลุมกลุ่ม 1080p (เช่น 1920x1080 = 2,073,600)
-  //         creditPerSec = hasAudio ? 45 : 40;
-  //       }
-  //       return {
-  //         token,
-  //         credit: creditPerSec * body.duration,
-  //         // credit: Math.round(token / perCredit)
-  //       };
-  //     } else if (model === 'realman_avatar_picture_omni15_cv') {
-  //       const credit = body.duration * 45;
-  //       const token = body.duration * 49846.15385;
-  //       return { token, credit };
-  //     } else if (model === 'dreamactor_m20_gen_video_cvtob') {
-  //       const credit = body.duration * 30;
-  //       const token = body.duration * 20769.23077;
-  //       return { token, credit };
-  //     }
-  //   } catch (err) {
-  //     return err;
-  //   }
-  // }
-
-  //ลบ hold image allowance ถ้า fail
   async getUsedCreditBak(
     token: number,
     body: any,
@@ -2142,6 +2101,20 @@ export class GenerateService {
       return err;
     }
   }
+  async getCreditPreSend(body: any) {
+    if (!body.model) {
+      throw new Error('Model not found');
+    }
+    const modelDetail = await this.modeltypeRepo.findOne({
+      where: { modelType: body.model, type: body.type },
+    });
+    if (!modelDetail) {
+      throw new Error('Model not found');
+    }
+    const credit = await this.getUsedCredit(0, body, modelDetail);
+    return credit.credit || 0;
+  }
+  //ลบ hold image allowance ถ้า fail
   cancelHoldAmount(
     holdCreditAllowance: number,
     userId: string,
