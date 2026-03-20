@@ -108,7 +108,9 @@ model ProjectMember {
 }
 
 model Gallery {
-  id               String   @id @default(uuid())
+  id  String @id @default(uuid())
+  seq Int    @default(autoincrement()) @db.Integer
+
   taskId           String?
   projectId        String
   userId           String
@@ -130,6 +132,7 @@ model Gallery {
 
 model Log {
   id              String   @id @default(uuid())
+  seq             Int      @default(autoincrement()) @db.Integer
   taskId          String?
   status          String?
   typeGenerate    String?
@@ -351,7 +354,7 @@ model Organization {
   subscription        OrganizationSubscription?
   creditBalance       CreditBalance?
   packageTransactions PackageTransaction[]
-  brandKits           BrandKit[] 
+  brandKits           BrandKit[]
 
   @@map("organization")
 }
@@ -626,32 +629,31 @@ model BrandKit {
   brandCiPrompt  String?  @map("brand_ci_prompt") @db.Text
   negativePrompt String?  @map("negative_prompt") @db.Text
 
-  organizationId String          @map("organization_id") @db.VarChar(50)
-  organization   Organization    @relation(fields: [organizationId], references: [organizationId])
+  organizationId  String           @map("organization_id") @db.VarChar(50)
+  organization    Organization     @relation(fields: [organizationId], references: [organizationId])
   brandKitDetails BrandKitDetail[]
 
   @@map("brand_kit")
 }
 
-model BrandKitDetail{
-  id             String   @id @default(uuid()) @db.Uuid
-  name           String   @db.VarChar(100) 
-  type           String   @db.VarChar(20)
-  detail         Json?    @db.JsonB
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6) 
- 
-  brandKit       BrandKit?    @relation(fields: [brandKitId], references: [id])
-  brandKitId     String?      @db.Uuid @map("brand_kit_id")
+model BrandKitDetail {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(100)
+  type      String   @db.VarChar(20)
+  detail    Json?    @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  brandKit   BrandKit? @relation(fields: [brandKitId], references: [id])
+  brandKitId String?   @map("brand_kit_id") @db.Uuid
 
   @@map("brand_kit_detail")
 }
 
-model BrandKitDetailType{
-  id             String   @id @default(uuid()) @db.Uuid
-  code           String   @db.VarChar(20)  
-  name           String   @db.VarChar(100)  
- 
+model BrandKitDetailType {
+  id   String @id @default(uuid()) @db.Uuid
+  code String @db.VarChar(20)
+  name String @db.VarChar(100)
 
   @@map("brand_kit_detail_type")
 }

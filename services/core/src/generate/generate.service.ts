@@ -625,112 +625,124 @@ export class GenerateService {
     maxCreditInPlan: number;
     onholdCredits: number;
   }> {
-    let currentCreditUsed = 0;
+    try {
+      let currentCreditUsed = 0;
 
-    let cachedCreditUsed: string | null = null;
-    if (cacheKey) {
-      cachedCreditUsed = await this.redis.get(cacheKey);
-    }
+      let cachedCreditUsed: string | null = null;
+      if (cacheKey) {
+        cachedCreditUsed = await this.redis.get(cacheKey);
+      }
 
-    if (cachedCreditUsed) {
-      currentCreditUsed = parseInt(cachedCreditUsed);
-    } else {
-      // Fallback to DB calculation
-      // const aggregateResult = await this.logrepo.aggregate({
-      //   where: {
-      //     userId: userId,
-      //     typeGenerate: body.type,
-      //     projectId: body.projectId,
-      //     status: 'success',
-      //     createdAt: {
-      //       gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-      //       lt: new Date(
-      //         new Date().getFullYear(),
-      //         new Date().getMonth() + 1,
-      //         1,
-      //       ),
-      //     },
-      //   },
-      //   _sum: {
-      //     ImageUsed: true,
-      //   },
-      // });
-      // currentImageUsed = aggregateResult._sum.ImageUsed || 0;
-      currentCreditUsed =
-        // projectMember.holdImageAllowance + projectMember.usedImageAllowance;
-        projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
-    }
-    const credit = await this.getUsedCredit(0, body, model);
+      if (cachedCreditUsed) {
+        currentCreditUsed = parseInt(cachedCreditUsed);
+      } else {
+        // Fallback to DB calculation
+        // const aggregateResult = await this.logrepo.aggregate({
+        //   where: {
+        //     userId: userId,
+        //     typeGenerate: body.type,
+        //     projectId: body.projectId,
+        //     status: 'success',
+        //     createdAt: {
+        //       gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+        //       lt: new Date(
+        //         new Date().getFullYear(),
+        //         new Date().getMonth() + 1,
+        //         1,
+        //       ),
+        //     },
+        //   },
+        //   _sum: {
+        //     ImageUsed: true,
+        //   },
+        // });
+        // currentImageUsed = aggregateResult._sum.ImageUsed || 0;
+        currentCreditUsed =
+          // projectMember.holdImageAllowance + projectMember.usedImageAllowance;
+          projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
+      }
+      console.log(body);
 
-    const maxCreditInPlan = projectMember?.limitCreditAllowance || 0;
-    currentCreditUsed = currentCreditUsed + credit.credit;
-    //Check Allowence :Member > Team >Organization
-    if (currentCreditUsed > maxCreditInPlan) {
-      Logger.error(
-        `Credit used ${
-          currentCreditUsed + credit.credit
-        } exceed max credit ${maxCreditInPlan}`,
+      const credit = await this.getUsedCredit(0, body, model);
+      console.log(credit);
+      const maxCreditInPlan = projectMember?.limitCreditAllowance || 0;
+      currentCreditUsed = currentCreditUsed + credit.credit;
+      //Check Allowence :Member > Team >Organization
+      if (currentCreditUsed > maxCreditInPlan) {
+        Logger.error(
+          `Credit used ${
+            currentCreditUsed + credit.credit
+          } exceed max credit ${maxCreditInPlan}`,
+        );
+        return {
+          isQuotaExceeded: true,
+          currentCreditUsed: currentCreditUsed,
+          maxCreditInPlan: maxCreditInPlan,
+          onholdCredits: credit.credit,
+        };
+      }
+
+      const project = await this.projectRepo.findOne({
+        where: { id: body.projectId },
+      });
+      if (
+        project.usedCreditAllowance + project.holdCreditAllowance >
+        project.limitCreditAllowance
+      ) {
+        Logger.error(
+          `Credit used ${
+            currentCreditUsed + credit.credit
+          } exceed max credit ${maxCreditInPlan}`,
+        );
+        return {
+          isQuotaExceeded: true,
+          currentCreditUsed: currentCreditUsed,
+          maxCreditInPlan: maxCreditInPlan,
+          onholdCredits: credit.credit,
+        };
+      }
+      const creditBalance = await this.creditBalanceRepo.findOne({
+        where: { organizationId: body.organizationId },
+      });
+      if (
+        creditBalance.currentCycleImage + creditBalance.onTopImage <
+        credit.credit
+      ) {
+        Logger.error(
+          `Credit used ${
+            currentCreditUsed + credit.credit
+          } exceed max organize credit ${maxCreditInPlan}`,
+        );
+
+        return {
+          isQuotaExceeded: true,
+          currentCreditUsed: currentCreditUsed,
+          maxCreditInPlan: maxCreditInPlan,
+          onholdCredits: credit.credit,
+        };
+      }
+      await this.updateHoldCreditBalance(
+        userId,
+        body.organizationId,
+        body.projectId,
+        'credit',
+        credit.credit,
       );
       return {
-        isQuotaExceeded: true,
+        isQuotaExceeded: false,
         currentCreditUsed: currentCreditUsed,
         maxCreditInPlan: maxCreditInPlan,
         onholdCredits: credit.credit,
       };
-    }
-
-    const project = await this.projectRepo.findOne({
-      where: { id: body.projectId },
-    });
-    if (
-      project.usedCreditAllowance + project.holdCreditAllowance >
-      project.limitCreditAllowance
-    ) {
-      Logger.error(
-        `Credit used ${
-          currentCreditUsed + credit.credit
-        } exceed max credit ${maxCreditInPlan}`,
-      );
+    } catch (e) {
+      Logger.error(e);
       return {
         isQuotaExceeded: true,
-        currentCreditUsed: currentCreditUsed,
-        maxCreditInPlan: maxCreditInPlan,
-        onholdCredits: credit.credit,
+        currentCreditUsed: 0,
+        maxCreditInPlan: 0,
+        onholdCredits: 0,
       };
     }
-    const creditBalance = await this.creditBalanceRepo.findOne({
-      where: { organizationId: body.organizationId },
-    });
-    if (
-      creditBalance.currentCycleImage + creditBalance.onTopImage <
-      credit.credit
-    ) {
-      Logger.error(
-        `Credit used ${
-          currentCreditUsed + credit.credit
-        } exceed max organize credit ${maxCreditInPlan}`,
-      );
-
-      return {
-        isQuotaExceeded: true,
-        currentCreditUsed: currentCreditUsed,
-        maxCreditInPlan: maxCreditInPlan,
-        onholdCredits: credit.credit,
-      };
-    }
-    this.updateHoldCreditBalance(
-      userId,
-      body.organizationId,
-      body.projectId,
-      'credit',
-      credit.credit,
-    );
-    return {
-      isQuotaExceeded: false,
-      currentCreditUsed: currentCreditUsed,
-      maxCreditInPlan: maxCreditInPlan,
-      onholdCredits: credit.credit,
-    };
   }
 
   // private async checkTokenVideoQuota(
@@ -1940,11 +1952,12 @@ export class GenerateService {
       if (
         model?.modelDetails &&
         (model.modelDetails.calculationType === 'FORMULA' ||
-         model.modelDetails.calculationType === 'USE_TOKEN' ||
-         model.modelDetails.calculationType === 'NOT_USE_TOKEN')
+          model.modelDetails.calculationType === 'USE_TOKEN' ||
+          model.modelDetails.calculationType === 'NOT_USE_TOKEN')
       ) {
         try {
-          const { calculationType, tokenFormula, creditFormula, formula } = model.modelDetails;
+          const { calculationType, tokenFormula, creditFormula, formula } =
+            model.modelDetails;
           let calculatedToken = token;
           let calculatedCredit = 0;
 
@@ -1952,13 +1965,21 @@ export class GenerateService {
             if (!expr) return 0;
             const isExpr = !expr.includes(';') && !expr.includes('return ');
             const code = isExpr ? `return ${expr};` : expr;
-            const evalFn = new Function('token', 'body', `"use strict"; ${code}`);
+            const evalFn = new Function(
+              'token',
+              'body',
+              `"use strict"; ${code}`,
+            );
             return evalFn(t, b);
           };
 
           if (calculationType === 'NOT_USE_TOKEN') {
             calculatedToken = 0;
-            calculatedCredit = evaluate(creditFormula || formula, calculatedToken, body);
+            calculatedCredit = evaluate(
+              creditFormula || formula,
+              calculatedToken,
+              body,
+            );
           } else if (calculationType === 'USE_TOKEN') {
             if (token > 0) {
               calculatedToken = token;
@@ -1967,17 +1988,27 @@ export class GenerateService {
             } else {
               calculatedToken = 0;
             }
-            calculatedCredit = evaluate(creditFormula || formula, calculatedToken, body);
+            calculatedCredit = evaluate(
+              creditFormula || formula,
+              calculatedToken,
+              body,
+            );
           } else if (calculationType === 'FORMULA') {
             calculatedCredit = evaluate(formula, token, body);
             if (model.type === 'image') calculatedToken = 0;
           }
 
-          if (typeof calculatedCredit === 'number' && !isNaN(calculatedCredit)) {
+          if (
+            typeof calculatedCredit === 'number' &&
+            !isNaN(calculatedCredit)
+          ) {
             return { token: calculatedToken, credit: calculatedCredit };
           }
         } catch (err) {
-          console.error('Error evaluating dynamic formula, falling back to default logic:', err);
+          console.error(
+            'Error evaluating dynamic formula, falling back to default logic:',
+            err,
+          );
         }
       }
 
@@ -1986,7 +2017,7 @@ export class GenerateService {
         const credit = body.images * 10;
         const outToken = 0;
         return { token: outToken, credit };
-      } else if (model.type ==='video') {
+      } else if (model.type === 'video') {
         // const perCredit = 1186.813;
         const pixels = body.width * body.height;
         let creditPerSec = 0;
@@ -2065,7 +2096,7 @@ export class GenerateService {
   // }
 
   //ลบ hold image allowance ถ้า fail
- async getUsedCreditBak(
+  async getUsedCreditBak(
     token: number,
     body: any,
     model: MasterModelTypeDto,
@@ -2075,7 +2106,7 @@ export class GenerateService {
         const credit = body.images * 10;
         const token = 0;
         return { token, credit };
-      } else if (model.type ==='video') {
+      } else if (model.type === 'video') {
         // const perCredit = 1186.813;
         const pixels = body.width * body.height;
         let creditPerSec = 0;
