@@ -449,7 +449,7 @@ export class WebsocketGatewayService
     data: {
       projectId: string;
       organizationId: string;
-      userId?: string;
+      userId: string;
       skip: number;
       take: number;
       type: 'image' | 'video' | 'omnihumen' | 'dreamactor';
@@ -464,7 +464,7 @@ export class WebsocketGatewayService
           ? await this.logsService.findProjectImageByPage(
               projectId,
               organizationId,
-              undefined,
+              data.userId,
               data.skip,
               data.take,
             )
@@ -472,7 +472,7 @@ export class WebsocketGatewayService
           ? await this.logsService.findProjectVideoByPage(
               projectId,
               organizationId,
-              undefined,
+              data.userId,
 
               data.skip,
               data.take,
@@ -481,7 +481,7 @@ export class WebsocketGatewayService
           ? await this.logsService.findProjectOmniHumenByPage(
               projectId,
               organizationId,
-              undefined,
+              data.userId,
 
               data.skip,
               data.take,
@@ -490,7 +490,7 @@ export class WebsocketGatewayService
           ? await this.logsService.findProjectDreamactorByPage(
               projectId,
               organizationId,
-              undefined,
+              data.userId,
 
               data.skip,
               data.take,
