@@ -200,7 +200,7 @@ export class ProjectService {
           },
         }),
       },
-      include: { members: true },
+      include: { members: { include: { users: true } } },
       orderBy: {
         createdAt: 'desc',
       },

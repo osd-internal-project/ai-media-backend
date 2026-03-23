@@ -25,10 +25,14 @@ export class DashboardController {
   }
 
   @Get('credit-per-month-and-type/:organizationId')
-  findCreditPerMonthAndType(@Param('organizationId') organizationId: string) {
-    return this.dashboardService.findCreditPerMonthAndType(organizationId);
+  countCreditPerMonthAndType(@Param('organizationId') organizationId: string) {
+    return this.dashboardService.countCreditPerMonthAndType(organizationId);
   }
 
+  @Get('generated-per-month-and-type/:organizationId')
+  countGeneratedPerMonthAndType(@Param('organizationId') organizationId: string) {
+    return this.dashboardService.countGeneratedPerMonthAndType(organizationId);
+  }
   @Post()
   create(@Body() createDashboardDto: CreateDashboardDto) {
     return this.dashboardService.create(createDashboardDto);

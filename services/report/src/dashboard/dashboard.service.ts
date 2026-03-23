@@ -100,7 +100,9 @@ export class DashboardService {
       usedCreditPercent: usedCreditPercent,
     };
   }
-  async findCreditPerMonthAndType(organizationId: string) {
+
+
+  async countCreditPerMonthAndType(organizationId: string) {
     try {
       // Using $queryRaw with template tags automatically handles parameterization
       const result = await this.prismaService.$queryRaw`
@@ -136,7 +138,42 @@ export class DashboardService {
       throw error;
     }
   }
-
+  async countGeneratedPerMonthAndType(organizationId: string) {
+    try {
+      // Using $queryRaw with template tags automatically handles parameterization
+      const result = await this.prismaService.$queryRaw`
+        WITH months AS (
+        -- Generate the last 6 months as a base table
+        SELECT TO_CHAR(date_series, 'YYYY-MM') AS month_label
+        FROM generate_series(
+          CURRENT_DATE - INTERVAL '5 months', 
+          CURRENT_DATE, 
+          '1 month'
+        ) AS date_series
+      )
+      SELECT 
+        m.month_label AS "month",
+        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'image' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "image",
+        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'video' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "video",
+        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'omnihumen' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "omnihuman",
+        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'dreamactor' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "dreamactor"
+      FROM months m
+      LEFT JOIN log l ON TO_CHAR(l."createdAt", 'YYYY-MM') = m.month_label
+        AND l.status = 'success'
+        AND l."projectId" IN (
+          SELECT id FROM project WHERE organization_id = ${organizationId}
+        )
+      GROUP BY m.month_label
+      ORDER BY m.month_label ASC;
+      `;
+      // Logger.debug(result);
+      // this.logger.debug('Credit usage per month result:', result);
+      return result;
+    } catch (error) {
+      Logger.error('Error fetching credit usage:', error);
+      throw error;
+    }
+  }
   create(createDashboardDto: CreateDashboardDto) {
     return 'This action adds a new dashboard';
   }
