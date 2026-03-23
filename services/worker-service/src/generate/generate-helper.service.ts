@@ -74,68 +74,38 @@ export class GenerateHelperService {
     try {
       const updatedProjectMember = await this.projectMemberRepo.updateMany({
         where: { userId: userId, projectId: projectId },
-        data:
-          unitType === 'image'
-            ? {
-                holdImageAllowance: {
-                  decrement: calculateAmount || trueAmount,
-                },
-                usedImageAllowance: { increment: trueAmount },
-              }
-            : {
-                holdCreditAllowance: {
-                  decrement: calculateAmount || trueAmount,
-                },
-                usedCreditAllowance: { increment: trueAmount },
-              },
+        data: {
+          holdCreditAllowance: {
+            decrement: calculateAmount || trueAmount,
+          },
+          usedCreditAllowance: { increment: trueAmount },
+        },
       });
       if (updatedProjectMember) {
         await this.projectRepo.updateMany({
           where: { id: projectId },
-          data:
-            unitType === 'image'
-              ? {
-                  // holdImageAllowance: { decrement: calculateAmount || trueAmount },
-                  usedImageAllowance: { increment: trueAmount },
-                }
-              : {
-                  // holdCreditAllowance: { decrement: calculateAmount || trueAmount },
-                  usedCreditAllowance: { increment: trueAmount },
-                },
+          data: {
+            usedCreditAllowance: { increment: trueAmount },
+          },
         });
         const creditBalance = await this.creditBalanceRepo.findOne({
           where: { organizationId },
         });
         let decrementOnTop = 0;
         let decrementCycle = 0;
-        if (unitType === 'image') {
-          if (creditBalance.currentCycleImage < trueAmount) {
-            decrementOnTop = trueAmount - creditBalance.currentCycleImage;
-            decrementCycle = creditBalance.currentCycleImage || 0;
-          } else {
-            decrementCycle = trueAmount;
-          }
-        } else {
-          if (creditBalance.currentCycleBalance < trueAmount) {
-            decrementOnTop = trueAmount - creditBalance.currentCycleBalance;
-            decrementCycle = creditBalance.currentCycleBalance || 0;
-          } else {
-            decrementCycle = trueAmount;
-          }
-        }
 
+        if (creditBalance.currentCycleBalance < trueAmount) {
+          decrementOnTop = trueAmount - creditBalance.currentCycleBalance;
+          decrementCycle = creditBalance.currentCycleBalance || 0;
+        } else {
+          decrementCycle = trueAmount;
+        }
         await this.creditBalanceRepo.update({
           where: { organizationId: organizationId },
-          data:
-            unitType === 'image'
-              ? {
-                  currentCycleImage: { decrement: decrementCycle },
-                  onTopImage: { decrement: decrementOnTop },
-                }
-              : {
-                  currentCycleBalance: { decrement: decrementCycle },
-                  onTopBalance: { decrement: decrementOnTop },
-                },
+          data: {
+            currentCycleBalance: { decrement: decrementCycle },
+            onTopBalance: { decrement: decrementOnTop },
+          },
         });
         //   if (updatedProjectMember) {
         //     const updateProject = await this.projectRepo.update({
