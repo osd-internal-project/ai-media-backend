@@ -25,7 +25,7 @@ import { KeycloakService } from 'src/keycloak/keycloak.service';
 import { HttpService } from '@nestjs/axios';
 import configs from 'src/configs';
 import { firstValueFrom } from 'rxjs';
-import dayjs from 'dayjs';
+import * as dayjs from 'dayjs';
 
 @Injectable()
 export class OrganizationService {
