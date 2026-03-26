@@ -73,6 +73,7 @@ export class PromptGuideService {
       where: {
         organizationId,
       },
+      include: { promptGuideType: true },
     });
   }
   async findWithImageByTypes(promptGuideTypeId: number) {
@@ -101,20 +102,20 @@ export class PromptGuideService {
                 index: 'asc',
               },
             });
-            if(image){
-            const url = await this.tosService.getPreSignedUrl(
-              bucketname,
-              image?.imagePath || '',
-            );
-            images.push({
-              uid: image?.uid,
-              name: image?.imageName,
-              url: url,
-              imagePath: image?.imagePath,
-              status: image?.status,
-              index: image?.index,
-            });
-          }
+            if (image) {
+              const url = await this.tosService.getPreSignedUrl(
+                bucketname,
+                image?.imagePath || '',
+              );
+              images.push({
+                uid: image?.uid,
+                name: image?.imageName,
+                url: url,
+                imagePath: image?.imagePath,
+                status: image?.status,
+                index: image?.index,
+              });
+            }
           }),
         );
         return {

@@ -24,6 +24,7 @@ export class PromptGuideTypeService {
             { organizationId: null },
             { organizationId: '' },
           ],
+          status: true,
           generateType: generateType,
         }
       : {};
@@ -49,6 +50,12 @@ export class PromptGuideTypeService {
         },
       },
       orderBy: { id: 'asc' },
+    });
+  }
+
+  findActive(organizationId?: string, generateType?: string) {
+    return this.promptGuideTypeRepo.findOne({
+      where: { organizationId, generateType, status: true },
     });
   }
 

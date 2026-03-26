@@ -31,7 +31,13 @@ export class PromptGuideTypeController {
   ) {
     return this.promptGuideTypeService.findAll(organizationId, generateType);
   }
-
+  @Get('active')
+  findActive(
+    @Query('organizationId') organizationId?: string,
+    @Query('generateType') generateType?: string,
+  ) {
+    return this.promptGuideTypeService.findActive(organizationId, generateType);
+  }
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.promptGuideTypeService.findOne(+id);
