@@ -201,13 +201,6 @@ export class LogsService {
 
       // include: { users: true },
       // distinct: ['taskId'],
-      select: {
-        taskId: true,
-        referenceImages: true,
-        resolution: true,
-        ratio: true,
-        generateAudio: true,
-      },
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
@@ -262,6 +255,7 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
+    console.log(seqMap);
 
     const newData = new Map();
     for (const item of data) {
@@ -426,6 +420,7 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
+    console.log(seqMap);
 
     const newData = new Map();
     for (const item of data) {
@@ -591,6 +586,7 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
+    console.log(seqMap);
 
     const newData = new Map();
     for (const item of data) {
