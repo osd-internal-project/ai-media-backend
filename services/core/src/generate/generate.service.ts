@@ -1521,14 +1521,7 @@ export class GenerateService {
         redisDreamactorCacheKey,
         modelDetail,
       );
-      console.log('checkCreditDreamactorQuota', {
-        isQuotaExceeded,
-        incrementCredit,
-        limitAllowance,
-        usedCredit,
-        onhandToken,
-      });
-      return;
+       
       if (isQuotaExceeded) {
         return {
           status: 400,
