@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { PromptGuideService } from './prompt-guide.service';
 import { Prisma } from '@prisma/client';
@@ -43,8 +44,11 @@ export class PromptGuideController {
   }
 
   @Get('organization/:organizationId')
-  findByOrganization(@Param('organizationId') organizationId: string) {
-    return this.promptGuideService.findByOrganization(organizationId);
+  findByOrganization(
+    @Param('organizationId') organizationId: string,
+    @Query('model') model?: string,
+  ) {
+    return this.promptGuideService.findByOrganization(organizationId, { model });
   }
   @Get('type/:promptGuideTypeId')
   findWithImageByTypes(@Param('promptGuideTypeId') promptGuideTypeId: string) {
