@@ -20,6 +20,7 @@ import { OrganizationSubscriptionModule } from './organization-subscription/orga
 import { PackageTransactionModule } from './package-transaction/package-transaction.module';
 import { CreditBalanceModule } from './credit-balance/credit-balance.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CouponCodeModule } from './coupon-code/coupon-code.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     OrganizationSubscriptionModule,
     PackageTransactionModule,
     CreditBalanceModule,
+    CouponCodeModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

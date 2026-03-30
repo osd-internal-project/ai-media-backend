@@ -32,6 +32,8 @@ import {
   BrandKitRepository,
   BrandKitDetailRepository,
   BrandKitDetailTypeRepository,
+  CouponCodeRepository,
+  CouponCodeUsageRepository,
 } from 'src/repositories';
 
 const services = [
@@ -67,6 +69,8 @@ const services = [
   BrandKitRepository,
   BrandKitDetailRepository,
   BrandKitDetailTypeRepository,
+  CouponCodeRepository,
+  CouponCodeUsageRepository,
 ];
 
 @Module({

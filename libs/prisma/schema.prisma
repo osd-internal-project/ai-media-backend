@@ -262,14 +262,14 @@ model MasterDataConfigApi {
 }
 
 model PromptGuide {
-  id          Int     @unique @default(autoincrement()) @map("id")
-  title       String? @map("title") @db.VarChar(150)
-  textPrompt  String? @map("text_prompt") @db.Text
-  description String? @map("description") @db.Text
-  model       String? @map("model") @db.VarChar(100)
-  status      Boolean @map("status") @db.Boolean
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @default(now()) @map("updated_at")
+  id                Int              @unique @default(autoincrement()) @map("id")
+  title             String?          @map("title") @db.VarChar(150)
+  textPrompt        String?          @map("text_prompt") @db.Text
+  description       String?          @map("description") @db.Text
+  model             String?          @map("model") @db.VarChar(100)
+  status            Boolean          @map("status") @db.Boolean
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @default(now()) @map("updated_at")
   promptGuideType   PromptGuideType? @relation(fields: [promptGuideTypeId], references: [id])
   promptGuideTypeId Int?             @map("prompt_guide_type_id")
   organizationId    String?          @map("organization_id") @db.VarChar(50)
@@ -443,6 +443,42 @@ model Invitation {
 
   @@index([email])
   @@map("invitation")
+}
+
+model CouponCode {
+  id                String           @id @default(uuid())
+  code              String           @default(uuid()) @db.VarChar(100)
+  expiresAt         DateTime         @map("expires_at")
+  status            String           @default("ACTIVE") @db.VarChar(20) // ACTIVE, INACTIVE, EXPIRED
+  usageLimit        Int              @default(1) @map("usage_limit")
+  fixOrganizationId String?          @map("fix_organization_id") @db.VarChar(50)
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  onTopCredit       Float            @default(0) @map("on_top_credit")
+  couponCodeUsage   CouponCodeUsage?
+
+  @@index([id])
+  @@map("coupon_code")
+}
+
+model CouponCodeUsage {
+  id               String     @id @default(uuid())
+  // discount       Float    @default(0) @map("discount") @db.Decimal(10, 2)
+  // expiresAt      DateTime @map("expires_at") 
+  organizationId   String?    @map("organization_id") @db.VarChar(50)
+  usedAt           DateTime   @map("used_at")
+  usedById         String     @map("used_by_id") @db.VarChar(50)
+  onTopCredit      Float      @default(0) @map("on_top_credit")
+  organizationName String     @map("organization_name") @db.VarChar(200)
+  organizationCode String     @map("organization_code") @db.VarChar(200)
+  usedByName       String     @map("used_by_name") @db.VarChar(200)
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  couponCode       CouponCode @relation(fields: [couponCodeId], references: [id])
+  couponCodeId     String     @unique @map("coupon_code_id") @db.VarChar(100)
+
+  @@index([couponCodeId])
+  @@map("coupon_code_usage")
 }
 
 model RequestChangePassword {
