@@ -58,13 +58,13 @@ export class CouponCodeService {
       throw new NotFoundException(`Coupon is limited`);
     }
     const form = {
-      couponCode: code,
       usedAt: new Date(),
       usedById: user.userId,
       usedByName: user.fullname,
       onTopCredit: cuponCode.onTopCredit,
       organizationName: organization.name,
       organizationCode: organization.organizationId,
+      couponCode: { connect: { id: cuponCode.id } },
     } as Prisma.CouponCodeUsageCreateInput;
     const result = await this.couponCodeUsageRepo.create({ data: form });
     await this.organizationRepository.update({
@@ -91,12 +91,17 @@ export class CouponCodeService {
     };
   }
 
-  async findMany(condition: { skip?: string; take?: string;code?:string status?: string }) {
-    const { skip, take, status ,code} = condition;
-    const where:Prisma.CouponCodeWhereInput={
-        ...(code && { code }),
-        ...(status && { status }),
-    }
+  async findMany(condition: {
+    skip?: string;
+    take?: string;
+    code?: string;
+    status?: string;
+  }) {
+    const { skip, take, status, code } = condition;
+    const where: Prisma.CouponCodeWhereInput = {
+      ...(code && { code }),
+      ...(status && { status }),
+    };
     const [data, total] = await Promise.all([
       this.couponCodeRepo.findMany({
         where,
@@ -104,7 +109,7 @@ export class CouponCodeService {
         ...{ take: take ? +take : 10 },
       }),
       this.couponCodeRepo.count({
-       where
+        where,
       }),
     ]);
     return { data, total };
