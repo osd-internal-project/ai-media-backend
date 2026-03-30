@@ -42,6 +42,7 @@ export class ByteplusePayloadVideo {
   ratio: string;
   duration: number;
   watermark: boolean;
+  resolution: string;
 }
 
 export class ByteplusePayloadOmnihumen {
@@ -54,10 +55,9 @@ export class ByteplusePayloadOmnihumen {
   prompt?: string;
 }
 
-
 export class ByteplusePayloadDreamactor {
   req_key: string;
   image_urls: string[];
-  video_url: string; 
+  video_url: string;
   prompt?: string;
 }

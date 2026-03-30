@@ -1009,7 +1009,7 @@ export class GenerateService {
     }
     console.log('onhandCredit', onhandCredit);
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
- 
+
     const limitAllowance = projectMember.limitCreditAllowance || 0;
 
     // currentTokenUsed = currentTokenUsed ;
@@ -1134,6 +1134,7 @@ export class GenerateService {
       ratio: body.ratio,
       duration: body.duration,
       watermark: body.watermark,
+      resolution: body.size,
     } as ByteplusePayloadVideo;
     return { basePayload, axiosConfig };
   }
@@ -1521,7 +1522,7 @@ export class GenerateService {
         redisDreamactorCacheKey,
         modelDetail,
       );
-       
+
       if (isQuotaExceeded) {
         return {
           status: 400,
