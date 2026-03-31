@@ -66,10 +66,7 @@ CREATE UNIQUE INDEX "organization_subscriptions_organization_id_key" ON "organiz
 
 -- CreateIndex
 CREATE UNIQUE INDEX "credit_balances_organization_id_key" ON "credit_balances"("organization_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "organization_member_organization_id_user_id_key" ON "organization_member"("organization_id", "user_id");
-
+ 
 -- AddForeignKey
 ALTER TABLE "organization_subscriptions" ADD CONSTRAINT "organization_subscriptions_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization"("organization_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
