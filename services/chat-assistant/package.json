@@ -1,7 +1,7 @@
 {
   "name": "@ai-media/chat-assistant",
   "description": "",
-  "version": "1.0.4",
+  "version": "1.0.0",
   "author": "",
   "dependencies": {
     "@ai-media/share": "0.0.1",
@@ -13,7 +13,8 @@
     "@nestjs/mapped-types": "1.1.0",
     "@nestjs/schedule": "^2.2.2",
     "@nestjs/swagger": "^7.1.8",
-    "@prisma/client": "^4.4.0"
+    "@prisma/client": "^4.4.0",
+    "helmet": "^5.0.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^9.1.3",
