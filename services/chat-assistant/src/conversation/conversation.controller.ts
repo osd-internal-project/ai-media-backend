@@ -21,9 +21,9 @@ import {
 
 @ApiTags('Conversations')
 @UseFilters(AppErrorExceptionFilter)
-@Controller('chat-assistant/conversations')
+@Controller('conversations')
 export class ConversationController {
-  constructor(private readonly conversationService: ConversationService) {}
+  constructor(private readonly conversationService: ConversationService) { }
 
   /**
    * POST /api/chat-assistant/conversations

@@ -62,14 +62,14 @@ spec:
             cpu: {{ .Values.resources.limits.cpu | quote }}
         livenessProbe:
           httpGet:
-            path: /api/chat-assistant/health
+            path: /api/health
             port: {{ .Values.service.containerPort }}
           initialDelaySeconds: 30
           periodSeconds: 30
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /api/chat-assistant/health
+            path: /api/health
             port: {{ .Values.service.containerPort }}
           initialDelaySeconds: 15
           periodSeconds: 15

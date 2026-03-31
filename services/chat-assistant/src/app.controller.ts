@@ -3,7 +3,7 @@ import { AppErrorExceptionFilter } from '@ai-media/share';
 import { ChatAssistantService } from './app.service';
 
 @UseFilters(AppErrorExceptionFilter)
-@Controller('chat-assistant')
+@Controller()
 export class ChatAssistantController {
   constructor(private ChatAssistantService: ChatAssistantService) { }
 
