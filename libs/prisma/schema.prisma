@@ -695,3 +695,81 @@ model BrandKitDetailType {
 
   @@map("brand_kit_detail_type")
 }
+
+// ─── Chat Assistant Models ────────────────────────────────────────────────────
+
+enum ChatRole {
+  user
+  assistant
+  system
+  tool
+}
+
+model ChatConversation {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.VarChar(50)
+  organizationId String?  @map("organization_id") @db.VarChar(50)
+  title          String?  @map("title") @db.VarChar(300)
+  model          String?  @map("model") @db.VarChar(100)
+  systemPrompt   String?  @map("system_prompt") @db.Text
+  metadata       Json?    @map("metadata") @db.JsonB
+  status         String   @default("active") @map("status") @db.VarChar(20)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  messages   ChatMessage[]
+  tokenUsage ChatTokenUsage[]
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("chat_conversation")
+}
+
+model ChatMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  role           ChatRole
+  content        String?  @map("content") @db.Text
+  name           String?  @map("name") @db.VarChar(100)
+  toolCallId     String?  @map("tool_call_id") @db.VarChar(100)
+  toolCalls      Json?    @map("tool_calls") @db.JsonB
+  metadata       Json?    @map("metadata") @db.JsonB
+  sequence       Int      @default(0) @map("sequence")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id])
+  tokenUsage   ChatTokenUsage?
+
+  @@index([conversationId])
+  @@map("chat_message")
+}
+
+model ChatTokenUsage {
+  id               String   @id @default(uuid()) @db.Uuid
+  conversationId   String   @map("conversation_id") @db.Uuid
+  messageId        String?  @unique @map("message_id") @db.Uuid
+  model            String   @map("model") @db.VarChar(100)
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @default(0) @map("total_tokens")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id])
+  message      ChatMessage?     @relation(fields: [messageId], references: [id])
+
+  @@index([conversationId])
+  @@map("chat_token_usage")
+}
+
+model ChatTool {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @map("name") @db.VarChar(100)
+  description String?  @map("description") @db.Text
+  parameters  Json     @map("parameters") @db.JsonB
+  handler     String?  @map("handler") @db.VarChar(100)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("chat_tool")
+}
