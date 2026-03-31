@@ -403,7 +403,6 @@ model OrganizationMember {
   maxToken  Int?
   maxImages Int?    @default(0) @map("max_images")
 
-  @@unique([organizationId, userId])
   @@map("organization_member")
 }
 
@@ -477,7 +476,7 @@ model CouponCodeUsage {
   couponCode       CouponCode @relation(fields: [couponCodeId], references: [id])
   couponCodeId     String     @unique @map("coupon_code_id") @db.VarChar(100)
 
-  @@index([couponCodeId])
+  // @@index([couponCodeId])
   @@map("coupon_code_usage")
 }
 
