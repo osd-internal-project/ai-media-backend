@@ -454,7 +454,7 @@ model CouponCode {
   createdAt         DateTime         @default(now()) @map("created_at")
   updatedAt         DateTime         @updatedAt @map("updated_at")
   onTopCredit       Float            @default(0) @map("on_top_credit")
-  couponCodeUsage   CouponCodeUsage?
+  couponCodeUsage   CouponCodeUsage[]
 
   @@index([id])
   @@map("coupon_code")
@@ -474,7 +474,7 @@ model CouponCodeUsage {
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
   couponCode       CouponCode @relation(fields: [couponCodeId], references: [id])
-  couponCodeId     String     @unique @map("coupon_code_id") @db.VarChar(100)
+  couponCodeId     String    @map("coupon_code_id") @db.VarChar(100)
 
   // @@index([couponCodeId])
   @@map("coupon_code_usage")
