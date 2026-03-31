@@ -22,7 +22,7 @@ ingress:
 env:
   nodeEnv: "Production"
   port: "4000"
-  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
+  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave_uat?schema=public"
   redisHost: "my-redis-master.aicave-prod.svc.cluster.local"
   redisPort: "6379"
   storagePath: "https://www.aicave.ai/public/api/v1/s3"
