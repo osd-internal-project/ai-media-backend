@@ -1,0 +1,40 @@
+# Production Environment Values
+# Override specific values for PROD environment
+
+namespace: aicave-prod
+replicaCount: 3
+
+image:
+  tag: "v1.0.0"
+
+ingress:
+  hosts:
+    - host: www.aicave.ai
+      paths:
+        - path: /public/api/v1/chat-assistant(/|$)(.*)
+          pathType: ImplementationSpecific
+  tls:
+    enabled: true
+    secretName: aicave-console-tls
+
+env:
+  nodeEnv: "Production"
+  port: "4004"
+  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
+  openaiApiKey: ""
+  openaiBaseUrl: "https://api.openai.com/v1"
+  openaiModel: "gpt-4o"
+  openaiFullbackModel: "gpt-3.5-turbo"
+  openaiMaxRetries: "3"
+  openaiTimeoutMs: "60000"
+  moderationEnabled: "true"
+  memoryMaxMessages: "20"
+  memoryMaxTokenBudget: "8000"
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "200m"
+  limits:
+    memory: "768Mi"
+    cpu: "1000m"

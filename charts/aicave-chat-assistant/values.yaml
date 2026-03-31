@@ -1,0 +1,79 @@
+# Default values for aicave-chat-assistant
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+appName: aicave-chat-assistant
+namespace: aicave-prod
+replicaCount: 2
+
+image:
+  repository: docker.io/library/ai-chat-assistant-be
+  pullPolicy: Always
+  tag: "v1.0.0"
+
+imagePullSecretName: huawei-swr-secret
+
+service:
+  type: ClusterIP
+  port: 8977
+  targetPort: 4004
+  containerPort: 4004
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "32k"
+    nginx.ingress.kubernetes.io/large-client-header-buffers: "4 32k"
+    # SSE / streaming support
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/rewrite-target: /api/$2
+  hosts:
+    - host: www.aicave.ai
+      paths:
+        - path: /public/api/v1/chat-assistant(/|$)(.*)
+          pathType: ImplementationSpecific
+  tls:
+    enabled: true
+    secretName: aicave-console-tls
+
+env:
+  nodeEnv: "Production"
+  port: "4004"
+  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
+  # OpenAI / LLM
+  openaiApiKey: "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"
+  openaiBaseUrl: "https://api.openai.com/v1"
+  openaiModel: "gpt-5-nano"
+  openaiFullbackModel: "gpt-4.1-nano"
+  openaiMaxRetries: "3"
+  openaiTimeoutMs: "60000"
+  # Moderation & Memory
+  moderationEnabled: "true"
+  memoryMaxMessages: "20"
+  memoryMaxTokenBudget: "8000"
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "200m"
+  limits:
+    memory: "768Mi"
+    cpu: "1000m"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+nameOverride: ""
+fullnameOverride: ""
