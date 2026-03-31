@@ -1,0 +1,40 @@
+# SIT Environment Values
+# Override specific values for SIT environment
+
+namespace: aicave-sit
+replicaCount: 1
+
+image:
+  tag: "v1.0.0"
+
+ingress:
+  hosts:
+    - host: sit.aicave.ai
+      paths:
+        - path: /public/api/v1/chat-assistant(/|$)(.*)
+          pathType: ImplementationSpecific
+  tls:
+    enabled: true
+    secretName: aicave-console-tls-sit
+
+env:
+  nodeEnv: "Development"
+  port: "4004"
+  databaseUrl: "postgresql://ai_cave_sit:osd@1234@10.134.2.3:5432/ai_cave_sit?schema=public"
+  openaiApiKey: ""
+  openaiBaseUrl: "https://api.openai.com/v1"
+  openaiModel: "gpt-4o-mini"
+  openaiFullbackModel: "gpt-3.5-turbo"
+  openaiMaxRetries: "2"
+  openaiTimeoutMs: "30000"
+  moderationEnabled: "false"
+  memoryMaxMessages: "10"
+  memoryMaxTokenBudget: "4000"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"

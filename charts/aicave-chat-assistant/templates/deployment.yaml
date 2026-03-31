@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.appName }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appName }}
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecretName }}
+      containers:
+      - name: {{ .Values.appName }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.service.containerPort }}
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: {{ .Values.env.nodeEnv | quote }}
+        - name: PORT
+          value: {{ .Values.env.port | quote }}
+        - name: DATABASE_URL
+          value: {{ .Values.env.databaseUrl | quote }}
+        # OpenAI / LLM
+        - name: OPENAI_API_KEY
+          value: {{ .Values.env.openaiApiKey | quote }}
+        - name: OPENAI_BASE_URL
+          value: {{ .Values.env.openaiBaseUrl | quote }}
+        - name: OPENAI_MODEL
+          value: {{ .Values.env.openaiModel | quote }}
+        - name: OPENAI_FALLBACK_MODEL
+          value: {{ .Values.env.openaiFullbackModel | quote }}
+        - name: OPENAI_MAX_RETRIES
+          value: {{ .Values.env.openaiMaxRetries | quote }}
+        - name: OPENAI_TIMEOUT_MS
+          value: {{ .Values.env.openaiTimeoutMs | quote }}
+        # Moderation & Memory
+        - name: MODERATION_ENABLED
+          value: {{ .Values.env.moderationEnabled | quote }}
+        - name: MEMORY_MAX_MESSAGES
+          value: {{ .Values.env.memoryMaxMessages | quote }}
+        - name: MEMORY_MAX_TOKEN_BUDGET
+          value: {{ .Values.env.memoryMaxTokenBudget | quote }}
+        resources:
+          requests:
+            memory: {{ .Values.resources.requests.memory | quote }}
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.resources.limits.memory | quote }}
+            cpu: {{ .Values.resources.limits.cpu | quote }}
+        livenessProbe:
+          httpGet:
+            path: /api/chat-assistant/health
+            port: {{ .Values.service.containerPort }}
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/chat-assistant/health
+            port: {{ .Values.service.containerPort }}
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          failureThreshold: 3
