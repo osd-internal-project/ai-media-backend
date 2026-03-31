@@ -201,13 +201,6 @@ export class LogsService {
 
       // include: { users: true },
       // distinct: ['taskId'],
-      select: {
-        taskId: true,
-        referenceImages: true,
-        resolution: true,
-        ratio: true,
-        generateAudio: true,
-      },
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
@@ -262,7 +255,8 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-
+    
+    console.log(seqMap); 
     const newData = new Map();
     for (const item of data) {
       const url = item.imageUrl
@@ -284,6 +278,8 @@ export class LogsService {
 
       // Generate presigned URLs for multiple reference images
       const referenceImageFilenames = referenceImagesMap.get(item.taskId);
+      // console.log(referenceImagesMap);
+
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
@@ -310,7 +306,6 @@ export class LogsService {
           }
         }
       }
-
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
@@ -426,6 +421,7 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
+    console.log(seqMap);
 
     const newData = new Map();
     for (const item of data) {
@@ -591,6 +587,7 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
+    console.log(seqMap);
 
     const newData = new Map();
     for (const item of data) {

@@ -192,7 +192,7 @@ export class GenerateService {
         'EX',
         24 * 60 * 60,
       );
-       
+
       console.log(`✅ Task created: ${taskId}, Job ID: ${job.id}`);
       return {
         status: 200,
@@ -661,10 +661,16 @@ export class GenerateService {
           // projectMember.holdImageAllowance + projectMember.usedImageAllowance;
           projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
       }
-      console.log(body);
 
       const credit = await this.getUsedCredit(0, body, model);
-      console.log(credit);
+      if (!credit) {
+        return {
+          isQuotaExceeded: true,
+          currentCreditUsed: 0,
+          maxCreditInPlan: 0,
+          onholdCredits: 0,
+        };
+      }
       const maxCreditInPlan = projectMember?.limitCreditAllowance || 0;
       currentCreditUsed = currentCreditUsed + credit.credit;
       //Check Allowence :Member > Team >Organization
@@ -871,6 +877,15 @@ export class GenerateService {
     const onhandToken =
       (body.width * body.height * body.duration * frameRate) / 1024;
     const onhandCredit = await this.getUsedCredit(onhandToken, body, model);
+    if (!onhandCredit) {
+      return {
+        isQuotaExceeded: true,
+        incrementCredit: 0,
+        limitAllowance: 0,
+        usedCredit: 0,
+        onhandToken: 0,
+      };
+    }
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
@@ -923,6 +938,15 @@ export class GenerateService {
     }
 
     const onhandCredit = await this.getUsedCredit(0, body, model);
+    if (!onhandCredit) {
+      return {
+        isQuotaExceeded: true,
+        incrementCredit: 0,
+        limitAllowance: 0,
+        usedCredit: 0,
+        onhandToken: 0,
+      };
+    }
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
     // currentTokenUsed = currentTokenUsed ;
@@ -973,14 +997,25 @@ export class GenerateService {
       currentCreditUsed =
         projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
-
     const onhandCredit = await this.getUsedCredit(0, body, model);
+    if (!onhandCredit) {
+      return {
+        isQuotaExceeded: true,
+        incrementCredit: 0,
+        limitAllowance: 0,
+        usedCredit: 0,
+        onhandToken: 0,
+      };
+    }
+    console.log('onhandCredit', onhandCredit);
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
+
     const limitAllowance = projectMember.limitCreditAllowance || 0;
+
     // currentTokenUsed = currentTokenUsed ;
     if (usedCredit > limitAllowance) {
       Logger.error(
-        `Token used ${usedCredit} exceed max token ${limitAllowance}`,
+        `Credit used ${usedCredit} exceed max credit ${limitAllowance}`,
       );
       return {
         isQuotaExceeded: true,
@@ -1099,6 +1134,7 @@ export class GenerateService {
       ratio: body.ratio,
       duration: body.duration,
       watermark: body.watermark,
+      resolution: body.size,
     } as ByteplusePayloadVideo;
     return { basePayload, axiosConfig };
   }
@@ -1946,9 +1982,8 @@ export class GenerateService {
     token: number,
     body: any,
     model?: MasterModelTypeDto,
-  ): Promise<{ token: number; credit: number }> {
+  ): Promise<{ token: number; credit: number } | undefined> {
     try {
-
       // 1. Dynamic Formula Check
       if (
         model?.modelDetails &&
@@ -1961,7 +1996,6 @@ export class GenerateService {
             model.modelDetails;
           let calculatedToken = token;
           let calculatedCredit = 0;
-
           const evaluate = (expr: string, t: number, b: any) => {
             if (!expr) return 0;
             const isExpr = !expr.includes(';') && !expr.includes('return ');
@@ -2004,12 +2038,15 @@ export class GenerateService {
             !isNaN(calculatedCredit)
           ) {
             return { token: calculatedToken, credit: calculatedCredit };
+          } else {
+            return undefined;
           }
         } catch (err) {
           console.error(
             'Error evaluating dynamic formula, falling back to default logic:',
             err,
           );
+          return undefined;
         }
       }
 
@@ -2112,7 +2149,7 @@ export class GenerateService {
       throw new Error('Model not found');
     }
     const credit = await this.getUsedCredit(0, body, modelDetail);
-    return credit.credit || 0;
+    return credit?.credit || 0;
   }
   //ลบ hold image allowance ถ้า fail
   cancelHoldAmount(

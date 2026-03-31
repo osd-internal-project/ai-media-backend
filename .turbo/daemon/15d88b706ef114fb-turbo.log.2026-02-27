@@ -1,0 +1,164 @@
+2026-02-27T02:59:40.703389Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/users/users.service.ts")}
+2026-02-27T02:59:40.705645Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T02:59:40.996195Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/daemon/15d88b706ef114fb-turbo.log.2026-02-27"), AnchoredSystemPathBuf(".turbo/daemon/15d88b706ef114fb-turbo.log.2026-02-26")}
+2026-02-27T02:59:40.996205Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-02-27T02:59:42.795013Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/users/users.service.ts")}
+2026-02-27T02:59:42.795051Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T03:00:26.705531Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/users/users.service.ts")}
+2026-02-27T03:00:26.705558Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T03:02:03.517178Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/users/users.service.ts")}
+2026-02-27T03:02:03.517969Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T03:02:04.596396Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/users/users.service.ts")}
+2026-02-27T03:02:04.596426Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T03:02:41.012864Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/users/users.service.ts")}
+2026-02-27T03:02:41.015556Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T03:02:41.189548Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T03:03:09.501198Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T03:03:09.502128Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T03:03:29.392864Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T03:03:29.392894Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T03:03:36.493284Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T03:03:36.493327Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T04:36:34.272127Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/websocket/websocket.gateway.ts")}
+2026-02-27T04:36:34.274562Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T04:54:04.958627Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/websocket/websocket.gateway.ts")}
+2026-02-27T04:54:04.963937Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T05:03:04.539136Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/websocket/websocket.gateway.ts")}
+2026-02-27T05:03:04.539802Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T05:03:04.646396Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T05:03:11.227853Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/websocket/websocket.gateway.ts")}
+2026-02-27T05:03:11.227879Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T05:03:28.530155Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/websocket/websocket.gateway.ts")}
+2026-02-27T05:03:28.530206Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T05:03:32.633332Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/websocket/websocket.gateway.ts")}
+2026-02-27T05:03:32.633814Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T07:01:35.119409Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/1.cookie")}
+2026-02-27T07:01:35.119566Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-02-27T07:01:35.519325Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/2.cookie"), AnchoredSystemPathBuf("libs/share/.turbo/turbo-build.log")}
+2026-02-27T07:01:35.519340Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }, WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-02-27T07:01:36.420337Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/dist")}
+2026-02-27T07:01:36.420348Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-02-27T07:01:43.220602Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/dist")}
+2026-02-27T07:01:43.220684Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-02-27T07:01:51.281632Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:01:51.420170Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T07:01:51.420520Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:01:52.619482Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/3.cookie"), AnchoredSystemPathBuf("libs/share/.turbo/turbo-build.log")}
+2026-02-27T07:01:52.619510Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }, WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-02-27T07:02:08.020387Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T07:02:08.020426Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:02:15.520466Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T07:02:15.520491Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:02:25.320671Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T07:02:25.320695Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:02:34.021885Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/4.cookie")}
+2026-02-27T07:02:34.021940Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-02-27T07:02:34.421469Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/.turbo/turbo-build.log"), AnchoredSystemPathBuf("libs/share/dist"), AnchoredSystemPathBuf("libs/share/.turbo"), AnchoredSystemPathBuf(".turbo/cookies/5.cookie")}
+2026-02-27T07:02:34.421480Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }, WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-02-27T07:02:34.857081Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:02:34.857509Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/6.cookie"), AnchoredSystemPathBuf("libs/share/dist")}
+2026-02-27T07:02:34.857515Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }, WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-02-27T07:02:34.857537Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:02:56.722493Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T07:02:56.722525Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:03:01.322559Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T07:03:01.323029Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:19:50.055345Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization-subscription"), AnchoredSystemPathBuf("services/users/src/organization-subscription/organization-subscription.module.ts")}
+2026-02-27T07:19:50.060827Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:19:50.453089Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization-subscription/organization-subscription.module.ts")}
+2026-02-27T07:19:50.453100Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:19:50.453237Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:19:56.487958Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization-subscription/organization-subscription.service.ts")}
+2026-02-27T07:19:56.489032Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:19:57.493474Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization-subscription/organization-subscription.service.ts")}
+2026-02-27T07:19:57.493509Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:19:57.493557Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:20:02.440464Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization-subscription/organization-subscription.controller.ts")}
+2026-02-27T07:20:02.440963Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:23.451224Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/package-transaction"), AnchoredSystemPathBuf("services/users/src/package-transaction/package-transaction.module.ts")}
+2026-02-27T07:20:23.453168Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:23.933501Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/package-transaction/package-transaction.module.ts")}
+2026-02-27T07:20:23.933519Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:23.933563Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:20:28.942906Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/package-transaction/package-transaction.service.ts")}
+2026-02-27T07:20:28.943071Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:29.202707Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/package-transaction/package-transaction.service.ts")}
+2026-02-27T07:20:29.202722Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:29.202748Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:20:35.441943Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/package-transaction/package-transaction.controller.ts")}
+2026-02-27T07:20:35.442064Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:35.630442Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/package-transaction/package-transaction.controller.ts")}
+2026-02-27T07:20:35.630456Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:35.630486Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:20:41.540543Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.module.ts"), AnchoredSystemPathBuf("services/users/src/credit-balance")}
+2026-02-27T07:20:41.540703Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:46.740345Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.service.ts")}
+2026-02-27T07:20:46.740416Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:46.923102Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.service.ts")}
+2026-02-27T07:20:46.923111Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:46.923138Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:20:54.242774Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.controller.ts")}
+2026-02-27T07:20:54.242879Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:54.543571Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.controller.ts")}
+2026-02-27T07:20:54.543581Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:20:54.543603Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:21:01.241114Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization-subscription/organization-subscription.module.ts")}
+2026-02-27T07:21:01.241141Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:21:01.322549Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:21:19.142032Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/package-transaction/package-transaction.module.ts")}
+2026-02-27T07:21:19.142069Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:21:19.408782Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:21:39.343116Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.module.ts")}
+2026-02-27T07:21:39.343525Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:21:39.694538Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:21:51.942649Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.module.ts")}
+2026-02-27T07:21:51.942672Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T07:21:51.992513Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T07:22:33.251847Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/app.module.ts")}
+2026-02-27T07:22:33.252853Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T08:46:47.555322Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization-subscription/organization-subscription.module.ts")}
+2026-02-27T08:46:47.556832Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T08:46:48.545329Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization-subscription/organization-subscription.module.ts")}
+2026-02-27T08:46:48.545340Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T08:47:01.373395Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.module.ts")}
+2026-02-27T08:47:01.375163Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T08:47:04.144172Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.module.ts")}
+2026-02-27T08:47:04.144205Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T08:47:18.144495Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/package-transaction/package-transaction.module.ts")}
+2026-02-27T08:47:18.144512Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T09:26:24.136945Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T09:26:24.141000Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T09:26:29.912410Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/organization/organization.service.ts")}
+2026-02-27T09:26:29.912450Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T09:48:17.767820Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/app.module.ts")}
+2026-02-27T09:48:17.769860Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T09:48:17.965745Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T09:48:28.664706Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.module.ts")}
+2026-02-27T09:48:28.665561Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T09:48:28.767826Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T09:48:37.154809Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.module.ts")}
+2026-02-27T09:48:37.155134Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T09:52:21.470323Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.controller.ts")}
+2026-02-27T09:52:21.470951Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T09:52:22.160500Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.controller.ts")}
+2026-02-27T09:52:22.160510Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T09:52:22.293744Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T09:53:45.574482Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/users/src/credit-balance/credit-balance.controller.ts")}
+2026-02-27T09:53:45.575240Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/users"), path: AnchoredSystemPathBuf("services/users") }}))
+2026-02-27T09:53:45.797545Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-02-27T10:15:57.504200Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/project/project.service.ts")}
+2026-02-27T10:15:57.504536Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T10:16:09.226233Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/project/project.service.ts")}
+2026-02-27T10:16:09.232102Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T10:16:24.007051Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/project/project.service.ts")}
+2026-02-27T10:16:24.007609Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T10:16:32.797178Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/project/project.service.ts")}
+2026-02-27T10:16:32.797219Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T10:17:52.607024Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/project/project.service.ts")}
+2026-02-27T10:17:52.608017Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T10:18:01.711471Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/project/project.service.ts")}
+2026-02-27T10:18:01.712231Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T10:18:09.567714Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/project/project.service.ts")}
+2026-02-27T10:18:09.568402Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-02-27T10:18:26.698623Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/src/project/project.service.ts")}
+2026-02-27T10:18:26.698701Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
