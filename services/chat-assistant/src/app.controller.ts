@@ -1,4 +1,4 @@
-import { Controller, UseFilters } from '@nestjs/common';
+import { Controller, Get, UseFilters } from '@nestjs/common';
 import { AppErrorExceptionFilter } from '@ai-media/share';
 import { ChatAssistantService } from './app.service';
 
@@ -6,4 +6,9 @@ import { ChatAssistantService } from './app.service';
 @Controller('chat-assistant')
 export class ChatAssistantController {
   constructor(private ChatAssistantService: ChatAssistantService) { }
+
+  @Get('health')
+  healthCheck() {
+    return { status: 'OK', service: 'chat-assistant' };
+  }
 }
