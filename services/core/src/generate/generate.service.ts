@@ -691,14 +691,15 @@ export class GenerateService {
       const project = await this.projectRepo.findOne({
         where: { id: body.projectId },
       });
+    
       if (
         project.usedCreditAllowance + project.holdCreditAllowance >
         project.limitCreditAllowance
       ) {
         Logger.error(
-          `Credit used ${
-            currentCreditUsed + credit.credit
-          } exceed max credit ${maxCreditInPlan}`,
+          `Project Credit used ${
+            project.usedCreditAllowance + project.holdCreditAllowance
+          } exceed max credit ${project.limitCreditAllowance}`,
         );
         return {
           isQuotaExceeded: true,
@@ -711,13 +712,13 @@ export class GenerateService {
         where: { organizationId: body.organizationId },
       });
       if (
-        creditBalance.currentCycleImage + creditBalance.onTopImage <
+        creditBalance.currentCycleBalance + creditBalance.onTopBalance <
         credit.credit
       ) {
         Logger.error(
-          `Credit used ${
-            currentCreditUsed + credit.credit
-          } exceed max organize credit ${maxCreditInPlan}`,
+          `Credit Balance used ${
+            creditBalance.currentCycleBalance + creditBalance.onTopBalance
+          } exceed max organize credit ${credit.credit}`,
         );
 
         return {
