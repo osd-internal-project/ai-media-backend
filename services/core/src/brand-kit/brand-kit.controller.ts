@@ -28,7 +28,7 @@ export class BrandKitController {
     return this.brandKitService.findAll(query);
   }
 
-  @Get('organization/default/:organizationId')
+  @Get('organization/:organizationId/default')
   findDefaultByOrganization(@Param('organizationId') organizationId: string) {
     return this.brandKitService.findDefaultByOrganization(organizationId);
   }
