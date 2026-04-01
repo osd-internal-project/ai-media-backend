@@ -8,6 +8,7 @@ import { MemoryService } from './services/memory.service';
 import { ToolCallingService } from './services/tool-calling.service';
 import { RetryService } from './services/retry.service';
 import { ModerationService } from './services/moderation.service';
+import { VisionService } from './services/vision.service';
 
 @Module({
   imports: [PrismaModule, HttpModule],
@@ -19,7 +20,8 @@ import { ModerationService } from './services/moderation.service';
     ToolCallingService,
     RetryService,
     ModerationService,
+    VisionService,
   ],
-  exports: [ChatService],
+  exports: [ChatService, VisionService],
 })
 export class ChatModule {}
