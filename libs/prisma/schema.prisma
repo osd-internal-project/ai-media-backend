@@ -445,17 +445,18 @@ model Invitation {
 }
 
 model CouponCode {
-  id                String           @id @default(uuid())
-  code              String           @default(uuid()) @db.VarChar(100)
-  expiresAt         DateTime         @map("expires_at")
-  status            String           @default("ACTIVE") @db.VarChar(20) // ACTIVE, INACTIVE, EXPIRED
-  usageLimit        Int              @default(1) @map("usage_limit")
-  fixOrganizationId String?          @map("fix_organization_id") @db.VarChar(50)
-  createdAt         DateTime         @default(now()) @map("created_at")
-  updatedAt         DateTime         @updatedAt @map("updated_at")
-  onTopCredit       Float            @default(0) @map("on_top_credit")
+  id                String            @id @default(uuid())
+  code              String            @default(uuid()) @db.VarChar(100)
+  expiresAt         DateTime          @map("expires_at")
+  status            String            @default("ACTIVE") @db.VarChar(20) // ACTIVE, INACTIVE, EXPIRED
+  usageLimit        Int               @default(1) @map("usage_limit")
+  fixOrganizationId String?           @map("fix_organization_id") @db.VarChar(50)
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  onTopCredit       Float             @default(0) @map("on_top_credit")
   couponCodeUsage   CouponCodeUsage[]
-
+  referenceTag      String?           @db.VarChar(100)
+  
   @@index([id])
   @@map("coupon_code")
 }
@@ -474,7 +475,7 @@ model CouponCodeUsage {
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
   couponCode       CouponCode @relation(fields: [couponCodeId], references: [id])
-  couponCodeId     String    @map("coupon_code_id") @db.VarChar(100)
+  couponCodeId     String     @map("coupon_code_id") @db.VarChar(100)
 
   // @@index([couponCodeId])
   @@map("coupon_code_usage")

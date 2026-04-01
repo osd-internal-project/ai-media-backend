@@ -8,6 +8,8 @@ import {
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { UseCouponCodeDto } from './dto/use-coupon.dto';
+import * as Papa from 'papaparse';
+import * as dayjs from 'dayjs';
 
 @Injectable()
 export class CouponCodeService {
@@ -22,6 +24,16 @@ export class CouponCodeService {
 
   async create(data: Prisma.CouponCodeCreateInput) {
     return this.couponCodeRepo.create({ data });
+  }
+  async createGroup(data: Prisma.CouponCodeCreateInput & { amount: number }) {
+    const { amount, ...rest } = data;
+
+    let success = 0;
+    for (let i = 0; i < amount; i++) {
+      const data = await this.couponCodeRepo.create({ data: { ...rest } });
+      if (data) success++;
+    }
+    return { success, amount, fail: amount - success };
   }
 
   async useCoupon(data: UseCouponCodeDto) {
@@ -91,25 +103,24 @@ export class CouponCodeService {
     };
   }
 
-  async findMany(condition: {
-    skip?: string;
-    take?: string;
-    code?: string;
-    status?: string;
-  }) {
-    const { skip, take, status, code } = condition;
-    const where: Prisma.CouponCodeWhereInput = {
-      ...(code && { code }),
+  async findMany(condition: any) {
+    const { skip, take, status, code, referenceTag } = condition;
+    const prismaWhere: Prisma.CouponCodeWhereInput = {
+      ...(code && { code: { contains: code, mode: 'insensitive' } }),
       ...(status && { status }),
+      ...(referenceTag && {
+        referenceTag: { contains: referenceTag, mode: 'insensitive' },
+      }),
     };
     const [data, total] = await Promise.all([
       this.couponCodeRepo.findMany({
-        where,
-        ...{ skip: skip ? +skip : 0 },
-        ...{ take: take ? +take : 10 },
+        where: prismaWhere,
+        skip: skip ? +skip : undefined,
+        take: take ? +take : undefined,
+        orderBy: { createdAt: 'desc' },
       }),
       this.couponCodeRepo.count({
-        where,
+        where: prismaWhere,
       }),
     ]);
     return { data, total };
@@ -137,5 +148,23 @@ export class CouponCodeService {
 
   async remove(id: string) {
     return this.couponCodeRepo.delete({ where: { id } });
+  }
+
+  async exportCsv(condition: any) {
+    // console.log(condition);
+    const { data } = await this.findMany({ ...condition });
+    // console.log(data.length);
+    const exportData = data.map((item, index) => ({
+      No: index + 1,
+      Code: item.code,
+      Credit: item.onTopCredit,
+      Limit: item.usageLimit,
+      Tag: item.referenceTag || '',
+      'Expired At': dayjs(item.expiresAt).format('YYYY-MM-DD HH:mm:ss'),
+      Status: item.status,
+    }));
+
+    const csv = Papa.unparse(exportData);
+    return '\uFEFF' + csv; // BOM for UTF-8 Excel support
   }
 }
