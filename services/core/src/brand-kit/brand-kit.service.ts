@@ -12,7 +12,17 @@ export class BrandKitService {
   async create(data: Prisma.BrandKitCreateInput) {
     return this.brandKitRepo.create({ data });
   }
-
+  async setDefault(id: string) {
+    const data = await this.brandKitRepo.findOne({ where: { id } });
+    await this.brandKitRepo.updateMany({
+      where: { organizationId: data.organizationId },
+      data: { default: false },
+    });
+    return this.brandKitRepo.update({
+      where: { id },
+      data: { default: true },
+    });
+  }
   async findAll(condition: Prisma.BrandKitFindManyArgs) {
     return this.brandKitRepo.findAll(condition);
   }
@@ -23,7 +33,11 @@ export class BrandKitService {
       include: { brandKitDetails: true },
     });
   }
-
+  async findDefaultByOrganization(organizationId: string) {
+    return this.brandKitRepo.findOne({
+      where: { organizationId, default: true },
+    });
+  }
   async findByOrganization(organizationId: string) {
     return this.brandKitRepo.findMany({
       where: { organizationId },

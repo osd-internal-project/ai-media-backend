@@ -353,6 +353,7 @@ model Organization {
   remainTokenAmount   Int?                      @default(0) @map("remain_token_amount")
   remainImageAmount   Int?                      @default(0) @map("remain_image_amount")
   maxUserAccess       Int?                      @map("max_user_access")
+  accessCodes         String[]                  @default(["image", "video", "omni", "dream"]) @map("access_codes")
   subscription        OrganizationSubscription?
   creditBalance       CreditBalance?
   packageTransactions PackageTransaction[]
@@ -456,7 +457,7 @@ model CouponCode {
   onTopCredit       Float             @default(0) @map("on_top_credit")
   couponCodeUsage   CouponCodeUsage[]
   referenceTag      String?           @db.VarChar(100)
-  
+
   @@index([id])
   @@map("coupon_code")
 }
@@ -658,15 +659,15 @@ model RefImage {
 }
 
 model BrandKit {
-  id             String   @id @default(uuid()) @db.Uuid
-  name           String   @db.VarChar(100)
-  description    String?  @db.Text
-  industryType   String?  @map("industry_type") @db.VarChar(50)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  brandCiPrompt  String?  @map("brand_ci_prompt") @db.Text
-  negativePrompt String?  @map("negative_prompt") @db.Text
-
+  id              String           @id @default(uuid()) @db.Uuid
+  name            String           @db.VarChar(100)
+  description     String?          @db.Text
+  industryType    String?          @map("industry_type") @db.VarChar(50)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  brandCiPrompt   String?          @map("brand_ci_prompt") @db.Text
+  negativePrompt  String?          @map("negative_prompt") @db.Text
+  default         Boolean          @default(false) @map("default") @db.Boolean
   organizationId  String           @map("organization_id") @db.VarChar(50)
   organization    Organization     @relation(fields: [organizationId], references: [organizationId])
   brandKitDetails BrandKitDetail[]
