@@ -49,7 +49,6 @@ env:
   port: "4004"
   databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
   # OpenAI / LLM
-  openaiApiKey: "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"
   openaiBaseUrl: "https://api.openai.com/v1"
   openaiModel: "gpt-5-nano"
   openaiFullbackModel: "gpt-4.1-nano"
@@ -59,6 +58,11 @@ env:
   moderationEnabled: "true"
   memoryMaxMessages: "20"
   memoryMaxTokenBudget: "8000"
+
+secrets:
+  openaiApiKey:
+    secretName: chat-assistant-secrets
+    secretKey: OPENAI_API_KEY
 
 resources:
   requests:

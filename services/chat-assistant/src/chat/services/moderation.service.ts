@@ -12,7 +12,7 @@ export interface ModerationResult {
 export class ModerationService {
   private readonly logger = new Logger(ModerationService.name);
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(private readonly httpService: HttpService) { }
 
   /**
    * Check content against the OpenAI Moderation API.
@@ -25,6 +25,8 @@ export class ModerationService {
     enabled: boolean = true,
   ): Promise<void> {
     if (!enabled || !text?.trim()) return;
+    console.log(`text`, text)
+    console.log(`baseUrl`, baseUrl)
 
     try {
       const result = await this.check(text, apiKey, baseUrl);
@@ -40,6 +42,7 @@ export class ModerationService {
       }
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
+      console.log(`err`, err.response?.data || err.message)
       // Moderation API failure should not block the user — log and continue
       this.logger.error(`Moderation API error (non-blocking): ${err.message}`);
     }

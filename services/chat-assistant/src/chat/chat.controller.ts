@@ -17,9 +17,9 @@ import { Observable } from 'rxjs';
 
 @ApiTags('Chat')
 @UseFilters(AppErrorExceptionFilter)
-@Controller('chat-assistant')
+@Controller()
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(private readonly chatService: ChatService) { }
 
   /**
    * POST /api/chat-assistant/chat
