@@ -1,6 +1,4 @@
 # SIT Environment Values
-# Override specific values for SIT environment
-
 namespace: aicave-sit
 replicaCount: 1
 
@@ -23,13 +21,18 @@ env:
   databaseUrl: "postgresql://ai_cave_sit:osd@1234@10.134.2.3:5432/ai_cave_sit?schema=public"
   openaiApiKey: ""
   openaiBaseUrl: "https://api.openai.com/v1"
-  openaiModel: "gpt-4o-mini"
-  openaiFullbackModel: "gpt-3.5-turbo"
+  openaiModel: "gpt-4.1-nano"
+  openaiFullbackModel: "gpt-4.1-nano"
   openaiMaxRetries: "2"
   openaiTimeoutMs: "30000"
   moderationEnabled: "false"
   memoryMaxMessages: "10"
   memoryMaxTokenBudget: "4000"
+
+secrets:
+  openaiApiKey:
+    secretName: chat-assistant-secrets
+    secretKey: OPENAI_API_KEY
 
 resources:
   requests:

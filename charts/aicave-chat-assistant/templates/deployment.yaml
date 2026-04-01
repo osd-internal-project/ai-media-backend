@@ -33,7 +33,7 @@ spec:
           value: {{ .Values.env.port | quote }}
         - name: DATABASE_URL
           value: {{ .Values.env.databaseUrl | quote }}
-        # OpenAI / LLM
+        # OpenAI / LLM — API key loaded from Secret
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
@@ -65,14 +65,14 @@ spec:
             cpu: {{ .Values.resources.limits.cpu | quote }}
         livenessProbe:
           httpGet:
-            path: /api/health
+            path: /api/chat-assistant/health
             port: {{ .Values.service.containerPort }}
           initialDelaySeconds: 30
           periodSeconds: 30
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /api/health
+            path: /api/chat-assistant/health
             port: {{ .Values.service.containerPort }}
           initialDelaySeconds: 15
           periodSeconds: 15
