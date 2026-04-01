@@ -417,7 +417,12 @@ export class OrganizationService {
       organizationId: invite.organizationId,
     };
   }
-
+  async findAccessCodeByOrganizationId(organizationId: string) {
+    const organization = await this.organizationRepo.findOne({
+      where: { organizationId },
+    });
+    return organization.accessCodes;
+  }
   findAll(search: { searchText?: string; type?: string }) {
     return this.organizationRepo.findMany({
       where: {

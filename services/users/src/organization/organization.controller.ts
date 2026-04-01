@@ -56,6 +56,14 @@ export class OrganizationController {
   acceptInvitation(@Body() acceptInvitationDto: AcceptInvitationDto) {
     return this.organizationService.acceptInvitation(acceptInvitationDto);
   }
+  @Get('access-code/:organizationId')
+  findAccessCodeByOrganizationId(
+    @Param('organizationId') organizationId: string,
+  ) {
+    return this.organizationService.findAccessCodeByOrganizationId(
+      organizationId,
+    );
+  }
 
   @Get()
   findAll(@Query() search: { searchText?: string; type?: string }) {
