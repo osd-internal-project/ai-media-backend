@@ -7,7 +7,9 @@ import {
   Param,
   Delete,
   Query,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { CouponCodeService } from './coupon-code.service';
 import { CouponCodeUsageService } from './coupon-code-usage.service';
 import { Prisma } from '@prisma/client';
@@ -24,14 +26,29 @@ export class CouponCodeController {
   create(@Body() createCouponCodeDto: Prisma.CouponCodeCreateInput) {
     return this.couponCodeService.create(createCouponCodeDto);
   }
+  @Post('group')
+  createGroup(
+    @Body()
+    createCouponCodeDto: Prisma.CouponCodeCreateInput & { amount: number },
+  ) {
+    return this.couponCodeService.createGroup(createCouponCodeDto);
+  }
 
   @Post('use')
   useCoupon(@Body() useCouponCodeDto: UseCouponCodeDto) {
     return this.couponCodeService.useCoupon(useCouponCodeDto);
   }
 
+  @Get('export')
+  async export(@Res() res: Response, @Query() condition?: any) {
+    const csv = await this.couponCodeService.exportCsv(condition || {});
+    res.header('Content-Type', 'text/csv; charset=utf-8');
+    res.attachment('coupons.csv');
+    return res.send(csv);
+  }
+
   @Get()
-  findMany(@Query() condition?: { skip?: string; take?: string; status?: string }) {
+  findMany(@Query() condition?: any) {
     return this.couponCodeService.findMany(condition || {});
   }
 
@@ -45,7 +62,6 @@ export class CouponCodeController {
     return this.couponCodeUsageService.findUsageByCouponCodeId(couponCodeId);
   }
 
-
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.couponCodeService.findOne(id);
@@ -53,7 +69,7 @@ export class CouponCodeController {
 
   @Patch(':id')
   update(
-    @Param('id') id: string, 
+    @Param('id') id: string,
     @Body() updateCouponCodeDto: Prisma.CouponCodeUpdateInput,
   ) {
     return this.couponCodeService.update(id, updateCouponCodeDto);
