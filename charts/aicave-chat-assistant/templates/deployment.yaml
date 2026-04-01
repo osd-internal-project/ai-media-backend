@@ -35,7 +35,10 @@ spec:
           value: {{ .Values.env.databaseUrl | quote }}
         # OpenAI / LLM
         - name: OPENAI_API_KEY
-          value: {{ .Values.env.openaiApiKey | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.openaiApiKey.secretName }}
+              key: {{ .Values.secrets.openaiApiKey.secretKey }}
         - name: OPENAI_BASE_URL
           value: {{ .Values.env.openaiBaseUrl | quote }}
         - name: OPENAI_MODEL
