@@ -32,6 +32,7 @@ jobs:
     with:
       service_path: services/email-api
       image_name: ai-cave-email-api
+      deploy_env: ${{ inputs.deploy_env || 'sit' }}
     secrets: inherit
 
   resolve-version:

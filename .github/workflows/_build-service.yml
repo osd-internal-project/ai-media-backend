@@ -11,6 +11,11 @@ on:
         description: "Docker image name (e.g. ai-core-be)"
         required: true
         type: string
+      deploy_env:
+        description: "Target deploy environment (sit, uat, prod)"
+        required: false
+        type: string
+        default: sit
     outputs:
       image_ver:
         description: "The built image version from package.json"
@@ -35,11 +40,14 @@ jobs:
       - name: Read Package Version
         id: pkg
         run: |
-          VER=$(jq -r .version ${{ inputs.service_path }}/package.json)
+          PKG="${{ inputs.service_path }}/package.json"
+          VER=$(jq -r .version ${PKG})
+          NAME=$(jq -r .name ${PKG})
+          echo "🐳 Image: ${{ inputs.image_name }}:${VER}"
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
-          echo "📦 Package: $(jq -r .name package.json)"
-          echo "📦 Version: $(jq -r .version package.json)"
-          echo "🌍 Deploy Env: ${{ env.DEPLOY_ENV }}"
+          echo "📦 Package: ${NAME}"
+          echo "📦 Version: ${VER}"
+          echo "🌍 Deploy Env: ${{ inputs.deploy_env }}"
 
       # ---------------------------------------------------------------------
       # Build Docker image (build context is root for Turbo monorepo)

@@ -32,6 +32,7 @@ jobs:
     with:
       service_path: services/worker-service
       image_name: ai-cave-worker-service
+      deploy_env: ${{ inputs.deploy_env || 'sit' }}
     secrets: inherit
 
   resolve-version:

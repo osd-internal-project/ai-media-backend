@@ -32,6 +32,7 @@ jobs:
     with:
       service_path: services/chat-assistant
       image_name: ai-chat-assistant-be
+      deploy_env: ${{ inputs.deploy_env || 'sit' }}
     secrets: inherit
 
   resolve-version:
