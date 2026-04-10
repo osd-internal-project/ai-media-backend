@@ -21,7 +21,6 @@ env:
   nodeEnv: "development"
   port: "4000"
   nodeTlsRejectUnauthorized: "0"
-  databaseUrl: "postgresql://ai_cave_sit:osd@1234@10.134.2.3:5432/ai_cave_sit?schema=public"
   pathMountdirUpload: "./uploads"
   pathDomain: "http://sit.aicave.ai"
   emailApiUrl: "http://aicave-email-api-service.aicave-sit.svc.cluster.local:8974"
