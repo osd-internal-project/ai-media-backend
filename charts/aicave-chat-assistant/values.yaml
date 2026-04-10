@@ -47,7 +47,6 @@ ingress:
 env:
   nodeEnv: "Production"
   port: "4004"
-  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
   # OpenAI / LLM
   openaiBaseUrl: "https://api.openai.com/v1"
   openaiModel: "gpt-5-nano"
@@ -59,10 +58,9 @@ env:
   memoryMaxMessages: "20"
   memoryMaxTokenBudget: "8000"
 
-secrets:
-  openaiApiKey:
-    secretName: chat-assistant-secrets
-    secretKey: OPENAI_API_KEY
+# Secrets managed via GitHub Actions secrets and passed with --set:
+#   secretEnv.DATABASE_URL
+#   secretEnv.OPENAI_API_KEY
 
 resources:
   requests:
