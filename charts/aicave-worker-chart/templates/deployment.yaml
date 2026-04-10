@@ -32,7 +32,10 @@ spec:
         - name: PORT
           value: {{ .Values.env.port | quote }}
         - name: DATABASE_URL
-          value: {{ .Values.env.databaseUrl | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: DATABASE_URL
         - name: REDIS_HOST
           value: {{ .Values.env.redisHost | quote }}
         - name: REDIS_PORT
@@ -42,9 +45,15 @@ spec:
         - name: TOS_BUCKET
           value: {{ .Values.env.tosBucket | quote }}
         - name: TOS_ACCESS_KEY
-          value: {{ .Values.env.tosAccessKey | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: TOS_ACCESS_KEY
         - name: TOS_SECRET_KEY
-          value: {{ .Values.env.tosSecretKey | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: TOS_SECRET_KEY
         - name: TOS_REGION
           value: {{ .Values.env.tosRegion | quote }}
         - name: TOS_ENDPOINT

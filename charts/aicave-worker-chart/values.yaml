@@ -43,15 +43,17 @@ ingress:
 env:
   nodeEnv: "Development"
   port: "4000"
-  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
   redisHost: "my-redis-master.aicave-prod.svc.cluster.local"
   redisPort: "6379"
   storagePath: "https://www.aicave.ai/public/api/v1/s3"
   tosBucket: "ai-cave"
-  tosAccessKey: "AKAPYjgyZmRiNzcwOGUzNGQzMWEzOTljMmJlMGMxZmIxN2M"
-  tosSecretKey: "WW1aaU5URTVNV1ptWmpKak5HWTJNbUpoTTJJeU1HWmlaak0zTlRRMVpUVQ=="
   tosRegion: "ap-southeast-3"
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
+
+# Secrets managed via GitHub Actions secrets and passed with --set:
+#   secretEnv.DATABASE_URL
+#   secretEnv.TOS_ACCESS_KEY
+#   secretEnv.TOS_SECRET_KEY
 
 resources:
   requests:
@@ -63,8 +65,8 @@ resources:
 
 autoscaling:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 10
+  minReplicas: 1
+  maxReplicas: 3
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 
