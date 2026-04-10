@@ -29,7 +29,11 @@ env:
   keycloakUrl: "https://id24.aicave.ai"
   keycloakRealm: "eportal"
   keycloakClientId: "aicave-sit"
-  keycloakClientSecret: "ZMoXR3jY8xism21PO51zOQu2fgSVEpU2"
+  keycloakRedirectUri: "https://www.aicave.ai/callback"
+
+# Secrets managed via GitHub Actions secrets and passed with --set:
+#   secretEnv.DATABASE_URL
+#   secretEnv.KEYCLOAK_CLIENT_SECRET
 
 resources:
   requests:

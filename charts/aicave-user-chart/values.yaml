@@ -47,8 +47,11 @@ env:
   keycloakUrl: "https://id24.aicave.ai"
   keycloakRealm: "eportal"
   keycloakClientId: "eportal-client-id"
-  keycloakClientSecret: "kovdYL3AAs9v6e3zxNw4o3CbaBwZiCId"
   keycloakRedirectUri: "https://www.aicave.ai/callback"
+
+# Secrets managed via GitHub Actions secrets and passed with --set:
+#   secretEnv.DATABASE_URL
+#   secretEnv.KEYCLOAK_CLIENT_SECRET
 
 resources:
   requests:
@@ -60,8 +63,8 @@ resources:
 
 autoscaling:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 10
+  minReplicas: 1
+  maxReplicas: 3
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 
