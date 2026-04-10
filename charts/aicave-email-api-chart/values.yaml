@@ -10,7 +10,7 @@ replicaCount: 3
 image:
   repository: docker.io/library/ai-cave-email-api
   pullPolicy: Always
-  tag: "v1.0.1"
+  tag: "1.0.1"
 
 imagePullSecretName: huawei-swr-secret
 

@@ -9,7 +9,7 @@ replicaCount: 3
 image:
   repository: docker.io/library/ai-report-be
   pullPolicy: Always
-  tag: "v1.0.0"
+  tag: "1.0.0"
 
 imagePullSecretName: huawei-swr-secret
 

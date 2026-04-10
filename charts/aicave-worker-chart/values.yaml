@@ -9,7 +9,7 @@ replicaCount: 3
 image:
   repository: docker.io/library/ai-cave-worker-service
   pullPolicy: Always
-  tag: "v1.0.2"
+  tag: "1.0.2"
 
 imagePullSecretName: huawei-swr-secret
 
