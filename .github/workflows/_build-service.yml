@@ -37,8 +37,9 @@ jobs:
         run: |
           VER=$(jq -r .version ${{ inputs.service_path }}/package.json)
           echo "ver=${VER}" >> "$GITHUB_OUTPUT"
-          echo "Package: ${{ inputs.image_name }}"
-          echo "Version: ${VER}"
+          echo "📦 Package: $(jq -r .name package.json)"
+          echo "📦 Version: $(jq -r .version package.json)"
+          echo "🌍 Deploy Env: ${{ env.DEPLOY_ENV }}"
 
       # ---------------------------------------------------------------------
       # Build Docker image (build context is root for Turbo monorepo)
