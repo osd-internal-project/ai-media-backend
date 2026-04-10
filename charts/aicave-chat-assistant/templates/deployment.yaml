@@ -77,6 +77,6 @@ spec:
         #   httpGet:
         #     path: /api/chat-assistant/health
         #     port: {{ .Values.service.containerPort }}
-          initialDelaySeconds: 15
-          periodSeconds: 15
-          failureThreshold: 3
+        #   initialDelaySeconds: 15
+        #   periodSeconds: 15
+        #   failureThreshold: 3
