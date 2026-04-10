@@ -53,21 +53,30 @@ model users {
 }
 
 model Project {
-  id             String          @id @default(uuid())
-  name           String
-  description    String?
-  createdAt      DateTime        @default(now())
-  status         String?         @default("active") @db.VarChar(10)
+  id                   String          @id @default(uuid())
+  name                 String
+  description          String?
+  createdAt            DateTime        @default(now())
+  status               String?         @default("active") @db.VarChar(10)
   // Relations
-  members        ProjectMember[]
-  galleries      Gallery[]
-  logs           Log[]
-  organizationId String?         @map("organization_id") @db.VarChar(50)
-
-  accessTokenAmount Int? @default(0) @map("access_token_amount")
-  accessImageAmount Int? @default(0) @map("access_image_amount")
-  remainTokenAmount Int? @default(0) @map("remain_token_amount")
-  remainImageAmount Int? @default(0) @map("remain_image_amount")
+  members              ProjectMember[]
+  galleries            Gallery[]
+  logs                 Log[]
+  organizationId       String?         @map("organization_id") @db.VarChar(50)
+  // ยอดจำกัด ของ Project
+  limitImageAllowance  Int             @default(0) @map("limit_image_allowance")
+  limitCreditAllowance Float           @default(0) @map("limit_credit_allowance")
+  // ยอดใช้ของ Project
+  usedImageAllowance   Int             @default(0) @map("used_image_allowance")
+  usedCreditAllowance  Float           @default(0) @map("used_credit_allowance")
+  // ยอดจัดเก็บของ Project
+  holdImageAllowance   Int             @default(0) @map("hold_image_allowance")
+  holdCreditAllowance  Float           @default(0) @map("hold_credit_allowance")
+  //ตัวเก่า
+  accessTokenAmount    Int?            @default(0) @map("access_token_amount")
+  accessImageAmount    Int?            @default(0) @map("access_image_amount")
+  remainTokenAmount    Int?            @default(0) @map("remain_token_amount")
+  remainImageAmount    Int?            @default(0) @map("remain_image_amount")
 
   @@map("project")
 }
@@ -79,18 +88,29 @@ model ProjectMember {
   role      String?
   joinedAt  DateTime @default(now())
 
-  project Project @relation(fields: [projectId], references: [id])
-  users   users   @relation(fields: [userId], references: [userId])
-
-  maxToken  Int? @default(0) @map("max_token")
-  maxImages Int? @default(0) @map("max_images")
+  project              Project @relation(fields: [projectId], references: [id])
+  users                users   @relation(fields: [userId], references: [userId])
+  // ยอดจำกัด ของ ProjectMember
+  limitImageAllowance  Int?    @default(0) @map("limit_image_allowance")
+  limitCreditAllowance Float?  @default(0) @map("limit_credit_allowance")
+  // ยอดใช้ของ ProjectMember
+  usedImageAllowance   Int     @default(0) @map("used_image_allowance")
+  usedCreditAllowance  Float   @default(0) @map("used_credit_allowance")
+  // ยอดจัดเก็บของ ProjectMember
+  holdImageAllowance   Int     @default(0) @map("hold_image_allowance")
+  holdCreditAllowance  Float   @default(0) @map("hold_credit_allowance")
+  // ตัวเก่า
+  maxToken             Int?    @default(0) @map("max_token")
+  maxImages            Int?    @default(0) @map("max_images")
 
   @@unique([projectId, userId]) // ห้ามซ้ำ
   @@map("project_member")
 }
 
 model Gallery {
-  id               String   @id @default(uuid())
+  id  String @id @default(uuid())
+  seq Int    @default(autoincrement()) @db.Integer
+
   taskId           String?
   projectId        String
   userId           String
@@ -104,12 +124,15 @@ model Gallery {
   users            users    @relation(fields: [userId], references: [userId])
   genneratedStatus String?  @default("PENDING") @db.VarChar(50)
   generateConfig   Json?    @map("generate_config") @db.JsonB
+  usedCredit       Float?   @default(0) @map("used_credit")
+  usedImage        Int?     @default(0) @map("used_image")
 
   @@map("gallery")
 }
 
 model Log {
   id              String   @id @default(uuid())
+  seq             Int      @default(autoincrement()) @db.Integer
   taskId          String?
   status          String?
   typeGenerate    String?
@@ -127,6 +150,8 @@ model Log {
   project         Project  @relation(fields: [projectId], references: [id])
   users           users    @relation(fields: [userId], references: [userId])
   galleryId       String?  @map("gallary_id") @db.VarChar(100)
+  usedCredit      Float?   @default(0) @map("used_credit")
+  usedImage       Int?     @default(0) @map("used_image")
 
   @@map("log")
 }
@@ -240,6 +265,8 @@ model PromptGuide {
   id                Int              @unique @default(autoincrement()) @map("id")
   title             String?          @map("title") @db.VarChar(150)
   textPrompt        String?          @map("text_prompt") @db.Text
+  description       String?          @map("description") @db.Text
+  model             String?          @map("model") @db.VarChar(100)
   status            Boolean          @map("status") @db.Boolean
   createdAt         DateTime         @default(now()) @map("created_at")
   updatedAt         DateTime         @default(now()) @map("updated_at")
@@ -321,13 +348,47 @@ model Organization {
   updatedById        String?              @map("updated_by") @db.VarChar(50)
   invitations        Invitation[]
 
-  packageTokenAmount Int? @map("package_token_amount")
-  packageImageAmount Int? @map("package_image_amount")
-  remainTokenAmount  Int? @default(0) @map("remain_token_amount")
-  remainImageAmount  Int? @default(0) @map("remain_image_amount")
-  maxUserAccess      Int? @map("max_user_access")
+  packageTokenAmount  Int?                      @map("package_token_amount")
+  packageImageAmount  Int?                      @map("package_image_amount")
+  remainTokenAmount   Int?                      @default(0) @map("remain_token_amount")
+  remainImageAmount   Int?                      @default(0) @map("remain_image_amount")
+  maxUserAccess       Int?                      @map("max_user_access")
+  accessCodes         String[]                  @default(["image", "video", "omni", "dream"]) @map("access_codes")
+  subscription        OrganizationSubscription?
+  creditBalance       CreditBalance?
+  packageTransactions PackageTransaction[]
+  brandKits           BrandKit[]
 
   @@map("organization")
+}
+
+model OrganizationSubscription {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @unique @map("organization_id") @db.VarChar(50)
+  organization   Organization @relation(fields: [organizationId], references: [organizationId])
+
+  planId             String   @map("plan_id") @db.Uuid
+  plan               Plan     @relation(fields: [planId], references: [id])
+  // --- Snapshot ข้อมูล Package ณ รอบปัจจุบัน ---
+  planName           String   @default("") @map("plan_name") // เช่น "Pro Plan"
+  price              Decimal  @default(0) @map("price") @db.Decimal(10, 2)
+  interval           String?  @map("interval") @db.VarChar(50)
+  creditAllowance    Float    @default(0) @map("credit_allowance") // โควตาของรอบนี้
+  imageAllowance     Float    @default(0) @map("image_allowance")
+  // จัดการรอบบิล: เมื่อถึง End Date คือวันที่ต้อง Reset Credit (Use-it-or-lose-it)
+  currentPeriodStart DateTime @map("current_period_start")
+  currentPeriodEnd   DateTime @map("current_period_end")
+  nextBillingDate    DateTime @map("next_billing_date")
+  nextPlanId         String?  @map("next_plan_id") @db.Uuid
+  nextPlanPriceId    String?  @map("next_plan_price_id") @db.Uuid
+  autoRenew          Boolean  @default(true) @map("auto_renew")
+  status             String   @default("active") @map("status")
+  period             String   @default("monthly") @map("period")
+  periodCount        Int      @default(1) @map("period_count")
+  periodCurrent      Int      @default(1) @map("period_current")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("organization_subscriptions")
 }
 
 model OrganizationMember {
@@ -346,6 +407,26 @@ model OrganizationMember {
   @@map("organization_member")
 }
 
+model CreditBalance {
+  id                  String       @id @default(uuid()) @db.Uuid
+  organizationId      String       @unique @map("organization_id") @db.VarChar(50)
+  organization        Organization @relation(fields: [organizationId], references: [organizationId])
+  // ยอด hold กรณี task ยังไม่ success
+  holdBalance         Float        @default(0) @map("hold_balance")
+  holdImage           Float        @default(0) @map("hold_image")
+  // ยอดเครดิตประจำรอบปัจจุบัน (จะ Reset เมื่อเปลี่ยนรอบบิล) 
+  currentCycleBalance Float        @default(0) @map("current_cycle_balance")
+  currentCycleImage   Float        @default(0) @map("current_cycle_image")
+
+  // เครดิตที่ซื้อเพิ่ม (On-top) ไม่หายเมื่อขึ้นรอบใหม่
+  onTopBalance Float @default(0) @map("on_top_balance")
+  onTopImage   Float @default(0) @map("on_top_image")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("credit_balances")
+}
+
 model Invitation {
   id             String   @id @default(uuid())
   email          String   @db.VarChar(200)
@@ -362,6 +443,43 @@ model Invitation {
 
   @@index([email])
   @@map("invitation")
+}
+
+model CouponCode {
+  id                String            @id @default(uuid())
+  code              String            @default(uuid()) @db.VarChar(100)
+  expiresAt         DateTime          @map("expires_at")
+  status            String            @default("ACTIVE") @db.VarChar(20) // ACTIVE, INACTIVE, EXPIRED
+  usageLimit        Int               @default(1) @map("usage_limit")
+  fixOrganizationId String?           @map("fix_organization_id") @db.VarChar(50)
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  onTopCredit       Float             @default(0) @map("on_top_credit")
+  couponCodeUsage   CouponCodeUsage[]
+  referenceTag      String?           @db.VarChar(100)
+
+  @@index([id])
+  @@map("coupon_code")
+}
+
+model CouponCodeUsage {
+  id               String     @id @default(uuid())
+  // discount       Float    @default(0) @map("discount") @db.Decimal(10, 2)
+  // expiresAt      DateTime @map("expires_at") 
+  organizationId   String?    @map("organization_id") @db.VarChar(50)
+  usedAt           DateTime   @map("used_at")
+  usedById         String     @map("used_by_id") @db.VarChar(50)
+  onTopCredit      Float      @default(0) @map("on_top_credit")
+  organizationName String     @map("organization_name") @db.VarChar(200)
+  organizationCode String     @map("organization_code") @db.VarChar(200)
+  usedByName       String     @map("used_by_name") @db.VarChar(200)
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  couponCode       CouponCode @relation(fields: [couponCodeId], references: [id])
+  couponCodeId     String     @map("coupon_code_id") @db.VarChar(100)
+
+  // @@index([couponCodeId])
+  @@map("coupon_code_usage")
 }
 
 model RequestChangePassword {
@@ -423,25 +541,59 @@ model Plan {
   isDefault   Boolean @default(false) @map("is_default")
   detailJson  Json?   @map("detail_json") @db.JsonB
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  prices   PlanPrice[]
-  features PlanFeature[]
+  createdAt     DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  subscriptions OrganizationSubscription[]
+  prices        PlanPrice[]
+  features      PlanFeature[]
+  status        Boolean                    @default(false)
+  orderIndex    Int                        @default(0) @map("order_index")
 
   @@map("plans")
 }
 
 model PlanPrice {
-  id     String @id @default(uuid()) @db.Uuid
-  planId String @map("plan_id") @db.Uuid
-  plan   Plan   @relation(fields: [planId], references: [id])
+  id              String  @id @default(uuid()) @db.Uuid
+  planId          String  @map("plan_id") @db.Uuid
+  plan            Plan    @relation(fields: [planId], references: [id])
+  interval        String  @default("MONTH") @db.VarChar(20) // MONTH | YEAR
+  price           Decimal @db.Decimal(10, 2)
+  duration        Int     @default(0) @map("duration")
+  creditAllowance Float   @default(0.00) @map("credit_allowance")
+  imageAllowance  Float   @default(0.00) @map("image_allowance")
+  currency        String  @default("THB") @db.VarChar(3)
+  isDefault       Boolean @default(false) @map("is_default")
+  orderIndex      Int     @default(0) @map("order_index")
+  detail          Json?   @map("detail") @db.JsonB
+  periodCount     Int     @default(1) @map("period_count")
+  periodUnit      String? @db.VarChar(20)
+  // priceLevel      Int     @default(0) @map("price_level") @db.Integer()
 
-  period String  @db.VarChar(20)
-  price  Decimal @db.Decimal(10, 2)
-
-  @@unique([planId, period])
+  // @@unique([])
   @@map("plan_prices")
+}
+
+model PackageTransaction {
+  id                 String       @id @default(uuid()) @db.Uuid
+  organizationId     String       @map("organization_id") @db.VarChar(50)
+  organization       Organization @relation(fields: [organizationId], references: [organizationId])
+  amountPaid         Decimal      @db.Decimal(10, 2)
+  currency           String       @default("THB")
+  status             String       @default("WAIT")
+  paymentMethod      String?      @map("payment_method")
+  paidAt             DateTime?    @map("paid_at") // วันที่จ่ายเงินจริง 
+  expiredPaymentAt   DateTime?    @map("expired_payment_at") // วันที่หมดอายุ 
+  // --- ข้อมูล Package ที่ซื้อใน Transaction นี้ ---
+  planId             String?      @map("plan_id") @db.VarChar(50)
+  planName           String       @map("plan_name") @db.VarChar(50)
+  planInterval       String       @map("plan_interval") @db.VarChar(20)
+  // บันทึกว่าการจ่ายเงินนี้ครอบคลุมช่วงเวลาไหน
+  billingPeriodStart DateTime     @map("billing_period_start")
+  billingPeriodEnd   DateTime     @map("billing_period_end")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("package_transactions")
 }
 
 model Feature {
@@ -504,4 +656,121 @@ model RefImage {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("ref_images")
+}
+
+model BrandKit {
+  id              String           @id @default(uuid()) @db.Uuid
+  name            String           @db.VarChar(100)
+  description     String?          @db.Text
+  industryType    String?          @map("industry_type") @db.VarChar(50)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  brandCiPrompt   String?          @map("brand_ci_prompt") @db.Text
+  negativePrompt  String?          @map("negative_prompt") @db.Text
+  default         Boolean          @default(false) @map("default") @db.Boolean
+  organizationId  String           @map("organization_id") @db.VarChar(50)
+  organization    Organization     @relation(fields: [organizationId], references: [organizationId])
+  brandKitDetails BrandKitDetail[]
+
+  @@map("brand_kit")
+}
+
+model BrandKitDetail {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(100)
+  type      String   @db.VarChar(20)
+  detail    Json?    @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  brandKit   BrandKit? @relation(fields: [brandKitId], references: [id])
+  brandKitId String?   @map("brand_kit_id") @db.Uuid
+
+  @@map("brand_kit_detail")
+}
+
+model BrandKitDetailType {
+  id   String @id @default(uuid()) @db.Uuid
+  code String @db.VarChar(20)
+  name String @db.VarChar(100)
+
+  @@map("brand_kit_detail_type")
+}
+
+// ─── Chat Assistant Models ────────────────────────────────────────────────────
+
+enum ChatRole {
+  user
+  assistant
+  system
+  tool
+}
+
+model ChatConversation {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.VarChar(50)
+  organizationId String?  @map("organization_id") @db.VarChar(50)
+  title          String?  @map("title") @db.VarChar(300)
+  model          String?  @map("model") @db.VarChar(100)
+  systemPrompt   String?  @map("system_prompt") @db.Text
+  metadata       Json?    @map("metadata") @db.JsonB
+  status         String   @default("active") @map("status") @db.VarChar(20)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  messages   ChatMessage[]
+  tokenUsage ChatTokenUsage[]
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("chat_conversation")
+}
+
+model ChatMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  role           ChatRole
+  content        String?  @map("content") @db.Text
+  name           String?  @map("name") @db.VarChar(100)
+  toolCallId     String?  @map("tool_call_id") @db.VarChar(100)
+  toolCalls      Json?    @map("tool_calls") @db.JsonB
+  metadata       Json?    @map("metadata") @db.JsonB
+  sequence       Int      @default(0) @map("sequence")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id])
+  tokenUsage   ChatTokenUsage?
+
+  @@index([conversationId])
+  @@map("chat_message")
+}
+
+model ChatTokenUsage {
+  id               String   @id @default(uuid()) @db.Uuid
+  conversationId   String   @map("conversation_id") @db.Uuid
+  messageId        String?  @unique @map("message_id") @db.Uuid
+  model            String   @map("model") @db.VarChar(100)
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @default(0) @map("total_tokens")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id])
+  message      ChatMessage?     @relation(fields: [messageId], references: [id])
+
+  @@index([conversationId])
+  @@map("chat_token_usage")
+}
+
+model ChatTool {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @map("name") @db.VarChar(100)
+  description String?  @map("description") @db.Text
+  parameters  Json     @map("parameters") @db.JsonB
+  handler     String?  @map("handler") @db.VarChar(100)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("chat_tool")
 }

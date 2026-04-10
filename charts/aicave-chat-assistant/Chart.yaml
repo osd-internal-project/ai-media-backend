@@ -1,0 +1,6 @@
+apiVersion: v2
+name: aicave-chat-assistant
+description: A Helm chart for AICave Chat Assistant Service
+type: application
+version: 1.0.0
+appVersion: "v1.0.0"

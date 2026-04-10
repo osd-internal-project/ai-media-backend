@@ -16,7 +16,7 @@ export class PromptGuideTypeService {
     return this.promptGuideTypeRepo.create({ data });
   }
 
-  findAll(organizationId?: string, generateType?: string) {
+  findAll(organizationId?: string, generateType?: string, model?: string) {
     const whereType: Prisma.PromptGuideTypeWhereInput = organizationId
       ? {
           OR: [
@@ -24,7 +24,8 @@ export class PromptGuideTypeService {
             { organizationId: null },
             { organizationId: '' },
           ],
-          generateType: generateType,
+          // promptGuide:{ coutn=}
+          status: true,
         }
       : {};
 
@@ -36,6 +37,7 @@ export class PromptGuideTypeService {
             { organizationId: '' },
           ],
           generateType: generateType,
+          ...(model && { model }),
         }
       : {};
 
@@ -49,6 +51,12 @@ export class PromptGuideTypeService {
         },
       },
       orderBy: { id: 'asc' },
+    });
+  }
+
+  findActive(organizationId?: string, generateType?: string) {
+    return this.promptGuideTypeRepo.findOne({
+      where: { organizationId, generateType, status: true },
     });
   }
 

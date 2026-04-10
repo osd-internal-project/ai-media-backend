@@ -16,10 +16,17 @@ import { OrganizationModule } from './organization/organization.module';
 import { OrganizationMembersModule } from './organization-members/organization-members.module';
 import { KeycloakModule } from './keycloak/keycloak.module';
 import { AuthModule } from './auth/auth.module';
+import { OrganizationSubscriptionModule } from './organization-subscription/organization-subscription.module';
+import { PackageTransactionModule } from './package-transaction/package-transaction.module';
+import { CreditBalanceModule } from './credit-balance/credit-balance.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { CouponCodeModule } from './coupon-code/coupon-code.module';
+
 @Module({
   imports: [
     PrismaModule,
     HttpModule,
+    ScheduleModule.forRoot(),
     UsersModule,
     GroupsModule,
     RolesModule,
@@ -29,6 +36,10 @@ import { AuthModule } from './auth/auth.module';
     OrganizationMembersModule,
     KeycloakModule,
     AuthModule,
+    OrganizationSubscriptionModule,
+    PackageTransactionModule,
+    CreditBalanceModule,
+    CouponCodeModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

@@ -10,6 +10,7 @@ import {
 } from '@ai-media/share';
 import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
 import { tosConfigs } from 'src/configs';
+import * as dayjs from 'dayjs';
 
 @Injectable()
 export class LogsService {
@@ -25,27 +26,32 @@ export class LogsService {
   async findProjectImageByPage(
     projectId: string,
     organizationId: string,
+    userId: string,
     skip?: number,
     take?: number,
+    fristsql?: number,
+    lastsql?: number,
   ) {
-    console.log(`projectId`, projectId);
-    console.log(`organizationId`, organizationId);
-    console.log(`skip`, skip);
-    console.log(`take`, take);
-
-    const taskIds = await this.galleryRepo.findMany({
+    const user = userId
+      ? await this.userRepo.findOne({
+          where: { token: userId },
+        })
+      : null;
+    const tasks = await this.logrepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'image',
+        ...(fristsql && { seq: { lt: fristsql } }),
+        ...(lastsql && { seq: { gt: lastsql } }),
+        ...(user && { userId: user.userId }),
       },
-      select: { taskId: true },
       distinct: ['taskId'],
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
 
-    const targetTaskIds = taskIds.map((t) => t.taskId);
+    const targetTaskIds = tasks.map((t) => t.taskId);
 
     if (targetTaskIds.length === 0) {
       return [];
@@ -60,28 +66,30 @@ export class LogsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const logData = await this.logrepo.findMany({
-      where: {
-        taskId: { in: targetTaskIds },
-        typeGenerate: 'image',
-      },
-    });
+    // const logData = await this.logrepo.findMany({
+    //   where: {
+    //     taskId: { in: targetTaskIds },
+    //     typeGenerate: 'image',
+    //   },
+    // });
 
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
+    const seqMap = new Map();
 
-    logData.forEach((log) => {
+    tasks.forEach((log) => {
       if (log.referenceImages && log.referenceImages.length > 0) {
         referenceImagesMap.set(log.taskId, log.referenceImages);
       }
       if (log.resolution) {
         resolutionMap.set(log.taskId, log.resolution);
       }
-      if (log.ratio) {
-        ratioMap.set(log.taskId, log.ratio);
+      if (log.seq) {
+        seqMap.set(log.taskId, log.seq);
       }
     });
+    console.log(seqMap);
     const map = new Map();
 
     for (const item of data) {
@@ -137,6 +145,7 @@ export class LogsService {
           referenceImages: referenceImageUrls, // All reference images
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
+          seq: seqMap.get(item.taskId) || null,
           imageUrls: [
             {
               imageUrl: url,
@@ -156,153 +165,7 @@ export class LogsService {
           id: item.id,
           status: item.status,
           fileName: item.imageUrl,
-        });
-      }
-    }
-    const result = Array.from(map.values());
-
-    return result;
-  }
-  async findProjectImageByFristId(
-    projectId: string,
-    organizationId: string,
-    fristId: string,
-  ) {
-    const cerrentTask = await this.galleryRepo.findOne({
-      where: {
-        id: fristId,
-      },
-    });
-    const taskIds = await this.galleryRepo.findMany({
-      where: {
-        projectId: projectId,
-        taskId: { not: null },
-        typeGenerate: 'image',
-        createdAt: { gte: cerrentTask.createdAt },
-      },
-      select: { taskId: true },
-      distinct: ['taskId'],
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const targetTaskIds = taskIds.map((t) => t.taskId);
-
-    if (targetTaskIds.length === 0) {
-      return [];
-    }
-
-    const data = await this.galleryRepo.findMany({
-      where: {
-        taskId: { in: targetTaskIds },
-        typeGenerate: 'image',
-      },
-      include: { users: true },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const logData = await this.logrepo.findMany({
-      where: {
-        taskId: { in: targetTaskIds },
-        typeGenerate: 'image',
-      },
-      select: {
-        taskId: true,
-        referenceImages: true,
-        resolution: true,
-        ratio: true,
-      },
-    });
-
-    const referenceImagesMap = new Map();
-    const resolutionMap = new Map();
-    const ratioMap = new Map();
-
-    logData.forEach((log) => {
-      if (log.referenceImages && log.referenceImages.length > 0) {
-        referenceImagesMap.set(log.taskId, log.referenceImages);
-      }
-      if (log.resolution) {
-        resolutionMap.set(log.taskId, log.resolution);
-      }
-      if (log.ratio) {
-        ratioMap.set(log.taskId, log.ratio);
-      }
-    });
-
-    const map = new Map();
-
-    for (const item of data) {
-      const url = item.imageUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
-          )
-        : '';
-      const thumbnailUrl = item.thumbnailUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
-          )
-        : '';
-
-      // Generate presigned URLs for multiple reference images
-      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
-      let referenceImageUrls = [];
-      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
-        for (const filename of referenceImageFilenames) {
-          const fileStats = await this.tosService.headObject(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
-          );
-          if (fileStats) {
-            const url = await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
-            );
-            referenceImageUrls.push(url);
-          } else {
-            const placeholder =
-              'data:image/svg+xml;base64,' +
-              Buffer.from(
-                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-                <rect width="32" height="32" fill="#333"/>
-                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-              </svg>`,
-              ).toString('base64');
-            referenceImageUrls.push(placeholder);
-          }
-        }
-      }
-
-      if (!map.has(item.taskId)) {
-        map.set(item.taskId, {
-          ...item,
-          referenceImages: referenceImageUrls, // All reference images
-          resolution: resolutionMap.get(item.taskId) || null,
-          ratio: ratioMap.get(item.taskId) || null,
-          imageUrls: [
-            {
-              imageUrl: url,
-              thumbnailUrl: thumbnailUrl,
-              id: item.id,
-              status: item.status,
-              fileName: item.imageUrl,
-            },
-          ],
-        });
-        delete map.get(item.taskId).imageUrl;
-        delete map.get(item.taskId).thumbnailUrl;
-      } else {
-        map.get(item.taskId).imageUrls.push({
-          imageUrl: url,
-          thumbnailUrl: thumbnailUrl,
-          id: item.id,
-          status: item.status,
-          fileName: item.imageUrl,
+          seq: seqMap.get(item.taskId) || null,
         });
       }
     }
@@ -313,54 +176,69 @@ export class LogsService {
   async findProjectVideoByPage(
     projectId: string,
     organizationId: string,
+    userId: string,
     skip?: number,
     take?: number,
+    fristseq?: number,
+    lastseq?: number,
   ) {
-    const data = await this.galleryRepo.findMany({
+    const user = userId
+      ? await this.userRepo.findOne({
+          where: { token: userId },
+        })
+      : null;
+    const tasks = await this.logrepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'video',
+        ...(fristseq && { seq: { lt: fristseq } }),
+        ...(lastseq && { seq: { gt: lastseq } }),
+        ...(userId && { userId: userId }),
+        ...(user && { userId: user.userId }),
       },
-      include: { users: true },
+      distinct: ['taskId'],
+
+      // include: { users: true },
+      // distinct: ['taskId'],
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
-    const targetTaskIds = data.map((t) => t.taskId);
+    const targetTaskIds = tasks.map((t) => t.taskId);
 
     if (targetTaskIds.length === 0) {
       return [];
     }
 
-    // const data = await this.galleryRepo.findMany({
-    //   where: {
-    //     taskId: { in: targetTaskIds },
-    //     typeGenerate: 'video',
-    //   },
-    //   include: { users: true },
-    //   orderBy: { createdAt: 'desc' },
-    // });
-
-    const logData = await this.logrepo.findMany({
+    const data = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
         typeGenerate: 'video',
       },
-      select: {
-        taskId: true,
-        referenceImages: true,
-        resolution: true,
-        ratio: true,
-        generateAudio: true,
-      },
+      include: { users: true },
+      orderBy: { createdAt: 'desc' },
     });
+
+    // const logData = await this.logrepo.findMany({
+    //   where: {
+    //     taskId: { in: targetTaskIds },
+    //     typeGenerate: 'video',
+    //   },
+    //   select: {
+    //     taskId: true,
+    //     referenceImages: true,
+    //     resolution: true,
+    //     ratio: true,
+    //     generateAudio: true,
+    //   },
+    // });
 
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
     const generateAudio = new Map();
-
-    logData.forEach((log) => {
+    const seqMap = new Map();
+    tasks.forEach((log) => {
       if (log.referenceImages && log.referenceImages.length > 0) {
         referenceImagesMap.set(log.taskId, log.referenceImages);
       }
@@ -373,8 +251,12 @@ export class LogsService {
       if (log.generateAudio) {
         generateAudio.set(log.taskId, log.generateAudio);
       }
+      if (log.seq) {
+        seqMap.set(log.taskId, log.seq);
+      }
     });
-
+    
+    console.log(seqMap); 
     const newData = new Map();
     for (const item of data) {
       const url = item.imageUrl
@@ -396,6 +278,8 @@ export class LogsService {
 
       // Generate presigned URLs for multiple reference images
       const referenceImageFilenames = referenceImagesMap.get(item.taskId);
+      // console.log(referenceImagesMap);
+
       let referenceImageUrls = [];
       if (referenceImageFilenames && referenceImageFilenames.length > 0) {
         for (const filename of referenceImageFilenames) {
@@ -422,7 +306,6 @@ export class LogsService {
           }
         }
       }
-
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
@@ -430,6 +313,7 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
+          seq: seqMap.get(item.taskId) || null,
           imageUrls: [
             {
               imageUrl: url,
@@ -461,53 +345,66 @@ export class LogsService {
   async findProjectOmniHumenByPage(
     projectId: string,
     organizationId: string,
+    userId: string,
     skip?: number,
     take?: number,
+    fristseq?: number,
+    lastseq?: number,
   ) {
-    const data = await this.galleryRepo.findMany({
+    const user = userId
+      ? await this.userRepo.findOne({
+          where: { token: userId },
+        })
+      : null;
+    const tasks = await this.logrepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'omnihumen',
+        ...(fristseq && { seq: { lt: fristseq } }),
+        ...(lastseq && { seq: { gt: lastseq } }),
+        ...(userId && { userId: userId }),
+        ...(user && { userId: user.userId }),
       },
-      include: { users: true },
+      distinct: ['taskId'],
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
-    const targetTaskIds = data.map((t) => t.taskId);
+    const targetTaskIds = tasks.map((t) => t.taskId);
 
     if (targetTaskIds.length === 0) {
       return [];
     }
 
-    // const data = await this.galleryRepo.findMany({
-    //   where: {
-    //     taskId: { in: targetTaskIds },
-    //     typeGenerate: 'video',
-    //   },
-    //   include: { users: true },
-    //   orderBy: { createdAt: 'desc' },
-    // });
-
-    const logData = await this.logrepo.findMany({
+    const data = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
         typeGenerate: 'omnihumen',
       },
-      select: {
-        taskId: true,
-        referenceImages: true,
-        resolution: true,
-        ratio: true,
-        generateAudio: true,
-      },
+      include: { users: true },
+      orderBy: { createdAt: 'desc' },
     });
+
+    // const logData = await this.logrepo.findMany({
+    //   where: {
+    //     taskId: { in: targetTaskIds },
+    //     typeGenerate: 'omnihumen',
+    //   },
+    //   select: {
+    //     taskId: true,
+    //     referenceImages: true,
+    //     resolution: true,
+    //     ratio: true,
+    //     generateAudio: true,
+    //     seq: true,
+    //   },
+    // });
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
     const generateAudio = new Map();
-
-    logData.forEach((log) => {
+    const seqMap = new Map();
+    tasks.forEach((log) => {
       if (log.referenceImages && log.referenceImages.length > 0) {
         referenceImagesMap.set(log.taskId, log.referenceImages);
       }
@@ -520,7 +417,11 @@ export class LogsService {
       if (log.generateAudio) {
         generateAudio.set(log.taskId, log.generateAudio);
       }
+      if (log.seq) {
+        seqMap.set(log.taskId, log.seq);
+      }
     });
+    console.log(seqMap);
 
     const newData = new Map();
     for (const item of data) {
@@ -576,6 +477,7 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
+          seq: seqMap.get(item.taskId) || null,
           imageUrls: [
             {
               imageUrl: url,
@@ -607,54 +509,68 @@ export class LogsService {
   async findProjectDreamactorByPage(
     projectId: string,
     organizationId: string,
+    userId: string,
     skip?: number,
     take?: number,
+    fristseq?: number,
+    lastseq?: number,
   ) {
-    const data = await this.galleryRepo.findMany({
+    const user = userId
+      ? await this.userRepo.findOne({
+          where: { token: userId },
+        })
+      : null;
+    const tasks = await this.logrepo.findMany({
       where: {
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'dreamactor',
+        ...(fristseq && { seq: { lt: fristseq } }),
+        ...(lastseq && { seq: { gt: lastseq } }),
+        ...(userId && { userId: userId }),
+        ...(user && { userId: user.userId }),
       },
+      distinct: ['taskId'],
       include: { users: true },
       orderBy: { createdAt: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
-    const targetTaskIds = data.map((t) => t.taskId);
+    const targetTaskIds = tasks.map((t) => t.taskId);
 
     if (targetTaskIds.length === 0) {
       return [];
     }
 
-    // const data = await this.galleryRepo.findMany({
-    //   where: {
-    //     taskId: { in: targetTaskIds },
-    //     typeGenerate: 'video',
-    //   },
-    //   include: { users: true },
-    //   orderBy: { createdAt: 'desc' },
-    // });
-
-    const logData = await this.logrepo.findMany({
+    const data = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
-        typeGenerate: 'dreamactor',
+        typeGenerate: 'video',
       },
-      select: {
-        taskId: true,
-        referenceImages: true,
-        resolution: true,
-        ratio: true,
-        generateAudio: true,
-      },
+      include: { users: true },
+      orderBy: { createdAt: 'desc' },
     });
+
+    // const logData = await this.logrepo.findMany({
+    //   where: {
+    //     taskId: { in: targetTaskIds },
+    //     typeGenerate: 'dreamactor',
+    //   },
+    //   select: {
+    //     taskId: true,
+    //     referenceImages: true,
+    //     resolution: true,
+    //     ratio: true,
+    //     generateAudio: true,
+    //     seq: true,
+    //   },
+    // });
 
     const referenceImagesMap = new Map();
     const resolutionMap = new Map();
     const ratioMap = new Map();
     const generateAudio = new Map();
-
-    logData.forEach((log) => {
+    const seqMap = new Map();
+    tasks.forEach((log) => {
       if (log.referenceImages && log.referenceImages.length > 0) {
         referenceImagesMap.set(log.taskId, log.referenceImages);
       }
@@ -667,7 +583,11 @@ export class LogsService {
       if (log.generateAudio) {
         generateAudio.set(log.taskId, log.generateAudio);
       }
+      if (log.seq) {
+        seqMap.set(log.taskId, log.seq);
+      }
     });
+    console.log(seqMap);
 
     const newData = new Map();
     for (const item of data) {
@@ -724,6 +644,8 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
+          seq: seqMap.get(item.taskId) || null,
+
           imageUrls: [
             {
               imageUrl: url,
@@ -802,6 +724,7 @@ export class LogsService {
         resolution: true,
         ratio: true,
         generateAudio: true,
+        seq: true,
       },
     });
 
@@ -963,42 +886,27 @@ export class LogsService {
     type: 'image' | 'video' | 'omnihumen' | 'dreamactor',
   ): Promise<{ usedCredit?: number; totalCredit?: number }> {
     const findUser = await this.userRepo.findOne({ where: { token: token } });
-    console.log('findUser', findUser.userId,);
-      console.log('project', projectId  ,);
-    const aggregateResult = await this.logrepo.aggregate({
-      where: {
-        userId: findUser.userId,
-        typeGenerate: type === 'image' ? 'image' : { not: 'image' },
-        projectId: projectId,
-        OR: [{ status: 'success' }, { status: 'pending' }],
-        createdAt: {
-          gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-          lt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
-        },
-      },
-      _sum: {
-        ImageUsed: true,
-        tokenUsed: true,
-      },
-    });
-    Logger.debug('totalCredit', aggregateResult);
-
-    const currentCredit =
-      type === 'image'
-        ? aggregateResult._sum.ImageUsed || 0
-        : aggregateResult._sum.tokenUsed || 0;
     const projectMember = await this.projectMemberRepository.findOne({
       where: {
         projectId: projectId,
         userId: findUser.userId,
       },
     });
-    const totalCredit =
-      type === 'image'
-        ? projectMember?.maxImages || 0
-        : type === 'video'
-        ? projectMember?.maxToken || 0
-        : 0;
+    // const currentCredit =
+    //   type === 'image'
+    //     ? projectMember.holdImageAllowance + projectMember.usedImageAllowance ||
+    //       0
+    //     : projectMember.holdCreditAllowance +
+    //         projectMember.usedCreditAllowance || 0;
+    // const totalCredit =
+    //   type === 'image'
+    //     ? projectMember.limitImageAllowance || 0
+    //     : projectMember.limitCreditAllowance || 0;
+
+    const currentCredit =
+      projectMember.holdCreditAllowance + projectMember.usedCreditAllowance ||
+      0;
+    const totalCredit = projectMember.limitCreditAllowance || 0;
 
     return {
       usedCredit: currentCredit,

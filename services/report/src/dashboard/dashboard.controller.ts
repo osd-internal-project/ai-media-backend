@@ -19,6 +19,20 @@ import * as dayjs from 'dayjs';
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
+  @Get('overview-summary/:organizationId')
+  findOverviewSummary(@Param('organizationId') organizationId: string) {
+    return this.dashboardService.findOverviewSummary(organizationId);
+  }
+
+  @Get('credit-per-month-and-type/:organizationId')
+  countCreditPerMonthAndType(@Param('organizationId') organizationId: string) {
+    return this.dashboardService.countCreditPerMonthAndType(organizationId);
+  }
+
+  @Get('generated-per-month-and-type/:organizationId')
+  countGeneratedPerMonthAndType(@Param('organizationId') organizationId: string) {
+    return this.dashboardService.countGeneratedPerMonthAndType(organizationId);
+  }
   @Post()
   create(@Body() createDashboardDto: CreateDashboardDto) {
     return this.dashboardService.create(createDashboardDto);

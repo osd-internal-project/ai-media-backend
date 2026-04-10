@@ -14,6 +14,7 @@ import { PrismaModule } from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { OmnihumenProcessor } from './omnihumen.service';
 import { DreamactorProcessor } from './dreamactor.service';
+import { GenerateHelperService } from './generate-helper.service';
 
 @Module({
   imports: [
@@ -22,6 +23,11 @@ import { DreamactorProcessor } from './dreamactor.service';
     RedisModule.forRoot({
       type: 'single',
       url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
+      ...(process.env.REDIS_PASSWORD && {
+        options: {
+          password: process.env.REDIS_PASSWORD,
+        },
+      }),
     }),
     BullModule.registerQueue({
       name: QUEUE_NAME_IMAGE,
@@ -42,12 +48,14 @@ import { DreamactorProcessor } from './dreamactor.service';
     VideoProcessor,
     OmnihumenProcessor,
     DreamactorProcessor,
+    GenerateHelperService,
   ], // อย่าลืมใส่ Processor
   exports: [
     ImageProcessor,
     VideoProcessor,
     OmnihumenProcessor,
     DreamactorProcessor,
+    GenerateHelperService,
   ],
 })
 export class GenerateModule {}

@@ -68,12 +68,57 @@ export class PromptGuideService {
     return this.promptguideRepo.delete({ where: { id } });
   }
 
-  findByOrganization(organizationId: string) {
-    return this.promptguideRepo.findMany({
+  async findByOrganization(organizationId: string, query?: { model?: string }) {
+    const bucketname = tosConfigs().tosBucket;
+
+    const promptGuides = await this.promptguideRepo.findMany({
       where: {
         organizationId,
+        model: query?.model,
       },
+      include: { promptGuideType: true },
     });
+    const templates = await Promise.all(
+      promptGuides.map(async (promptGuide) => {
+        const ImageUids = promptGuide?.promptGuideImages
+          ? promptGuide.promptGuideImages
+          : [];
+        const images = [];
+
+        await Promise.all(
+          ImageUids.map(async (uid: string) => {
+            const image = await this.promptGuideImageRepo.findOne({
+              where: {
+                uid: uid,
+                status: 'completed',
+              },
+              orderBy: {
+                index: 'asc',
+              },
+            });
+            if (image) {
+              const url = await this.tosService.getPreSignedUrl(
+                bucketname,
+                image?.imagePath || '',
+              );
+              images.push({
+                uid: image?.uid,
+                name: image?.imageName,
+                url: url,
+                imagePath: image?.imagePath,
+                status: image?.status,
+                index: image?.index,
+              });
+            }
+          }),
+        );
+        return {
+          ...promptGuide,
+          images: images.sort((a, b) => a.index - b.index),
+        };
+      }),
+    );
+    return templates;
   }
   async findWithImageByTypes(promptGuideTypeId: number) {
     const bucketname = tosConfigs().tosBucket;
@@ -101,20 +146,20 @@ export class PromptGuideService {
                 index: 'asc',
               },
             });
-            if(image){
-            const url = await this.tosService.getPreSignedUrl(
-              bucketname,
-              image?.imagePath || '',
-            );
-            images.push({
-              uid: image?.uid,
-              name: image?.imageName,
-              url: url,
-              imagePath: image?.imagePath,
-              status: image?.status,
-              index: image?.index,
-            });
-          }
+            if (image) {
+              const url = await this.tosService.getPreSignedUrl(
+                bucketname,
+                image?.imagePath || '',
+              );
+              images.push({
+                uid: image?.uid,
+                name: image?.imageName,
+                url: url,
+                imagePath: image?.imagePath,
+                status: image?.status,
+                index: image?.index,
+              });
+            }
           }),
         );
         return {

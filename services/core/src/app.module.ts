@@ -22,6 +22,10 @@ import { PlanModule } from './plan/plan.module';
 import { GenerateModule } from './generate/generate.module';
 import { BullModule } from '@nestjs/bullmq';
 import { WebsocketModule } from './websocket/websocket.module';
+import { MasterModelTypeModule } from './master-model-type/master-model-type.module';
+import { BrandKitModule } from './brand-kit/brand-kit.module';
+import { BrandKitDetailModule } from './brand-kit-detail/brand-kit-detail.module';
+import { BrandKitDetailTypeModule } from './brand-kit-detail-type/brand-kit-detail-type.module';
 
 @Module({
   imports: [
@@ -39,6 +43,10 @@ import { WebsocketModule } from './websocket/websocket.module';
     GalleryModule,
     ProjectMemberModule,
     MasteradataConfigApiModule,
+    MasterModelTypeModule,
+    BrandKitModule,
+    BrandKitDetailModule,
+    BrandKitDetailTypeModule,
     DashboardModule,
     PromptGuideModule,
     PromptGuideTypeModule,

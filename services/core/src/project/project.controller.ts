@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { Prisma } from '@prisma/client';
+import { query } from 'express';
 
 @Controller('project')
 export class ProjectController {
@@ -28,9 +29,9 @@ export class ProjectController {
   @Get('organization/:organizationId')
   findByOrganizationId(
     @Param('organizationId') organizationId: string,
-    @Query('token') token: string,
+    @Query() query: {status?: string; name?: string; token: string },
   ) {
-    return this.projectService.findByOrganizationId(organizationId, token);
+    return this.projectService.findByOrganizationId(organizationId, query);
   }
 
   @Get('manage/:id')

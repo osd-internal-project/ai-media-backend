@@ -13,6 +13,8 @@ interface ProjectMemberInput {
   role: 'ADMIN' | 'USER' | 'VIEWER';
   maxToken?: number;
   maxImages?: number;
+  limitCreditAllowance?: number;
+  limitImageAllowance?: number;
 }
 
 // Role validation and hierarchy utilities
@@ -95,10 +97,8 @@ export class ProjectService {
         name: createProjectDto.name,
         organizationId: createProjectDto?.organizationId,
         description: createProjectDto.description,
-        accessImageAmount: createProjectDto.accessImageAmount,
-        remainImageAmount: createProjectDto.remainImageAmount,
-        accessTokenAmount: createProjectDto.accessTokenAmount,
-        remainTokenAmount: createProjectDto.remainTokenAmount,
+        limitCreditAllowance: createProjectDto.limitCreditAllowance,
+        limitImageAllowance: createProjectDto.limitImageAllowance,
         members: createProjectDto.members?.length
           ? {
               create: createProjectDto.members.map(
@@ -110,10 +110,14 @@ export class ProjectService {
                     },
                   },
                   role: typeof member === 'object' ? member.role : 'USER',
-                  maxToken:
-                    typeof member === 'object' ? member.maxToken || 0 : 0,
-                  maxImages:
-                    typeof member === 'object' ? member.maxImages || 0 : 0,
+                  limitCreditAllowance:
+                    typeof member === 'object'
+                      ? member.limitCreditAllowance || 0
+                      : 0,
+                  limitImageAllowance:
+                    typeof member === 'object'
+                      ? member.limitImageAllowance || 0
+                      : 0,
                 }),
               ),
             }
@@ -160,7 +164,11 @@ export class ProjectService {
   async findById(id: string) {
     return this.projectRepo.findOne({ where: { id } });
   }
-  async findByOrganizationId(organizationId: string, token: string) {
+  async findByOrganizationId(
+    organizationId: string,
+    query: { name?: string; token: string; status?: string },
+  ) {
+    const { name, token, status } = query;
     const user = await this.usersRepo.findOne({ where: { token } });
 
     if (!user) {
@@ -178,6 +186,8 @@ export class ProjectService {
     const isShowAll = isOwner || isAdmin || isSuperAdmin;
     const data = await this.projectRepo.findMany({
       where: {
+        ...(name && { name: { contains: name, mode: 'insensitive' } }),
+        ...(status && { status }),
         organizationId,
         ...(!isSuperAdmin && { status: { not: 'deleted' } }),
         ...(!isShowAll && {
@@ -190,7 +200,7 @@ export class ProjectService {
           },
         }),
       },
-      include: { members: true },
+      include: { members: { include: { users: true } } },
       orderBy: {
         createdAt: 'desc',
       },
@@ -217,10 +227,14 @@ export class ProjectService {
                         },
                       },
                       role: typeof member === 'object' ? member.role : 'USER', // Default to USER role
-                      maxToken:
-                        typeof member === 'object' ? member.maxToken || 0 : 0,
-                      maxImages:
-                        typeof member === 'object' ? member.maxImages || 0 : 0,
+                      limitCreditAllowance:
+                        typeof member === 'object'
+                          ? member.limitCreditAllowance || 0
+                          : 0,
+                      limitImageAllowance:
+                        typeof member === 'object'
+                          ? member.limitImageAllowance || 0
+                          : 0,
                     }),
                   ),
                 }),
@@ -236,24 +250,15 @@ export class ProjectService {
         where: { id },
         data: {
           status: 'deleted',
-          accessImageAmount: 0,
-          accessTokenAmount: 0,
-          remainImageAmount: 0,
-          remainTokenAmount: 0,
+          limitCreditAllowance: 0,
+          limitImageAllowance: 0,
         },
       });
       await this.projectMemberRepo.updateMany({
         where: { projectId: project.id },
         data: {
-          maxImages: 0,
-          maxToken: 0,
-        },
-      });
-      this.organizationRepo.update({
-        where: { organizationId: project.organizationId },
-        data: {
-          remainImageAmount: { increment: project.accessImageAmount },
-          remainTokenAmount: { increment: project.accessTokenAmount },
+          limitImageAllowance: 0,
+          limitCreditAllowance: 0,
         },
       });
     } else {

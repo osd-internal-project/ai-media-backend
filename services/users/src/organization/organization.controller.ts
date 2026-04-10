@@ -29,7 +29,16 @@ export class OrganizationController {
   }
   @Post('system-admin')
   createBySystemAdmin(
-    @Body() createOrganizationDto: Prisma.OrganizationCreateInput,
+    @Body()
+    createOrganizationDto: {
+      name: string;
+      description: string;
+      planId: string;
+      priceId: string;
+      type: string;
+      createdById: string;
+      slug: string;
+    },
   ) {
     return this.organizationService.createBySystemAdmin(createOrganizationDto);
   }
@@ -46,6 +55,14 @@ export class OrganizationController {
   @Post('invitation/accept')
   acceptInvitation(@Body() acceptInvitationDto: AcceptInvitationDto) {
     return this.organizationService.acceptInvitation(acceptInvitationDto);
+  }
+  @Get('access-code/:organizationId')
+  findAccessCodeByOrganizationId(
+    @Param('organizationId') organizationId: string,
+  ) {
+    return this.organizationService.findAccessCodeByOrganizationId(
+      organizationId,
+    );
   }
 
   @Get()
