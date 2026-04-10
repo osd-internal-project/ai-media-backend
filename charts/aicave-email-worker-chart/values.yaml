@@ -27,9 +27,11 @@ env:
   smtpHost: "smtp.office365.com"
   smtpPort: "587"
   smtpUser: "internalsupport@osd.co.th"
-  smtpPassword: "Internal-support@osd1234."
   smtpFrom: "internalsupport@osd.co.th"
   smtpService: "outlook"
+
+# Secrets managed via GitHub Actions secrets and passed with --set:
+#   secretEnv.SMTP_PASSWORD
 
 resources:
   requests:

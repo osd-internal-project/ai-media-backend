@@ -42,7 +42,10 @@ spec:
         - name: SMTP_USER
           value: {{ .Values.env.smtpUser | quote }}
         - name: SMTP_PASSWORD
-          value: {{ .Values.env.smtpPassword | quote }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: SMTP_PASSWORD
         - name: SMTP_FROM
           value: {{ .Values.env.smtpFrom | quote }}
         - name: SMTP_SERVICE
