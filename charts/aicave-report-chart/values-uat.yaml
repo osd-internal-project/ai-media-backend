@@ -20,9 +20,11 @@ ingress:
 env:
   nodeEnv: "staging"
   port: "4001"
-  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
   pathMountdirUpload: "./uploads"
   pathDomain: "http://uat.aicave.ai"
+
+# Secrets managed via GitHub Actions secrets and passed with --set:
+#   secretEnv.DATABASE_URL
 
 resources:
   requests:

@@ -38,9 +38,11 @@ ingress:
 env:
   nodeEnv: "Production"
   port: "4001"
-  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave?schema=public"
   pathMountdirUpload: "./uploads"
   pathDomain: "http://www.aicave.ai"
+
+# Secrets managed via GitHub Actions secrets and passed with --set:
+#   secretEnv.DATABASE_URL
 
 resources:
   requests:
@@ -52,8 +54,8 @@ resources:
 
 autoscaling:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 10
+  minReplicas: 1
+  maxReplicas: 3
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 
