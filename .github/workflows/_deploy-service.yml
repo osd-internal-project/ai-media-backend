@@ -35,6 +35,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: [self-hosted, k8s]
+    environment: ${{ inputs.deploy_env }}
 
     steps:
       # ---------------------------------------------------------------------
@@ -104,6 +105,13 @@ jobs:
             -f ./${CHART}/values-${DEPLOY_ENV}.yaml \
             --set image.repository=swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${IMAGE} \
             --set image.tag=${VER} \
+            --set secretEnv.DATABASE_URL=${{ secrets.DATABASE_URL }} \
+            --set secretEnv.BYTEPLUS_ACCESS_KEY=${{ secrets.BYTEPLUS_ACCESS_KEY }} \
+            --set secretEnv.BYTEPLUS_SECRET_KEY=${{ secrets.BYTEPLUS_SECRET_KEY }} \
+            --set secretEnv.TOS_ACCESS_KEY=${{ secrets.TOS_ACCESS_KEY }} \
+            --set secretEnv.TOS_SECRET_KEY=${{ secrets.TOS_SECRET_KEY }} \
+            --set secretEnv.SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }} \
+            --set secretEnv.KEYCLOAK_CLIENT_SECRET=${{ secrets.KEYCLOAK_CLIENT_SECRET }} \
             --namespace ${{ inputs.namespace }}-${DEPLOY_ENV} \
             --wait \
             --timeout 5m \

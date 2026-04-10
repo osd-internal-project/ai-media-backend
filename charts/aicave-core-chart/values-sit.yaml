@@ -20,18 +20,20 @@ ingress:
 env:
   nodeEnv: "Development"
   port: "4002"
-  databaseUrl: "postgresql://ai_cave:osd@1234@10.134.2.3:5432/ai_cave_sit?schema=public"
   pathMountdirUpload: "./uploads"
   storagePath: "https://sit.aicave.ai/public/api/v1/s3"
-  byteplusAccessKey: "AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM"
-  byteplusSecretKey: "T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ=="
-  tosBucket: "ai-cave"
-  tosAccessKey: "AKAPYjgyZmRiNzcwOGUzNGQzMWEzOTljMmJlMGMxZmIxN2M"
-  tosSecretKey: "WW1aaU5URTVNV1ptWmpKak5HWTJNbUpoTTJJeU1HWmlaak0zTlRRMVpUVQ=="
+  tosBucket: "ai-cave-sit"
   tosRegion: "ap-southeast-3"
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
   redisHost: "my-redis-master.redis.svc.cluster.local"
   redisPort: "6379"
+
+# Secrets managed via GitHub Actions secrets and passed with --set:
+#   secretEnv.DATABASE_URL
+#   secretEnv.BYTEPLUS_ACCESS_KEY
+#   secretEnv.BYTEPLUS_SECRET_KEY
+#   secretEnv.TOS_ACCESS_KEY
+#   secretEnv.TOS_SECRET_KEY
 
 resources:
   requests:
