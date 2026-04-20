@@ -613,13 +613,13 @@ model PlanFeature {
   planId    String @map("plan_id") @db.Uuid
   featureId String @map("feature_id") @db.Uuid
 
-  plan    Plan    @relation(fields: [planId], references: [id])
-  feature Feature @relation(fields: [featureId], references: [id])
-
+  plan        Plan    @relation(fields: [planId], references: [id])
+  feature     Feature @relation(fields: [featureId], references: [id])
   value       String  @db.Text
   isHighlight Boolean @default(false) @map("is_highlight")
+  // isChecked   Boolean @default(false) @map("is_check")
   orderIndex  Int     @default(0) @map("order_index")
-  category    String? @default("General") @db.VarChar(100)
+  category    String? @default("") @db.VarChar(200)
 
   @@unique([planId, featureId])
   @@map("plan_features")
