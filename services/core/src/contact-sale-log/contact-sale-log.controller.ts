@@ -17,7 +17,6 @@ export class ContactSaleLogController {
   async createContactSaleLog(
     @Body() payload: Prisma.ContactSaleLogCreateInput,
   ) {
-    console.log(payload);
     const newLog = await this.contactSaleLogService.create({
       data: payload,
     });
