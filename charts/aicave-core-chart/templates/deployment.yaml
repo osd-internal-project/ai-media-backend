@@ -70,6 +70,10 @@ spec:
           value: {{ .Values.env.redisHost | quote }}
         - name: REDIS_PORT
           value: {{ .Values.env.redisPort | quote }}
+        - name: EMAIL_API_URL
+          value: {{ .Values.env.emailApiUrl | quote }}
+        - name: RECEIVE_EMAIL
+          value: {{ .Values.env.receiveEmail | quote }}
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

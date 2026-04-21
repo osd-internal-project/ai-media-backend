@@ -5,6 +5,8 @@ export const appConfigs = registerAs('app', () => ({
   port: process.env.PORT || 4002,
   pathMountDirUpload: process.env.PATH_MOUNTDIR_UPLOAD,
   storagePath: process.env.STORAGE_PATH,
+  emailApiUrl: process.env.EMAIL_API_URL,
+  receiveEmail: process.env.RECEIVE_EMAIL,
 }));
 
 export const byteplusConfigs = registerAs('byteplus', () => ({
