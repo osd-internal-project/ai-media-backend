@@ -34,6 +34,7 @@ import {
   BrandKitDetailTypeRepository,
   CouponCodeRepository,
   CouponCodeUsageRepository,
+  ContactSaleLogRepository,
 } from 'src/repositories';
 
 const services = [
@@ -71,10 +72,12 @@ const services = [
   BrandKitDetailTypeRepository,
   CouponCodeRepository,
   CouponCodeUsageRepository,
+  ContactSaleLogRepository,
 ];
 
 @Module({
   providers: [...services],
   exports: [...services],
 })
+
 export class PrismaModule {}

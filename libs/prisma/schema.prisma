@@ -774,3 +774,18 @@ model ChatTool {
 
   @@map("chat_tool")
 }
+
+model ContactSaleLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  firstName   String   @map("first_name") @db.VarChar(200)
+  lastName    String   @map("last_name") @db.VarChar(200)
+  email       String   @map("email") @db.VarChar(100)
+  phoneNumber String   @map("phone_number") @db.VarChar(20)
+  companyName String?  @map("company_name") @db.VarChar(200)
+  message     String   @map("message") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  status      String   @default("done") @map("status") @db.VarChar(10)
+
+  @@map("contact_sale_log")
+}

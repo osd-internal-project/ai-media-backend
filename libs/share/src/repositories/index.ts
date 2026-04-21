@@ -31,3 +31,4 @@ export * from './brandKitDetail.repository';
 export * from './brandKitDetailType.repository';
 export * from './coupon-code.repository';
 export * from './coupon-code-usage.repository';
+export * from './contactSaleLog.repository';

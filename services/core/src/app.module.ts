@@ -26,6 +26,7 @@ import { MasterModelTypeModule } from './master-model-type/master-model-type.mod
 import { BrandKitModule } from './brand-kit/brand-kit.module';
 import { BrandKitDetailModule } from './brand-kit-detail/brand-kit-detail.module';
 import { BrandKitDetailTypeModule } from './brand-kit-detail-type/brand-kit-detail-type.module';
+import { ContactSaleLogModule } from './contact-sale-log/contact-sale-log.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { BrandKitDetailTypeModule } from './brand-kit-detail-type/brand-kit-deta
         password: redisConfigs().redisPassword,
       },
     }),
+    ContactSaleLogModule,
   ],
   controllers: [InventoryController],
   providers: [InventoryService],
