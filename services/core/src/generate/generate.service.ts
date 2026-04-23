@@ -247,6 +247,9 @@ export class GenerateService {
     body: RequestVideoGenerateDto,
     clientId: string,
   ) {
+    // console.log(clientId);
+    Logger.debug(body);
+
     let taskId = body.taskId;
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
 
@@ -305,11 +308,11 @@ export class GenerateService {
           body.organizationId,
         );
 
-      console.log('basePayload', basePayload);
-
+      Logger.debug('basePayload', basePayload);
+      // return;
       // 5. Call External API
       const res = await this.executeGenerationRequestVideo(
-        getConfigApi.apiCreateTaskVdo,
+        modelDetail.sendApi,
         basePayload,
         axiosConfig,
       );
@@ -378,6 +381,7 @@ export class GenerateService {
             draft: body.draft,
             generateAudio: body.generateAudio,
             watermark: body.watermark,
+            files: body.files,
           }),
         },
       });
@@ -466,6 +470,7 @@ export class GenerateService {
             draft: body.draft,
             generateAudio: body.generateAudio,
             watermark: body.watermark,
+            files: body.files,
           },
           users: {
             fullname: user.fullname,
@@ -691,7 +696,7 @@ export class GenerateService {
       const project = await this.projectRepo.findOne({
         where: { id: body.projectId },
       });
-    
+
       if (
         project.usedCreditAllowance + project.holdCreditAllowance >
         project.limitCreditAllowance
@@ -1093,7 +1098,48 @@ export class GenerateService {
       },
       httpsAgent: this.agent,
     };
-
+    let imageIndex =0;
+    let videoIndex =0;
+    let audioIndex =0;
+    const filesUrl = await Promise.all(
+      body.files.map(async (file, index) => {
+        if (file.type === 'image') {
+          imageIndex++;
+          return {
+            type: 'image_url',
+            image_url: {
+              url: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                file.url,
+              ),
+            },
+            role: 'reference_image',
+          };
+        } else if (file.type === 'video') {
+          return {
+            type: 'video_url',
+            video_url: {
+              url: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                file.url,
+              ),
+            },
+            role: 'reference_video',
+          };
+        } else if (file.type === 'audio') {
+          return {
+            type: 'audio_url',
+            audio_url: {
+              url: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                file.url,
+              ),
+            },
+            role: 'reference_audio',
+          };
+        }
+      }),
+    );
     const basePayload = {
       model: body.model,
       content: [
@@ -1101,6 +1147,7 @@ export class GenerateService {
           type: 'text',
           text: body.prompt,
         },
+        ...filesUrl,
         ...(body.image[0]
           ? [
               {
@@ -1802,6 +1849,7 @@ export class GenerateService {
     watermark?: boolean;
     seed?: number;
     fastMode?: boolean;
+    files?: { type: string; url: string }[];
   }) {
     return {
       ...(body?.width && { width: body?.width }),

@@ -254,7 +254,7 @@ export class WebsocketGatewayService
         data,
         client.id,
       );
-
+      console.log('🎥 Generate Video result: ', result);
       // Broadcast to room
       this.server.to(roomName).emit('video-task:created', {
         taskId: data.taskId,
