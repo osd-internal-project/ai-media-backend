@@ -248,7 +248,7 @@ export class GenerateService {
     clientId: string,
   ) {
     // console.log(clientId);
-    Logger.debug(body);
+    // Logger.debug(body);
 
     let taskId = body.taskId;
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
