@@ -218,8 +218,21 @@ model MasterModelType {
   modelDetails Json?    @map("model_details")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @map("updated_at")
+  optionCode   String[] @default([]) @map("option_code")
+  sendApi      String   @default("") @map("send_api") @db.Text
+  sendConfig   Json?    @map("send_config")
 
   @@map("master_model_type")
+}
+
+model MasterModelOption {
+  id          String  @unique @default(uuid()) @map("id") @db.VarChar(50)
+  optionCode  String  @unique @map("option_code") @db.VarChar(20) //code แสดง input
+  avaliable   String  @unique @map("avaliable") @db.VarChar(20) //ชื่อตัวแปล
+  description String? @unique @map("description") @db.VarChar(20)
+  type        String  @map("type") @db.VarChar(150)
+
+  @@map("master_model_option")
 }
 
 model GenerateImage {

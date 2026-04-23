@@ -19,4 +19,5 @@ export class RequestVideoGenerateDto {
   draft: boolean;
   resolution: string;
   organizationId?: string;
+  files: { type: 'image' | 'video' | 'audio'; url: string }[];
 }
