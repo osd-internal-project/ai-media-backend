@@ -19,13 +19,13 @@ env:
   nodeEnv: "Development"
   port: "4004"
   openaiBaseUrl: "https://api.openai.com/v1"
-  openaiModel: "gpt-4.1-nano"
+  openaiModel: "gpt-5-nano"
   openaiFullbackModel: "gpt-4.1-nano"
-  openaiMaxRetries: "2"
-  openaiTimeoutMs: "30000"
-  moderationEnabled: "false"
-  memoryMaxMessages: "10"
-  memoryMaxTokenBudget: "4000"
+  openaiMaxRetries: "3"
+  openaiTimeoutMs: "60000"
+  moderationEnabled: "true"
+  memoryMaxMessages: "20"
+  memoryMaxTokenBudget: "8000"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
