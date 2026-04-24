@@ -30,7 +30,7 @@ env:
 
 concurrency:
   group: deploy-${{ inputs.namespace }}-${{ inputs.image_name }}-${{ inputs.deploy_env }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
