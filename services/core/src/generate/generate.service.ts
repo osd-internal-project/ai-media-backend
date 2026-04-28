@@ -97,9 +97,9 @@ export class GenerateService {
       if (!modelDetail) {
         return { status: 400, data: 'Model not found' };
       }
-      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-        where: { id: 1 },
-      });
+      // const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+      //   where: { id: 1 },
+      // });
       // 3. Check Quota
       const { isQuotaExceeded, currentCreditUsed, onholdCredits } =
         await this.checkCreditImageQuota(
@@ -132,16 +132,14 @@ export class GenerateService {
       const { basePayload, axiosConfig } =
         await this.prepareGenerationPayloadImage(
           { ...body, prompt },
-          modelDetail,
-          getConfigApi,
+          modelDetail.sendConfig,
           user.userId,
           taskId,
-          imageUrls,
         );
 
       // 5. Call External API
       const res = await this.executeGenerationRequest(
-        getConfigApi.apiCreateImage,
+        modelDetail.sendApi,
         basePayload,
         axiosConfig,
       );
@@ -271,9 +269,9 @@ export class GenerateService {
       const modelDetail = await this.modeltypeRepo.findOne({
         where: { modelType: body.model, type: 'video' },
       });
-      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-        where: { id: 1 },
-      });
+      // const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+      //   where: { id: 1 },
+      // });
 
       if (!modelDetail) {
         return { status: 400, data: 'Model not found' };
@@ -304,7 +302,7 @@ export class GenerateService {
       const { basePayload, axiosConfig } =
         await this.prepareGenerationPayloadVideo(
           body,
-          getConfigApi,
+          modelDetail.sendConfig,
           body.organizationId,
         );
 
@@ -1042,7 +1040,6 @@ export class GenerateService {
   }
   private async prepareGenerationPayloadImage(
     body: RequestImageGenerateDto,
-    modelDetail: any,
     configApi: any,
     userId: string,
     taskId: string,
@@ -1088,19 +1085,19 @@ export class GenerateService {
 
   private async prepareGenerationPayloadVideo(
     body: RequestVideoGenerateDto,
-    configApi: any,
+    config: any,
     organizationId: string,
   ) {
     const axiosConfig: AxiosRequestConfig = {
       headers: {
-        'Content-Type': configApi.configType,
-        Authorization: `${configApi.authorization}`,
+        'Content-Type': config.configType,
+        Authorization: `${config.authorization}`,
       },
       httpsAgent: this.agent,
     };
-    let imageIndex =0;
-    let videoIndex =0;
-    let audioIndex =0;
+    let imageIndex = 0;
+    let videoIndex = 0;
+    let audioIndex = 0;
     const filesUrl = await Promise.all(
       body.files.map(async (file, index) => {
         if (file.type === 'image') {
@@ -1230,9 +1227,9 @@ export class GenerateService {
       const modelDetail = await this.modeltypeRepo.findOne({
         where: { modelType: body.model, type: 'omnihumen' },
       });
-      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-        where: { id: 2 },
-      });
+      // const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+      //   where: { id: 2 },
+      // });
       // console.log(getConfigApi);
 
       if (!modelDetail) {
@@ -1275,14 +1272,14 @@ export class GenerateService {
             seed: body.seed,
             pe_fast_mode: body.fastMode,
           },
-          getConfigApi,
+          modelDetail.sendConfig,
           body.organizationId,
         );
       console.log('basePayload', basePayload);
 
       // 5. Call External API
       const res = await this.executeGenerationRequestOmnihumen(
-        'https://cv.byteplusapi.com/',
+        modelDetail.sendApi,
         basePayload,
         axiosConfig,
       );
@@ -1547,9 +1544,9 @@ export class GenerateService {
         where: { modelType: body.model, type: 'dreamactor' },
       });
 
-      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-        where: { id: 2 },
-      });
+      // const getConfigApi = await this.masterdataconfigapiRepo.findOne({
+      //   where: { id: 2 },
+      // });
       // console.log(getConfigApi);
 
       if (!modelDetail) {
@@ -1587,14 +1584,14 @@ export class GenerateService {
             image_urls: [body.image[0]],
             video_url: body.image[1],
           },
-          getConfigApi,
+          modelDetail.sendConfig,
           body.organizationId,
         );
       console.log('basePayload', basePayload);
 
       // 5. Call External API
       const res = await this.executeGenerationRequestDreamactor(
-        'https://cv.byteplusapi.com/',
+        modelDetail.sendApi,
         basePayload,
         axiosConfig,
       );
