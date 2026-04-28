@@ -18,14 +18,14 @@ on:
         default: sit
     outputs:
       image_ver:
-        description: "The built image version from package.json"
+        description: "The built image version from package.json (with env suffix)"
         value: ${{ jobs.build.outputs.image_ver }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      image_ver: ${{ steps.pkg.outputs.ver }}
+      image_ver: ${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }}
 
     steps:
       # ---------------------------------------------------------------------
@@ -55,7 +55,7 @@ jobs:
       - name: Build Docker Image
         run: |
           docker build --no-cache --platform linux/amd64 \
-            -t ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} \
+            -t ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }} \
             -f ${{ inputs.service_path }}/Dockerfile .
 
       # ---------------------------------------------------------------------
@@ -72,9 +72,9 @@ jobs:
       # ---------------------------------------------------------------------
       - name: Tag and Push Docker Image
         run: |
-          docker tag ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} \
-            swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
-          docker push swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}
+          docker tag ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }} \
+            swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }}
+          docker push swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }}
 
       # ---------------------------------------------------------------------
       # Cleanup local Docker images
@@ -82,7 +82,7 @@ jobs:
       - name: Cleanup Docker Images
         if: always()
         run: |
-          docker rmi ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} || true
-          docker rmi swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }} || true
+          docker rmi ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }} || true
+          docker rmi swr.ap-southeast-2.myhuaweicloud.com/osd-internal/${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }} || true
           docker image prune -f
           docker builder prune -f
