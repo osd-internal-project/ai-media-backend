@@ -166,7 +166,7 @@ export class WebsocketGatewayService
       `ws:client-tasks:${client.id}`,
     );
     for (const taskId of activeTasks) {
-      await this.generateService.cancelTask(taskId);
+      await this.generateService.cancelImageTask(taskId);
     }
     await this.redis.del(`ws:client-tasks:${client.id}`);
   }
@@ -554,7 +554,7 @@ export class WebsocketGatewayService
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      const status = await this.generateService.getTaskStatus(data.taskId);
+      const status = await this.generateService.getImageTaskStatus(data.taskId);
       client.emit('task:status', status);
     } catch (error) {
       client.emit('error', { message: error.message });
@@ -567,7 +567,7 @@ export class WebsocketGatewayService
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      const result = await this.generateService.cancelTask(data.taskId);
+      const result = await this.generateService.cancelImageTask(data.taskId);
 
       // ลบออกจาก client tasks
       await this.redis.srem(`ws:client-tasks:${client.id}`, data.taskId);
