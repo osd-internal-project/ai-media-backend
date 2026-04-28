@@ -15,7 +15,7 @@ import {
   QUEUE_NAME_OMNIHUMEN,
   CreateGenerateDto,
 } from '@ai-media/share';
-import { GenerateService } from './generate.service';
+import { GenerateService } from './services/generate.service';
 
 @Controller('generate')
 export class GenerateController {

@@ -11,7 +11,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
 import { WebsocketService } from './websocket.service';
-import { GenerateService } from 'src/generate/generate.service';
+import { GenerateService } from 'src/generate/services/generate.service';
 import {
   RequestImageGenerateDto,
   RequestVideoGenerateDto,
@@ -184,10 +184,7 @@ export class WebsocketGatewayService
 
       // เรียก service เพื่อสร้าง task
       // Broadcast to room
-      const result = await this.generateService.createImageGenerationTask(
-        data,
-        client.id,
-      );
+      const result = await this.generateService.createImageGenerationTask(data, client.id)
       this.server.to(roomName).emit('task:started', {
         taskId: data.taskId,
         message: 'Task started',
@@ -250,10 +247,7 @@ export class WebsocketGatewayService
       const { projectId } = data;
       const roomName = `${projectId}:video`;
 
-      const result = await this.generateService.createVideoGenerationTask(
-        data,
-        client.id,
-      );
+      const result = await this.generateService.createVideoGenerationTask(data, client.id)
       // console.log('🎥 Generate Video result: ', result);
       // Broadcast to room
       this.server.to(roomName).emit('video-task:created', {

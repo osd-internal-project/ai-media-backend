@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { WebsocketGatewayService } from './websocket.gateway';
 import { WebsocketService } from './websocket.service';
-import { GenerateService } from 'src/generate/generate.service';
+import { GenerateService } from 'src/generate/services/generate.service';
 import {
   PrismaModule,
   QUEUE_NAME_IMAGE,

@@ -9,7 +9,11 @@ import {
   QUEUE_NAME_DREAMACTOR,
 } from '@ai-media/share';
 import { BullModule } from '@nestjs/bullmq';
-import { GenerateService } from './generate.service';
+import { GenerateService } from './services/generate.service';
+import { GenerateImageService } from './services/generate-image.service';
+import { GenerateVideoService } from './services/generate-video.service';
+import { GenerateOmnihumanService } from './services/generate-omnihuman.service';
+import { GenerateDreamactorService } from './services/generate-dreamactor.service';
 
 @Module({
   imports: [
@@ -29,6 +33,19 @@ import { GenerateService } from './generate.service';
     }),
   ],
   controllers: [GenerateController],
-  providers: [GenerateService],
+  providers: [
+    GenerateService,
+    GenerateImageService,
+    GenerateVideoService,
+    GenerateOmnihumanService,
+    GenerateDreamactorService,
+  ],
+  exports: [
+    GenerateService,
+    GenerateImageService,
+    GenerateVideoService,
+    GenerateOmnihumanService,
+    GenerateDreamactorService,
+  ],
 })
 export class GenerateModule {}
