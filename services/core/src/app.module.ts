@@ -5,7 +5,6 @@ import { InventoryController } from './app.controller';
 import { InventoryService } from './app.service';
 import { RequestLoggerMiddleware } from './middleware/request-logger.middleware';
 import { PrismaModule } from '@ai-media/share';
-import { GenerateImageModule } from './generate-image/generate-image.module';
 import { HttpModule } from '@nestjs/axios';
 import { ProjectModule } from './project/project.module';
 import { LogsModule } from './logs/logs.module';
@@ -36,8 +35,7 @@ import { ContactSaleLogModule } from './contact-sale-log/contact-sale-log.module
     }),
     ScheduleModule.forRoot(),
     WebsocketModule,
-    PrismaModule,
-    GenerateImageModule,
+    PrismaModule, 
     HttpModule,
     ProjectModule,
     LogsModule,

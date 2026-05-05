@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { WebsocketGatewayService } from './websocket.gateway';
 import { WebsocketService } from './websocket.service';
-import { GenerateService } from 'src/generate/services/generate.service';
+import { GenerateModule } from 'src/generate/generate.module';
 import {
   PrismaModule,
   QUEUE_NAME_IMAGE,
@@ -18,6 +18,7 @@ import { LogsService } from 'src/logs/logs.service';
   imports: [
     PrismaModule,
     TosModule,
+    GenerateModule,
     RedisModule.forRoot({
       type: 'single',
       url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
@@ -45,13 +46,11 @@ import { LogsService } from 'src/logs/logs.service';
   ],
   providers: [
     WebsocketGatewayService,
-    GenerateService,
     WebsocketService,
     LogsService,
   ],
   exports: [
     WebsocketGatewayService,
-    GenerateService,
     WebsocketService,
     LogsService,
   ],

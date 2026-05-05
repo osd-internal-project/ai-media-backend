@@ -16,6 +16,7 @@ import {
   CreateGenerateDto,
 } from '@ai-media/share';
 import { GenerateService } from './services/generate.service';
+import { GenerateHelperService } from './services/generate-helper.service';
 
 @Controller('generate')
 export class GenerateController {
@@ -23,6 +24,7 @@ export class GenerateController {
     @InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue,
     @InjectQueue(QUEUE_NAME_OMNIHUMEN) private omnihumenQueue: Queue,
     private readonly generateService: GenerateService,
+    private readonly generateHelperService: GenerateHelperService,
   ) {}
 
   @Post('image')
@@ -52,6 +54,6 @@ export class GenerateController {
 
   @Post('get-credit-pre-send')
   async getCreditPreSend(@Body('body') body: any) {
-    return await this.generateService.getCreditPreSend(body);
+    return await this.generateHelperService.getCreditPreSend(body);
   }
 }

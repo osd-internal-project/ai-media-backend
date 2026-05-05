@@ -16,7 +16,7 @@ import { Queue } from 'bullmq';
 import * as https from 'https';
 import Redis from 'ioredis';
 import { tosConfigs } from 'src/configs';
-import { GenerateService } from './generate.service';
+import { GenerateHelperService } from './generate-helper.service';
 
 @Injectable()
 export class GenerateDreamactorService {
@@ -26,17 +26,17 @@ export class GenerateDreamactorService {
     private readonly galleryRepo: GalleryRepository,
     private readonly logrepo: LogRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
-    private readonly generateService: GenerateService,
     @InjectRedis() private readonly redis: Redis,
     @InjectQueue(QUEUE_NAME_DREAMACTOR) private dreamactorQueue: Queue,
     private readonly tosService: TosService,
+    private readonly generateHelperService: GenerateHelperService,
   ) {}
 
   async createDreamactorGenerationTask(body: any, clientId: string) {
     let taskId = body.taskId;
     const redisDreamactorCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${body.userId}`;
     try {
-      const { user, projectMember } = await this.generateService.validateUserAndProject(
+      const { user, projectMember } = await this.generateHelperService.validateUserAndProject(
         body.userId,
         body.projectId,
       );
@@ -46,7 +46,7 @@ export class GenerateDreamactorService {
       }
 
       if (user) {
-        await this.generateService.logAudit(user.userId, 'CREATE', body, taskId);
+        await this.generateHelperService.logAudit(user.userId, 'CREATE', body, taskId);
       }
 
       const modelDetail = await this.modeltypeRepo.findOne({
@@ -109,7 +109,7 @@ export class GenerateDreamactorService {
           status: false,
           usedCredit: incrementCredit,
 
-          generateConfig: this.generateService.buildGenerateConfig({
+          generateConfig: this.generateHelperService.buildGenerateConfig({
             ratio: '',
             width: 0,
             height: 0,
@@ -140,7 +140,7 @@ export class GenerateDreamactorService {
               ? body.image.filter((item: any) => item !== null)
               : [],
           resolution: body.resolution,
-          generateConfig: this.generateService.buildGenerateConfig({
+          generateConfig: this.generateHelperService.buildGenerateConfig({
             ratio: '',
             width: 0,
             height: 0,
@@ -154,7 +154,7 @@ export class GenerateDreamactorService {
         },
       });
       if (log) {
-        await this.generateService.updateHoldCreditBalance(
+        await this.generateHelperService.updateHoldCreditBalance(
           user.userId,
           body.organizationId,
           body.projectId,
@@ -248,7 +248,7 @@ export class GenerateDreamactorService {
       };
     } catch (error) {
       console.error('Error creating dreamactor generation task:', error);
-      this.generateService.handleGenerationError(error, body.userId);
+      this.generateHelperService.handleGenerationError(error, body.userId);
       throw error;
     }
   }
@@ -279,7 +279,7 @@ export class GenerateDreamactorService {
       currentCreditUsed =
         projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
-    const onhandCredit = await this.generateService.getUsedCredit(0, body, model);
+    const onhandCredit = await this.generateHelperService.getUsedCredit(0, body, model);
     if (!onhandCredit) {
       return {
         isQuotaExceeded: true,
@@ -348,7 +348,7 @@ export class GenerateDreamactorService {
       ),
     } as ByteplusePayloadDreamactor;
 
-    const headers = this.generateService.signBytePlusRequest(
+    const headers = this.generateHelperService.signBytePlusRequest(
       'POST',
       '/',
       queryParams,

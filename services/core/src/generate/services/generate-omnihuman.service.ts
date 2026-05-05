@@ -16,7 +16,7 @@ import { Queue } from 'bullmq';
 import * as https from 'https';
 import Redis from 'ioredis';
 import { tosConfigs } from 'src/configs';
-import { GenerateService } from './generate.service';
+import { GenerateHelperService } from './generate-helper.service';
 
 @Injectable()
 export class GenerateOmnihumanService {
@@ -26,7 +26,7 @@ export class GenerateOmnihumanService {
     private readonly galleryRepo: GalleryRepository,
     private readonly logrepo: LogRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
-    private readonly generateService: GenerateService,
+    private readonly generateHelperService: GenerateHelperService,
     @InjectRedis() private readonly redis: Redis,
     @InjectQueue(QUEUE_NAME_OMNIHUMEN) private omnihumenQueue: Queue,
     private readonly tosService: TosService,
@@ -37,7 +37,7 @@ export class GenerateOmnihumanService {
     const redisOmnihumenCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${body.userId}`;
 
     try {
-      const { user, projectMember } = await this.generateService.validateUserAndProject(
+      const { user, projectMember } = await this.generateHelperService.validateUserAndProject(
         body.userId,
         body.projectId,
       );
@@ -47,7 +47,7 @@ export class GenerateOmnihumanService {
       }
 
       if (user) {
-        await this.generateService.logAudit(user.userId, 'CREATE', body, taskId);
+        await this.generateHelperService.logAudit(user.userId, 'CREATE', body, taskId);
       }
 
       const modelDetail = await this.modeltypeRepo.findOne({
@@ -120,7 +120,7 @@ export class GenerateOmnihumanService {
           status: false,
           usedCredit: incrementCredit,
           usedImage: 1,
-          generateConfig: this.generateService.buildGenerateConfig({
+          generateConfig: this.generateHelperService.buildGenerateConfig({
             resolution: body.resolution,
             seed: body.seed,
             fastMode: body.fastMode,
@@ -153,7 +153,7 @@ export class GenerateOmnihumanService {
               ? body.image.filter((item: any) => item !== null)
               : [],
           resolution: body.resolution,
-          generateConfig: this.generateService.buildGenerateConfig({
+          generateConfig: this.generateHelperService.buildGenerateConfig({
             resolution: body.resolution,
             seed: body.seed,
             fastMode: body.fastMode,
@@ -169,7 +169,7 @@ export class GenerateOmnihumanService {
         },
       });
       if (log) {
-        await this.generateService.updateHoldCreditBalance(
+        await this.generateHelperService.updateHoldCreditBalance(
           user.userId,
           body.organizationId,
           body.projectId,
@@ -263,7 +263,7 @@ export class GenerateOmnihumanService {
       };
     } catch (error) {
       console.error('Error creating omnihumen generation task:', error);
-      this.generateService.handleGenerationError(error, body.userId);
+      this.generateHelperService.handleGenerationError(error, body.userId);
       throw error;
     }
   }
@@ -295,7 +295,7 @@ export class GenerateOmnihumanService {
         projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
     }
 
-    const onhandCredit = await this.generateService.getUsedCredit(0, body, model);
+    const onhandCredit = await this.generateHelperService.getUsedCredit(0, body, model);
     if (!onhandCredit) {
       return {
         isQuotaExceeded: true,
@@ -357,7 +357,7 @@ export class GenerateOmnihumanService {
       ),
     } as ByteplusePayloadOmnihumen;
 
-    const headers = this.generateService.signBytePlusRequest(
+    const headers = this.generateHelperService.signBytePlusRequest(
       'POST',
       '/',
       queryParams,

@@ -23,17 +23,17 @@ import { Queue } from 'bullmq';
 import * as https from 'https';
 import Redis from 'ioredis';
 import { tosConfigs } from 'src/configs';
-import { GenerateService } from './generate.service';
+import { GenerateHelperService } from './generate-helper.service';
 
 @Injectable()
 export class GenerateVideoService {
   private readonly agent = new https.Agent({ rejectUnauthorized: false });
 
   constructor(
+    private readonly generateHelperService: GenerateHelperService,
     private readonly galleryRepo: GalleryRepository,
     private readonly logrepo: LogRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
-    private readonly generateService: GenerateService,
     @InjectRedis() private readonly redis: Redis,
     @InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue,
     private readonly tosService: TosService,
@@ -47,17 +47,23 @@ export class GenerateVideoService {
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
 
     try {
-      const { user, projectMember } = await this.generateService.validateUserAndProject(
-        body.userId,
-        body.projectId,
-      );
+      const { user, projectMember } =
+        await this.generateHelperService.validateUserAndProject(
+          body.userId,
+          body.projectId,
+        );
 
       if (!projectMember) {
         return { status: 400, data: 'Team member not found' };
       }
 
       if (user) {
-        await this.generateService.logAudit(user.userId, 'CREATE', body, taskId);
+        await this.generateHelperService.logAudit(
+          user.userId,
+          'CREATE',
+          body,
+          taskId,
+        );
       }
 
       const modelDetail = await this.modeltypeRepo.findOne({
@@ -97,7 +103,7 @@ export class GenerateVideoService {
         );
 
       Logger.debug('basePayload', basePayload);
-      
+
       const res = await this.executeGenerationRequestVideo(
         modelDetail.sendApi,
         basePayload,
@@ -116,7 +122,7 @@ export class GenerateVideoService {
           genneratedStatus: 'PENDING',
           status: false,
           usedCredit: incrementCredit,
-          generateConfig: this.generateService.buildGenerateConfig({
+          generateConfig: this.generateHelperService.buildGenerateConfig({
             ratio: body.ratio,
             width: body.width,
             height: body.height,
@@ -150,7 +156,7 @@ export class GenerateVideoService {
               : [],
           resolution: body.size,
           ratio: body.ratio,
-          generateConfig: this.generateService.buildGenerateConfig({
+          generateConfig: this.generateHelperService.buildGenerateConfig({
             ratio: body.ratio,
             width: body.width,
             height: body.height,
@@ -167,7 +173,7 @@ export class GenerateVideoService {
         },
       });
       if (log) {
-        await this.generateService.updateHoldCreditBalance(
+        await this.generateHelperService.updateHoldCreditBalance(
           user.userId,
           body.organizationId,
           body.projectId,
@@ -175,14 +181,14 @@ export class GenerateVideoService {
           incrementCredit,
         );
       }
-      
+
       await this.redis.set(
         redisVideoCacheKey,
         usedCredit.toString(),
         'EX',
         24 * 60 * 60,
       );
-      
+
       const job = await this.videoQueue.add(
         QUEUE_NAME_VDO,
         {
@@ -267,7 +273,7 @@ export class GenerateVideoService {
       };
     } catch (error) {
       console.error('Error creating video generation task:', error);
-      this.generateService.handleGenerationError(error, body.userId);
+      this.generateHelperService.handleGenerationError(error, body.userId);
       throw error;
     }
   }
@@ -301,7 +307,11 @@ export class GenerateVideoService {
     }
     const onhandToken =
       (body.width * body.height * body.duration * frameRate) / 1024;
-    const onhandCredit = await this.generateService.getUsedCredit(onhandToken, body, model);
+    const onhandCredit = await this.generateHelperService.getUsedCredit(
+      onhandToken,
+      body,
+      model,
+    );
     if (!onhandCredit) {
       return {
         isQuotaExceeded: true,
@@ -313,7 +323,7 @@ export class GenerateVideoService {
     }
     const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
-    
+
     if (usedCredit > limitAllowance) {
       Logger.error(
         `Token used ${usedCredit} exceed max token ${limitAllowance}`,
@@ -348,7 +358,7 @@ export class GenerateVideoService {
       },
       httpsAgent: this.agent,
     };
-    
+
     const filesUrl = await Promise.all(
       body.files.map(async (file, index) => {
         if (file.type === 'image') {

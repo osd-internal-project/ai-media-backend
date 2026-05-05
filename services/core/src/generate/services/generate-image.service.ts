@@ -33,11 +33,10 @@ import {
 } from '@nestjs/common';
 import axios, { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
-import e from 'express';
 import * as https from 'https';
 import Redis from 'ioredis';
 import { tosConfigs } from 'src/configs';
-import { GenerateService } from './generate.service';
+import { GenerateHelperService } from './generate-helper.service';
 
 @Injectable()
 export class GenerateImageService {
@@ -53,7 +52,7 @@ export class GenerateImageService {
     private readonly galleryRepo: GalleryRepository,
     private readonly modeltypeRepo: MasterdataModelTypeRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
-    private readonly generateService: GenerateService,
+    private readonly generateHelperService: GenerateHelperService,
 
     @InjectRedis() private readonly redis: Redis,
     @InjectQueue(QUEUE_NAME_IMAGE) private imageQueue: Queue,
@@ -74,17 +73,23 @@ export class GenerateImageService {
 
     try {
       // 1. Validate User & Project
-      const { user, projectMember } = await this.generateService.validateUserAndProject(
-        body.userId,
-        body.projectId,
-      );
+      const { user, projectMember } =
+        await this.generateHelperService.validateUserAndProject(
+          body.userId,
+          body.projectId,
+        );
 
       if (!projectMember) {
         return { status: 400, data: 'Team member not found' };
       }
 
       if (user) {
-        await this.generateService.logAudit(user.userId, 'CREATE', body, taskId);
+        await this.generateHelperService.logAudit(
+          user.userId,
+          'CREATE',
+          body,
+          taskId,
+        );
       }
       // 2. Get Config & Model
 
@@ -207,7 +212,7 @@ export class GenerateImageService {
           typeGenerate: 'image',
           genneratedStatus: 'SUCCESS',
           status: true,
-          generateConfig: this.generateService.buildGenerateConfig({
+          generateConfig: this.generateHelperService.buildGenerateConfig({
             ratio: body.ratio,
             width: body.width,
             height: body.height,
@@ -231,8 +236,12 @@ export class GenerateImageService {
       };
     } catch (error) {
       console.error('Error creating generation task:', error);
-      this.generateService.cancelHoldAmount(holdCreditCount, body.userId, body.projectId);
-      this.generateService.handleGenerationError(error, body.userId);
+      this.generateHelperService.cancelHoldAmount(
+        holdCreditCount,
+        body.userId,
+        body.projectId,
+      );
+      this.generateHelperService.handleGenerationError(error, body.userId);
       throw error;
     }
   }
@@ -286,7 +295,7 @@ export class GenerateImageService {
           projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
       }
 
-      const credit = await this.generateService.getUsedCredit(0, body, model);
+      const credit = await this.generateHelperService.getUsedCredit(0, body, model);
       if (!credit) {
         return {
           isQuotaExceeded: true,
@@ -352,7 +361,7 @@ export class GenerateImageService {
           onholdCredits: credit.credit,
         };
       }
-      await this.generateService.updateHoldCreditBalance(
+      await this.generateHelperService.updateHoldCreditBalance(
         userId,
         body.organizationId,
         body.projectId,
@@ -428,8 +437,7 @@ export class GenerateImageService {
     return await axios.post(url, payload, config);
   }
 
-
-   /**
+  /**
    * ดึงสถานะของ Task
    */
   async getTaskStatus(taskId: string) {

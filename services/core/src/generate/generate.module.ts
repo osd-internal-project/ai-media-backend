@@ -10,6 +10,7 @@ import {
 } from '@ai-media/share';
 import { BullModule } from '@nestjs/bullmq';
 import { GenerateService } from './services/generate.service';
+import { GenerateHelperService } from './services/generate-helper.service';
 import { GenerateImageService } from './services/generate-image.service';
 import { GenerateVideoService } from './services/generate-video.service';
 import { GenerateOmnihumanService } from './services/generate-omnihuman.service';
@@ -34,18 +35,20 @@ import { GenerateDreamactorService } from './services/generate-dreamactor.servic
   ],
   controllers: [GenerateController],
   providers: [
-    GenerateService,
+    GenerateHelperService,
     GenerateImageService,
     GenerateVideoService,
     GenerateOmnihumanService,
     GenerateDreamactorService,
+    GenerateService,
   ],
   exports: [
-    GenerateService,
+    GenerateHelperService,
     GenerateImageService,
     GenerateVideoService,
     GenerateOmnihumanService,
     GenerateDreamactorService,
+    GenerateService,
   ],
 })
 export class GenerateModule {}
