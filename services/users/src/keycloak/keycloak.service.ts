@@ -117,7 +117,7 @@ export class KeycloakService {
         firstName: userDto.fullname?.trim().split(' ')[0] || userDto.username,
         lastName:
           userDto.fullname?.trim().split(' ').slice(1).join(' ') ||
-          'NOLASTNAME',
+          '-',
         email: userDto.email || '',
         emailVerified: false,
         enabled: true,
