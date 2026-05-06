@@ -13,11 +13,10 @@ import * as dayjs from 'dayjs';
 
 @Injectable()
 export class CouponCodeService {
-  private readonly logger = new Logger(CouponCodeService.name);
-
   constructor(
     private readonly couponCodeRepo: CouponCodeRepository,
     private readonly organizationRepository: OrganizationRepository,
+    private readonly creditBalanceRepository: CreditBalanceRepository,
     private readonly userRepository: UsersRepository,
     private readonly couponCodeUsageRepo: CouponCodeUsageRepository,
   ) {}
@@ -48,6 +47,7 @@ export class CouponCodeService {
     if (cuponCode.expiresAt < new Date()) {
       throw new NotFoundException(`Coupon is expired`);
     }
+    Logger.debug(cuponCode);
     if (
       cuponCode?.fixOrganizationId &&
       cuponCode.fixOrganizationId !== organizationId
@@ -69,16 +69,7 @@ export class CouponCodeService {
     if (usage >= cuponCode.usageLimit) {
       throw new NotFoundException(`Coupon is limited`);
     }
-    const form = {
-      usedAt: new Date(),
-      usedById: user.userId,
-      usedByName: user.fullname,
-      onTopCredit: cuponCode.onTopCredit,
-      organizationName: organization.name,
-      organizationCode: organization.organizationId,
-      couponCode: { connect: { id: cuponCode.id } },
-    } as Prisma.CouponCodeUsageCreateInput;
-    const result = await this.couponCodeUsageRepo.create({ data: form });
+
     await this.organizationRepository.update({
       where: { organizationId: organizationId },
       data: {
@@ -90,6 +81,21 @@ export class CouponCodeService {
         },
       },
     });
+
+    const credit = await this.creditBalanceRepository.findOne({
+      where: { organizationId: organizationId },
+    });
+    const form = {
+      usedAt: new Date(),
+      usedById: user.userId,
+      usedByName: user.fullname,
+      onTopCredit: cuponCode.onTopCredit,
+      organizationName: organization.name,
+      organizationCode: organization.organizationId,
+      couponCode: { connect: { id: cuponCode.id } },
+      remainCredit: credit.onTopBalance,
+    } as Prisma.CouponCodeUsageCreateInput;
+    const result = await this.couponCodeUsageRepo.create({ data: form });
     if (usage + 1 === cuponCode.usageLimit) {
       await this.couponCodeRepo.update({
         where: { id: cuponCode.id },
@@ -120,6 +126,26 @@ export class CouponCodeService {
         orderBy: { createdAt: 'desc' },
       }),
       this.couponCodeRepo.count({
+        where: prismaWhere,
+      }),
+    ]);
+    return { data, total };
+  }
+
+  async findUsageManyByOrganization(organizationCode: string, condition: any) {
+    const { skip, take } = condition;
+    const prismaWhere: Prisma.CouponCodeUsageWhereInput = {
+      organizationCode,
+    };
+    const [data, total] = await Promise.all([
+      this.couponCodeUsageRepo.findMany({
+        where: prismaWhere,
+        skip: skip ? +skip : undefined,
+        take: take ? +take : undefined,
+        orderBy: { createdAt: 'desc' },
+        include: { couponCode: true },
+      }),
+      this.couponCodeUsageRepo.count({
         where: prismaWhere,
       }),
     ]);

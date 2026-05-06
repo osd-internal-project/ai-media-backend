@@ -67,6 +67,17 @@ export class CouponCodeController {
     return this.couponCodeService.findOne(id);
   }
 
+  @Get('usage/organization/:organizationcode')
+  findUsageManyByOrganization(
+    @Param('organizationcode') organizationcode: string,
+    @Query() condition?: any,
+  ) {
+    return this.couponCodeService.findUsageManyByOrganization(
+      organizationcode,
+      condition || {},
+    );
+  }
+
   @Patch(':id')
   update(
     @Param('id') id: string,

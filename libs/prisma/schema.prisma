@@ -485,6 +485,7 @@ model CouponCodeUsage {
   onTopCredit      Float      @default(0) @map("on_top_credit")
   organizationName String     @map("organization_name") @db.VarChar(200)
   organizationCode String     @map("organization_code") @db.VarChar(200)
+  remainCredit     Float      @default(0) @map("remain_credit")
   usedByName       String     @map("used_by_name") @db.VarChar(200)
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
