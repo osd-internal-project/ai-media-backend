@@ -165,9 +165,7 @@ export class WebsocketGatewayService
     const activeTasks = await this.redis.smembers(
       `ws:client-tasks:${client.id}`,
     );
-    for (const taskId of activeTasks) {
-      await this.generateService.cancelImageTask(taskId);
-    }
+    await Promise.all(activeTasks.map((taskId) => this.generateService.cancelImageTask(taskId)));
     await this.redis.del(`ws:client-tasks:${client.id}`);
   }
 
@@ -226,12 +224,12 @@ export class WebsocketGatewayService
       this.logger.error('Generate error:', error);
       client.emit('generate:error', {
         taskId: data.taskId,
-        message: error.message || 'Internal server error',
+        message: this.getErrorMessage(error) || 'Internal server error',
       });
       // [NEW] Return error acknowledgement
       return {
         success: false,
-        message: error.message || 'Internal server error',
+        message: this.getErrorMessage(error) || 'Internal server error',
       };
     }
   }
@@ -291,11 +289,11 @@ export class WebsocketGatewayService
       this.logger.error('Generate video error:', error);
       client.emit('video-generate:error', {
         taskId: data.taskId,
-        message: error.message || 'Internal server error',
+        message: this.getErrorMessage(error) || 'Internal server error',
       });
       return {
         success: false,
-        message: error.message || 'Internal server error',
+        message: this.getErrorMessage(error) || 'Internal server error',
       };
     }
   }
@@ -358,11 +356,11 @@ export class WebsocketGatewayService
       this.logger.error('Generate video error:', error);
       client.emit('omnihumen-generate:error', {
         taskId: data.taskId,
-        message: error.message || 'Internal server error',
+        message: this.getErrorMessage(error) || 'Internal server error',
       });
       return {
         success: false,
-        message: error.message || 'Internal server error',
+        message: this.getErrorMessage(error) || 'Internal server error',
       };
     }
   }
@@ -428,11 +426,11 @@ export class WebsocketGatewayService
       this.logger.error('Generate video error:', error);
       client.emit('dreamactor-generate:error', {
         taskId: data.taskId,
-        message: error.message || 'Internal server error',
+        message: this.getErrorMessage(error) || 'Internal server error',
       });
       return {
         success: false,
-        message: error.message || 'Internal server error',
+        message: this.getErrorMessage(error) || 'Internal server error',
       };
     }
   }
@@ -496,7 +494,7 @@ export class WebsocketGatewayService
       });
     } catch (error) {
       client.emit('chat:error', {
-        message: error.message,
+        message: this.getErrorMessage(error),
       });
     }
   }
@@ -543,7 +541,7 @@ export class WebsocketGatewayService
       // }
     } catch (error) {
       client.emit('chat:error', {
-        message: error.message,
+        message: this.getErrorMessage(error),
       });
     }
   }
@@ -557,7 +555,7 @@ export class WebsocketGatewayService
       const status = await this.generateService.getImageTaskStatus(data.taskId);
       client.emit('task:status', status);
     } catch (error) {
-      client.emit('error', { message: error.message });
+      client.emit('error', { message: this.getErrorMessage(error) });
     }
   }
 
@@ -574,7 +572,7 @@ export class WebsocketGatewayService
 
       client.emit('task:cancelled', result);
     } catch (error) {
-      client.emit('error', { message: error.message });
+      client.emit('error', { message: this.getErrorMessage(error) });
     }
   }
 
@@ -597,7 +595,7 @@ export class WebsocketGatewayService
         message: `Joined room ${roomName}`,
       });
     } catch (error) {
-      this.logger.error(`Error joining room: ${error.message}`);
+      this.logger.error(`Error joining room: ${this.getErrorMessage(error)}`);
       client.emit('error', { message: 'Failed to join room' });
     }
   }
@@ -618,7 +616,7 @@ export class WebsocketGatewayService
         message: `Left room ${roomName}`,
       });
     } catch (error) {
-      this.logger.error(`Error leaving room: ${error.message}`);
+      this.logger.error(`Error leaving room: ${this.getErrorMessage(error)}`);
       client.emit('error', { message: 'Failed to leave room' });
     }
   }
@@ -647,7 +645,7 @@ export class WebsocketGatewayService
       this.server.to(roomName).emit('chat:message', payload);
       this.logger.log(`Message sent to room ${roomName}: ${message}`);
     } catch (error) {
-      this.logger.error(`Error sending message: ${error.message}`);
+      this.logger.error(`Error sending message: ${this.getErrorMessage(error)}`);
       client.emit('error', { message: 'Failed to send message' });
     }
   }
@@ -674,5 +672,9 @@ export class WebsocketGatewayService
 
   async onModuleDestroy() {
     await this.redisSubscriber.quit();
+  }
+
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 }

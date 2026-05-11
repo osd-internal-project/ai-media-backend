@@ -25,15 +25,10 @@ export class GalleryController {
   findAll() {
     return this.galleryService.findAll();
   }
-  @Get(':projectId')
-  findOne(@Param('projectId') projectId: string, @Query() query: any) {
-    return this.galleryService.findMany(projectId, query);
-  }
   @Get('activity/:projectId')
   findByActivity(@Param('projectId') projectId: string, @Query() query: any) {
     return this.galleryService.findByActivity(projectId, query);
   }
-
   @Get('download/:id')
   async downloadFile(
     @Param('id') id: string,
@@ -47,6 +42,11 @@ export class GalleryController {
       'Content-Type':type,
     });
     res.send(file);
+  }
+
+  @Get(':projectId')
+  findOne(@Param('projectId') projectId: string, @Query() query: any) {
+    return this.galleryService.findMany(projectId, query);
   }
 
   @Patch('task/:taskId')

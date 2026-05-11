@@ -36,31 +36,22 @@ export class GalleryService {
       where: { projectId: projectId, ...(query?.status && { status: true }) },
     });
 
-    const newData = new Map();
-    for (const item of data) {
-      const url = item.imageUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.imageUrl}`,
-          )
-        : '';
-      const thumbnailUrl = item.thumbnailUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/${
-              `${item.typeGenerate}-generate`
-            }/${item.thumbnailUrl}`,
-          )
-        : '';
-      newData.set(item.id, {
-        ...item,
-        imageUrl: url,
-        thumbnailUrl: thumbnailUrl,
-      });
-    }
-    return { data: Array.from(newData.values()), total };
+    const bucket = tosConfigs().tosBucket;
+    const processedData = await Promise.all(
+      data.map(async (item) => {
+        const basePath = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
+        const [url, thumbnailUrl] = await Promise.all([
+          item.imageUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${basePath}/${item.imageUrl}`)
+            : Promise.resolve(''),
+          item.thumbnailUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${basePath}/${item.thumbnailUrl}`)
+            : Promise.resolve(''),
+        ]);
+        return { ...item, imageUrl: url, thumbnailUrl };
+      }),
+    );
+    return { data: processedData, total };
   }
 
   async findByActivity(projectId: string, query: any) {

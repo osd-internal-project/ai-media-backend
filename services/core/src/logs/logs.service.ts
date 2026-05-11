@@ -12,6 +12,15 @@ import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
 import { tosConfigs } from 'src/configs';
 import * as dayjs from 'dayjs';
 
+const REF_IMAGE_PLACEHOLDER =
+  'data:image/svg+xml;base64,' +
+  Buffer.from(
+    `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+    <rect width="32" height="32" fill="#333"/>
+    <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
+  </svg>`,
+  ).toString('base64');
+
 @Injectable()
 export class LogsService {
   constructor(
@@ -89,89 +98,54 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    console.log(seqMap);
+    const bucket = tosConfigs().tosBucket;
+    const PLACEHOLDER = REF_IMAGE_PLACEHOLDER;
+
+    const processed = await Promise.all(
+      data.map(async (item) => {
+        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
+        const [url, thumbnailUrl] = await Promise.all([
+          item.imageUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            : Promise.resolve(''),
+          item.thumbnailUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            : Promise.resolve(''),
+        ]);
+        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
+        const referenceImageUrls = await Promise.all(
+          filenames.map(async (filename) => {
+            const ok = await this.tosService.headObject(bucket, filename);
+            return ok
+              ? this.tosService.getPreSignedUrl(bucket, filename)
+              : PLACEHOLDER;
+          }),
+        );
+        return { item, url, thumbnailUrl, referenceImageUrls };
+      }),
+    );
+
     const map = new Map();
-
-    for (const item of data) {
-      const url = item.imageUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
-          )
-        : '';
-      const thumbnailUrl = item.thumbnailUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
-          )
-        : '';
-
-      // Generate presigned URLs for multiple reference images
-      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
-      let referenceImageUrls = [];
-      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
-        for (const filename of referenceImageFilenames) {
-          const fileStats = await this.tosService.headObject(
-            tosConfigs().tosBucket,
-            filename,
-          );
-          if (fileStats) {
-            const url = await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              filename,
-            );
-            referenceImageUrls.push(url);
-          } else {
-            const placeholder =
-              'data:image/svg+xml;base64,' +
-              Buffer.from(
-                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-                <rect width="32" height="32" fill="#333"/>
-                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-              </svg>`,
-              ).toString('base64');
-            referenceImageUrls.push(placeholder);
-          }
-        }
-      }
-
+    for (const { item, url, thumbnailUrl, referenceImageUrls } of processed) {
       if (!map.has(item.taskId)) {
         map.set(item.taskId, {
           ...item,
-          referenceImages: referenceImageUrls, // All reference images
+          referenceImages: referenceImageUrls,
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [
-            {
-              imageUrl: url,
-              thumbnailUrl: thumbnailUrl,
-              id: item.id,
-              status: item.status,
-              fileName: item.imageUrl,
-            },
-          ],
+          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl }],
         });
         delete map.get(item.taskId).imageUrl;
         delete map.get(item.taskId).thumbnailUrl;
       } else {
         map.get(item.taskId).imageUrls.push({
-          imageUrl: url,
-          thumbnailUrl: thumbnailUrl,
-          id: item.id,
-          status: item.status,
-          fileName: item.imageUrl,
-          seq: seqMap.get(item.taskId) || null,
+          imageUrl: url, thumbnailUrl, id: item.id, status: item.status,
+          fileName: item.imageUrl, seq: seqMap.get(item.taskId) || null,
         });
       }
     }
-    const result = Array.from(map.values());
-
-    return result;
+    return Array.from(map.values());
   }
   async findProjectVideoByPage(
     projectId: string,
@@ -256,56 +230,37 @@ export class LogsService {
       }
     });
     
-    console.log(seqMap); 
+    const bucket = tosConfigs().tosBucket;
+    const PLACEHOLDER = REF_IMAGE_PLACEHOLDER;
+
+    const processed = await Promise.all(
+      data.map(async (item) => {
+        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
+        const [url, thumbnailUrl] = await Promise.all([
+          item.imageUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            : Promise.resolve(''),
+          item.thumbnailUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            : Promise.resolve(''),
+        ]);
+        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
+        const refBase = `organize/${organizationId}/${item.projectId}/uploads`;
+        const referenceImageUrls = await Promise.all(
+          filenames.map(async (filename) => {
+            const path = `${refBase}/${filename}`;
+            const ok = await this.tosService.headObject(bucket, path);
+            return ok
+              ? this.tosService.getPreSignedUrl(bucket, path)
+              : PLACEHOLDER;
+          }),
+        );
+        return { item, url, thumbnailUrl, referenceImageUrls };
+      }),
+    );
+
     const newData = new Map();
-    for (const item of data) {
-      const url = item.imageUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
-          )
-        : '';
-      const thumbnailUrl = item.thumbnailUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
-          )
-        : '';
-
-      // Generate presigned URLs for multiple reference images
-      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
-      // console.log(referenceImagesMap);
-
-      let referenceImageUrls = [];
-      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
-        for (const filename of referenceImageFilenames) {
-          const fileStats = await this.tosService.headObject(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
-          );
-          if (fileStats) {
-            const url = await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
-            );
-            referenceImageUrls.push(url);
-          } else {
-            const placeholder =
-              'data:image/svg+xml;base64,' +
-              Buffer.from(
-                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-                <rect width="32" height="32" fill="#333"/>
-                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-              </svg>`,
-              ).toString('base64');
-            referenceImageUrls.push(placeholder);
-          }
-        }
-      }
+    for (const { item, url, thumbnailUrl, referenceImageUrls } of processed) {
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
@@ -314,32 +269,17 @@ export class LogsService {
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [
-            {
-              imageUrl: url,
-              thumbnailUrl: thumbnailUrl,
-              id: item.id,
-              status: item.status,
-              fileName: item.imageUrl,
-            },
-          ],
+          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl }],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
-          imageUrl: url,
-          thumbnailUrl: thumbnailUrl,
-          id: item.id,
-          fileName: item.imageUrl,
-          status: item.status,
+          imageUrl: url, thumbnailUrl, id: item.id, fileName: item.imageUrl, status: item.status,
         });
       }
     }
-
-    const result = Array.from(newData.values());
-
-    return result;
+    return Array.from(newData.values());
   }
 
   async findProjectOmniHumenByPage(
@@ -421,55 +361,33 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    console.log(seqMap);
+    const bucket = tosConfigs().tosBucket;
+    const processed = await Promise.all(
+      data.map(async (item) => {
+        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
+        const [url, thumbnailUrl] = await Promise.all([
+          item.imageUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            : Promise.resolve(''),
+          item.thumbnailUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            : Promise.resolve(''),
+        ]);
+        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
+        const referenceImageUrls = await Promise.all(
+          filenames.map(async (filename) => {
+            const ok = await this.tosService.headObject(bucket, filename || '');
+            return ok
+              ? this.tosService.getPreSignedUrl(bucket, filename)
+              : REF_IMAGE_PLACEHOLDER;
+          }),
+        );
+        return { item, url, thumbnailUrl, referenceImageUrls };
+      }),
+    );
 
     const newData = new Map();
-    for (const item of data) {
-      const url = item.imageUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
-          )
-        : '';
-      const thumbnailUrl = item.thumbnailUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
-          )
-        : '';
-      // Generate presigned URLs for multiple reference images
-      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
-      let referenceImageUrls = [];
-      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
-        for (const filename of referenceImageFilenames) {
-          const fileStats = await this.tosService.headObject(
-            tosConfigs().tosBucket,
-            filename || '',
-          );
-          if (fileStats) {
-            const url = await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              filename,
-            );
-            referenceImageUrls.push(url);
-          } else {
-            const placeholder =
-              'data:image/svg+xml;base64,' +
-              Buffer.from(
-                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-                <rect width="32" height="32" fill="#333"/>
-                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-              </svg>`,
-              ).toString('base64');
-            referenceImageUrls.push(placeholder);
-          }
-        }
-      }
-
+    for (const { item, url, thumbnailUrl, referenceImageUrls } of processed) {
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
@@ -478,32 +396,17 @@ export class LogsService {
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [
-            {
-              imageUrl: url,
-              thumbnailUrl: thumbnailUrl,
-              id: item.id,
-              status: item.status,
-              fileName: item.imageUrl,
-            },
-          ],
+          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl }],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
-          imageUrl: url,
-          thumbnailUrl: thumbnailUrl,
-          id: item.id,
-          fileName: item.imageUrl,
-          status: item.status,
+          imageUrl: url, thumbnailUrl, id: item.id, fileName: item.imageUrl, status: item.status,
         });
       }
     }
-
-    const result = Array.from(newData.values());
-
-    return result;
+    return Array.from(newData.values());
   }
 
   async findProjectDreamactorByPage(
@@ -587,56 +490,33 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    console.log(seqMap);
+    const bucket = tosConfigs().tosBucket;
+    const processed = await Promise.all(
+      data.map(async (item) => {
+        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
+        const [url, thumbnailUrl] = await Promise.all([
+          item.imageUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            : Promise.resolve(''),
+          item.thumbnailUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            : Promise.resolve(''),
+        ]);
+        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
+        const referenceImageUrls = await Promise.all(
+          filenames.map(async (filename) => {
+            const ok = await this.tosService.headObject(bucket, filename || '');
+            return ok
+              ? this.tosService.getPreSignedUrl(bucket, filename)
+              : REF_IMAGE_PLACEHOLDER;
+          }),
+        );
+        return { item, url, thumbnailUrl, referenceImageUrls };
+      }),
+    );
 
     const newData = new Map();
-    for (const item of data) {
-      const url = item.imageUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
-          )
-        : '';
-      const thumbnailUrl = item.thumbnailUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
-          )
-        : '';
-
-      // Generate presigned URLs for multiple reference images
-      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
-      let referenceImageUrls = [];
-      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
-        for (const filename of referenceImageFilenames) {
-          const fileStats = await this.tosService.headObject(
-            tosConfigs().tosBucket,
-            filename || '',
-          );
-          if (fileStats) {
-            const url = await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              filename,
-            );
-            referenceImageUrls.push(url);
-          } else {
-            const placeholder =
-              'data:image/svg+xml;base64,' +
-              Buffer.from(
-                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-                <rect width="32" height="32" fill="#333"/>
-                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-              </svg>`,
-              ).toString('base64');
-            referenceImageUrls.push(placeholder);
-          }
-        }
-      }
-
+    for (const { item, url, thumbnailUrl, referenceImageUrls } of processed) {
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
@@ -748,54 +628,35 @@ export class LogsService {
       }
     });
 
+    const bucket = tosConfigs().tosBucket;
+    const processed = await Promise.all(
+      data.map(async (item) => {
+        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
+        const [url, thumbnailUrl] = await Promise.all([
+          item.imageUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            : Promise.resolve(''),
+          item.thumbnailUrl
+            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            : Promise.resolve(''),
+        ]);
+        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
+        const refBase = `organize/${organizationId}/${item.projectId}/uploads`;
+        const referenceImageUrls = await Promise.all(
+          filenames.map(async (filename) => {
+            const path = `${refBase}/${filename}`;
+            const ok = await this.tosService.headObject(bucket, path);
+            return ok
+              ? this.tosService.getPreSignedUrl(bucket, path)
+              : REF_IMAGE_PLACEHOLDER;
+          }),
+        );
+        return { item, url, thumbnailUrl, referenceImageUrls };
+      }),
+    );
+
     const newData = new Map();
-    for (const item of data) {
-      const url = item.imageUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.imageUrl}`,
-          )
-        : '';
-      const thumbnailUrl = item.thumbnailUrl
-        ? await this.tosService.getPreSignedUrl(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${
-              item.projectId
-            }/${`${item.typeGenerate}-generate`}/${item.thumbnailUrl}`,
-          )
-        : '';
-
-      // Generate presigned URLs for multiple reference images
-      const referenceImageFilenames = referenceImagesMap.get(item.taskId);
-      let referenceImageUrls = [];
-      if (referenceImageFilenames && referenceImageFilenames.length > 0) {
-        for (const filename of referenceImageFilenames) {
-          const fileStats = await this.tosService.headObject(
-            tosConfigs().tosBucket,
-            `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
-          );
-          if (fileStats) {
-            const url = await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              `organize/${organizationId}/${item.projectId}/uploads/${filename}`,
-            );
-            referenceImageUrls.push(url);
-          } else {
-            const placeholder =
-              'data:image/svg+xml;base64,' +
-              Buffer.from(
-                `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-                <rect width="32" height="32" fill="#333"/>
-                <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-              </svg>`,
-              ).toString('base64');
-            referenceImageUrls.push(placeholder);
-          }
-        }
-      }
-
+    for (const { item, url, thumbnailUrl, referenceImageUrls } of processed) {
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
@@ -803,32 +664,17 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || false,
-          imageUrls: [
-            {
-              imageUrl: url,
-              thumbnailUrl: thumbnailUrl,
-              id: item.id,
-              fileName: item.imageUrl,
-              status: item.status,
-            },
-          ],
+          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, fileName: item.imageUrl, status: item.status }],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
-          imageUrl: url,
-          thumbnailUrl: thumbnailUrl,
-          id: item.id,
-          status: item.status,
-          fileName: item.imageUrl,
+          imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl,
         });
       }
     }
-
-    const result = Array.from(newData.values());
-
-    return result;
+    return Array.from(newData.values());
   }
 
   async findByTaskId(taskId: string, query: any) {

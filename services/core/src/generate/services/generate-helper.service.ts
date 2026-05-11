@@ -165,12 +165,12 @@ export class GenerateHelperService {
     }
   }
 
-  cancelHoldAmount(
+  async cancelHoldAmount(
     holdCreditAllowance: number,
     userId: string,
     projectId: string,
   ) {
-    this.projectMemberRepo.updateMany({
+    await this.projectMemberRepo.updateMany({
       where: { userId: userId, projectId: projectId },
       data: { holdCreditAllowance: { decrement: holdCreditAllowance } },
     });
@@ -280,7 +280,8 @@ export class GenerateHelperService {
         return { token: outToken, credit };
       }
     } catch (err) {
-      return err;
+      Logger.error(`Failed to calculate credit: ${err}`);
+      return undefined;
     }
   }
 

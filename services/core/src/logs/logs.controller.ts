@@ -9,10 +9,6 @@ import {
   Query,
 } from '@nestjs/common';
 import { LogsService } from './logs.service';
-import { CreateLogDto } from './dto/create-log.dto';
-import { UpdateLogDto } from './dto/update-log.dto';
-import { Socket } from 'socket.io';
-import { ConnectedSocket } from '@nestjs/websockets';
 
 @Controller('logs')
 export class LogsController {
@@ -85,58 +81,55 @@ export class LogsController {
     @Query('fristsql') fristsql: number,
     @Query('lastsql') lastsql: number,
   ) {
-    // const projectId = data.projectId;
-    // const organizationId = data.organizationId;
-    try {
-      // console.log('type', type);
-      const conversation =
+    const numSkip = skip != null ? +skip : undefined;
+    const numTake = take != null ? +take : undefined;
+    const numFrist = fristsql != null ? +fristsql : undefined;
+    const numLast = lastsql != null ? +lastsql : undefined;
+
+    const conversation =
         type === 'image'
           ? await this.logsService.findProjectImageByPage(
               projectId,
               organizationId,
               userId,
-              skip,
-              take,
-              fristsql,
-              lastsql,
+              numSkip,
+              numTake,
+              numFrist,
+              numLast,
             )
           : type === 'video'
           ? await this.logsService.findProjectVideoByPage(
               projectId,
               organizationId,
               userId,
-              skip,
-              take,
-              fristsql,
-              lastsql,
+              numSkip,
+              numTake,
+              numFrist,
+              numLast,
             )
           : type === 'omnihumen'
           ? await this.logsService.findProjectOmniHumenByPage(
               projectId,
               organizationId,
               userId,
-              skip,
-              take,
-              fristsql,
-              lastsql,
+              numSkip,
+              numTake,
+              numFrist,
+              numLast,
             )
           : type === 'dreamactor'
           ? await this.logsService.findProjectDreamactorByPage(
               projectId,
               organizationId,
               userId,
-              skip,
-              take,
-              fristsql,
-              lastsql,
+              numSkip,
+              numTake,
+              numFrist,
+              numLast,
             )
           : [];
-      // console.log(conversation);
 
-      return conversation;
-    } catch (error) {
-      throw error;
-    }
+    return conversation;
   }
 
   @Get('generate-vdo-logs/:taskId')

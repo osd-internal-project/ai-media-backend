@@ -5,6 +5,7 @@ import {
   ProjectMemberRepository,
   OrganizationMemberRepository,
   OrganizationRepository,
+  PrismaService,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 
@@ -67,6 +68,7 @@ export class ProjectService {
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly organizationMemberRepo: OrganizationMemberRepository,
     private readonly organizationRepo: OrganizationRepository,
+    private readonly prisma: PrismaService,
   ) {}
 
   private async getUserOrganizationRole(
@@ -184,12 +186,20 @@ export class ProjectService {
     const isAdmin = organizationRole === 'ADMIN';
 
     const isShowAll = isOwner || isAdmin || isSuperAdmin;
+
+    // Build status filter: never show deleted to non-superadmins;
+    // combine with the requested status so the spread doesn't overwrite it.
+    const statusFilter = isSuperAdmin
+      ? status || undefined
+      : status && status !== 'deleted'
+        ? status
+        : { not: 'deleted' };
+
     const data = await this.projectRepo.findMany({
       where: {
         ...(name && { name: { contains: name, mode: 'insensitive' } }),
-        ...(status && { status }),
+        status: statusFilter,
         organizationId,
-        ...(!isSuperAdmin && { status: { not: 'deleted' } }),
         ...(!isShowAll && {
           members: {
             some: {
@@ -200,7 +210,20 @@ export class ProjectService {
           },
         }),
       },
-      include: { members: { include: { users: true } } },
+      include: {
+        members: {
+          include: {
+            users: {
+              select: {
+                userId: true,
+                username: true,
+                fullname: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: {
         createdAt: 'desc',
       },
@@ -244,26 +267,27 @@ export class ProjectService {
     });
   }
   async deleteProject(id: string) {
-    const project = await this.projectRepo.findOne({ where: { id } });
-    if (project) {
-      await this.projectRepo.update({
-        where: { id },
-        data: {
-          status: 'deleted',
-          limitCreditAllowance: 0,
-          limitImageAllowance: 0,
+    
+      const project = await this.projectRepo.findOne(
+        { where: { id } },
+      );
+      if (!project) throw new Error('Project not found');
+      await this.projectRepo.update(
+        {
+          where: { id },
+          data: {
+            status: 'deleted',
+            limitCreditAllowance: 0,
+            limitImageAllowance: 0,
+          },
         },
-      });
-      await this.projectMemberRepo.updateMany({
-        where: { projectId: project.id },
-        data: {
-          limitImageAllowance: 0,
-          limitCreditAllowance: 0,
+      );
+      await this.projectMemberRepo.updateMany(
+        {
+          where: { projectId: id },
+          data: { limitImageAllowance: 0, limitCreditAllowance: 0 },
         },
-      });
-    } else {
-      throw new Error('Project not found');
-    }
+      );
   }
 
   remove(id: string) {
