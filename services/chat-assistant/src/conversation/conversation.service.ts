@@ -1,6 +1,9 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@ai-media/share';
-import { CreateConversationDto, UpdateConversationDto } from './dto/conversation.dto';
+import {
+  CreateConversationDto,
+  UpdateConversationDto,
+} from './dto/conversation.dto';
 
 @Injectable()
 export class ConversationService {
@@ -18,10 +21,29 @@ export class ConversationService {
         model: dto.model,
       },
     });
-    this.logger.log(`Created conversation ${conversation.id} for user ${dto.userId}`);
+    this.logger.log(
+      `Created conversation ${conversation.id} for user ${dto.userId}`,
+    );
     return conversation;
   }
-
+  async set(dto: CreateConversationDto) {
+    const conversation = await this.prisma.chatConversation.findFirst({
+      where: { projectId: dto.projectId, userId: dto.userId },
+    });
+    if (!conversation) {
+      return await this.prisma.chatConversation.create({
+        data: {
+          userId: dto.userId,
+          organizationId: dto.organizationId,
+          projectId: dto.projectId,
+          title: `${dto.projectId}-${dto.userId}`,
+          systemPrompt: dto.systemPrompt,
+          model: dto.model,
+        },
+      });
+    }
+    return conversation;
+  }
   async findAll(userId: string, organizationId?: string) {
     return this.prisma.chatConversation.findMany({
       where: {
@@ -49,7 +71,8 @@ export class ConversationService {
         _count: { select: { messages: true, tokenUsage: true } },
       },
     });
-    if (!conversation) throw new NotFoundException(`Conversation ${id} not found`);
+    if (!conversation)
+      throw new NotFoundException(`Conversation ${id} not found`);
     return conversation;
   }
 
@@ -57,7 +80,8 @@ export class ConversationService {
     const conversation = await this.prisma.chatConversation.findUnique({
       where: { id },
     });
-    if (!conversation) throw new NotFoundException(`Conversation ${id} not found`);
+    if (!conversation)
+      throw new NotFoundException(`Conversation ${id} not found`);
 
     return this.prisma.chatMessage.findMany({
       where: { conversationId: id },
@@ -73,7 +97,9 @@ export class ConversationService {
       data: {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
-        ...(dto.systemPrompt !== undefined ? { systemPrompt: dto.systemPrompt } : {}),
+        ...(dto.systemPrompt !== undefined
+          ? { systemPrompt: dto.systemPrompt }
+          : {}),
       },
     });
   }

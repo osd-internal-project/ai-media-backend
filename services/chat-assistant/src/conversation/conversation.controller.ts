@@ -23,7 +23,7 @@ import {
 @UseFilters(AppErrorExceptionFilter)
 @Controller('conversations')
 export class ConversationController {
-  constructor(private readonly conversationService: ConversationService) { }
+  constructor(private readonly conversationService: ConversationService) {}
 
   /**
    * POST /api/chat-assistant/conversations
@@ -33,6 +33,12 @@ export class ConversationController {
   @ApiOperation({ summary: 'Create a new conversation' })
   create(@Body() dto: CreateConversationDto) {
     return this.conversationService.create(dto);
+  }
+  @Post('set')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  @ApiOperation({ summary: 'Set a conversation' })
+  set(@Body() dto: CreateConversationDto) {
+    return this.conversationService.set(dto);
   }
 
   /**
@@ -64,10 +70,7 @@ export class ConversationController {
   @Get(':id/messages')
   @ApiOperation({ summary: 'Get messages in a conversation' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  findMessages(
-    @Param('id') id: string,
-    @Query('limit') limit?: string,
-  ) {
+  findMessages(@Param('id') id: string, @Query('limit') limit?: string) {
     return this.conversationService.findMessages(
       id,
       limit ? parseInt(limit, 10) : 50,

@@ -7,7 +7,15 @@ export class CreateConversationDto {
   @MinLength(1)
   userId: string;
 
-  @ApiPropertyOptional({ description: 'Conversation title', example: 'My first chat' })
+  @ApiPropertyOptional({ description: 'Project ID' })
+  @IsString()
+  @IsOptional()
+  projectId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Conversation title',
+    example: 'My first chat',
+  })
   @IsString()
   @MaxLength(300)
   @IsOptional()
@@ -18,12 +26,17 @@ export class CreateConversationDto {
   @IsOptional()
   organizationId?: string;
 
-  @ApiPropertyOptional({ description: 'Custom system prompt for this conversation' })
+  @ApiPropertyOptional({
+    description: 'Custom system prompt for this conversation',
+  })
   @IsString()
   @IsOptional()
   systemPrompt?: string;
 
-  @ApiPropertyOptional({ description: 'Model to use for this conversation', example: 'gpt-4o' })
+  @ApiPropertyOptional({
+    description: 'Model to use for this conversation',
+    example: 'gpt-4o',
+  })
   @IsString()
   @IsOptional()
   model?: string;
@@ -36,7 +49,10 @@ export class UpdateConversationDto {
   @IsOptional()
   title?: string;
 
-  @ApiPropertyOptional({ description: 'Conversation status', enum: ['active', 'archived'] })
+  @ApiPropertyOptional({
+    description: 'Conversation status',
+    enum: ['active', 'archived'],
+  })
   @IsString()
   @IsOptional()
   status?: 'active' | 'archived';
