@@ -93,7 +93,10 @@ export class OrganizationService {
     const maxUserAccess = planDetails?.maxUserAccess || 0;
     const periodCount = price.periodCount || 1;
     const endDate = dayjs(startDate).add(1, 'month').add(-1, 'day').toDate(); //End used for check date
-    const billingDate = dayjs(startDate).add(periodCount, 'month').add(-1, 'day').toDate(); //Billing Date
+    const billingDate = dayjs(startDate)
+      .add(periodCount, 'month')
+      .add(-1, 'day')
+      .toDate(); //Billing Date
     const organization = await this.organizationRepo.create({
       data: {
         name: createOrganizationDto.name,
@@ -433,13 +436,20 @@ export class OrganizationService {
     });
   }
 
-  findManyByUserId(userId: string, search: { type: string }) {
-    console.log(userId);
+  async findManyByUserId(userId: string, search: { type: string }) {
+    // console.log(userId);
+    const user = await this.usersRepo.findOne({
+      where: { userId },
+    });
     return this.organizationRepo.findMany({
       where: {
         type: search.type,
         OR: [
-          { organizationMember: { some: { userId } } },
+          ...(user.role !== 'SUPER_ADMIN' && [
+            {
+              organizationMember: { some: { userId } },
+            },
+          ]),
           { createdById: userId },
         ],
       },
