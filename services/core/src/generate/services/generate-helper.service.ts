@@ -201,9 +201,27 @@ export class GenerateHelperService {
             const evalFn = new Function(
               'token',
               'body',
+              'pow',
+              'abs',
+              'min',
+              'max',
+              'round',
+              'ceil',
+              'floor',
+              'ternary',
               `"use strict"; ${code}`,
             );
-            return evalFn(t, b);
+            return evalFn(
+              t, b,
+              Math.pow,
+              Math.abs,
+              Math.min,
+              Math.max,
+              Math.round,
+              Math.ceil,
+              Math.floor,
+              (cond: boolean, a: unknown, b: unknown) => (cond ? a : b),
+            );
           };
 
           if (calculationType === 'NOT_USE_TOKEN') {
@@ -227,7 +245,7 @@ export class GenerateHelperService {
               body,
             );
           } else if (calculationType === 'FORMULA') {
-            calculatedCredit = evaluate(formula, token, body);
+            calculatedCredit = evaluate(creditFormula || formula, token, body);
             if (model.type === 'image') calculatedToken = 0;
           }
 
@@ -296,6 +314,7 @@ export class GenerateHelperService {
       throw new Error('Model not found');
     }
     const credit = await this.getUsedCredit(0, body, modelDetail);
+    console.log('Pre-send credit calculation:', credit);
     return credit?.credit || 0;
   }
 

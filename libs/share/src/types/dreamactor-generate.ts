@@ -17,5 +17,6 @@ export class RequestDreamactorGenerateDto {
     typeGenerate: string;
     generateAudio: boolean;
     draft: boolean;
+    resolution: string;
     organizationId?: string;
 }

@@ -5,6 +5,7 @@ import {
   GalleryRepository,
   LogRepository,
   MasterDataConfigApiRepository,
+  MasterdataModelTypeRepository,
   QUEUE_NAME_VDO,
   RefImageRepository,
   RequestVideoGenerateDto,
@@ -18,7 +19,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as https from 'https';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as ffmpeg from 'fluent-ffmpeg';
+import ffmpeg = require('fluent-ffmpeg');
 import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
 const ffmpegPath = require('ffmpeg-static');
@@ -26,6 +27,24 @@ const ffprobePath = require('ffprobe-static');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
+
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+  stream: null;
+  destination: string;
+  filename: string;
+  path: string;
+}
+
+interface ProjectMemberCredit {
+  usedCreditAllowance: number;
+  holdCreditAllowance: number;
+}
 
 interface VideoProcessJob {
   taskId: string;
@@ -75,6 +94,7 @@ export class VideoProcessor extends WorkerHost {
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly tosService: TosService,
     private readonly generateHelperService: GenerateHelperService,
+    private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
   ) {
     super();
     this.agent = new https.Agent({
@@ -201,7 +221,7 @@ export class VideoProcessor extends WorkerHost {
           const uuidName = uuidv4();
           const ext = 'mp4';
 
-          const mockFile: Express.Multer.File = {
+          const mockFile: MulterFile = {
             fieldname: 'file',
             originalname: `${uuidName}.${ext}`,
             encoding: '7bit',
@@ -244,10 +264,13 @@ export class VideoProcessor extends WorkerHost {
           const log = await this.logrepo.findOne({
             where: { taskId: taskId },
           });
+          const modelDto = await this.masterModelTypeRepo.findOne({
+            where: { modelType: body.model },
+          });
           const realCredit = await this.generateHelperService.getUsedCredit(
             usage.total_tokens,
             body,
-            body.model,
+            modelDto,
           );
           await this.galleryRepo.updateMany({
             where: { taskId: taskId },
@@ -278,7 +301,7 @@ export class VideoProcessor extends WorkerHost {
                 'credit',
                 realCredit.credit,
                 log.usedCredit,
-              );
+              ) as ProjectMemberCredit;
             const usedCredit =
               updated.usedCreditAllowance + updated.holdCreditAllowance;
             await this.redis.set(
@@ -306,7 +329,7 @@ export class VideoProcessor extends WorkerHost {
             body.projectId,
             'credit',
             failedLog.usedCredit,
-          );
+          ) as ProjectMemberCredit;
 
           const usedCredit =
             updated.usedCreditAllowance + updated.holdCreditAllowance;
@@ -362,28 +385,29 @@ export class VideoProcessor extends WorkerHost {
             duration: +body.duration,
             modelName: body.model,
             imageCount: body.maxImages,
-            resolution: body.size,
+            resolution: body.resolution,
             generateAudio: false,
           }),
         },
       };
     } catch (error) {
+      const err = error as Error;
       this.logger.error(
-        `❌ Job ${job.id} failed: ${error.message}`,
-        error.stack,
+        `❌ Job ${job.id} failed: ${err.message}`,
+        err.stack,
       );
 
       // อัพเดทสถานะเป็น failed
       await this.updateTaskStatus(taskId, {
         status: 'failed',
         failedAt: new Date().toISOString(),
-        error: error.message,
+        error: err.message,
       });
 
       // ส่ง error event ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:video-error', {
         taskId,
-        error: error.message,
+        error: err.message,
         timestamp: new Date().toISOString(),
         type: 'video',
         projectId: body.projectId,
@@ -405,7 +429,7 @@ export class VideoProcessor extends WorkerHost {
         body.projectId,
         'credit',
         failedLog.usedCredit,
-      );
+      ) as ProjectMemberCredit;
 
       const usedCredit =
         updated.usedCreditAllowance + updated.holdCreditAllowance;
@@ -442,7 +466,7 @@ export class VideoProcessor extends WorkerHost {
         }),
       );
     } catch (error) {
-      this.logger.error(`Failed to publish event: ${error.message}`);
+      this.logger.error(`Failed to publish event: ${(error as Error).message}`);
     }
   }
 
@@ -490,7 +514,7 @@ export class VideoProcessor extends WorkerHost {
   private async uploadVideoWithThumbnail(
     organizationId: string,
     projectId: string,
-    file: Express.Multer.File,
+    file: MulterFile,
     id: string,
   ) {
     const videoFileName = `${Date.now()}-${file.originalname}`;
@@ -549,7 +573,7 @@ export class VideoProcessor extends WorkerHost {
       };
     } catch (error) {
       console.error('Error in uploadVideoWithThumbnail:', error);
-      throw new BadRequestException('Error processing video: ' + error.message);
+      throw new BadRequestException('Error processing video: ' + (error as Error).message);
     } finally {
       // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
       try {

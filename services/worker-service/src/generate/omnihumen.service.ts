@@ -377,12 +377,12 @@ export class OmnihumenProcessor extends WorkerHost {
             duration: +body.duration,
             modelName: body.model,
             imageCount: body.maxImages,
-            resolution: body.size,
+            resolution: body.resolution,
             generateAudio: false,
           }),
         },
       };
-    } catch (error) {
+    } catch (error:any) {
       this.logger.error(
         `❌ Job ${job.id} failed: ${error.message}`,
         error.stack,
@@ -455,7 +455,7 @@ export class OmnihumenProcessor extends WorkerHost {
           timestamp: new Date().toISOString(),
         }),
       );
-    } catch (error) {
+    } catch (error:any) {
       this.logger.error(`Failed to publish event: ${error.message}`);
     }
   }
@@ -561,7 +561,7 @@ export class OmnihumenProcessor extends WorkerHost {
         file: objectName,
         thumbnail: thumbnailObjectName,
       };
-    } catch (error) {
+    } catch (error:any) {
       console.error('Error in uploadVideoWithThumbnail:', error);
       throw new BadRequestException('Error processing video: ' + error.message);
     } finally {

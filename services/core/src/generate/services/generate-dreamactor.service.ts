@@ -241,7 +241,7 @@ export class GenerateDreamactorService {
             ...(body.image[0] ? [body.image[0]] : []),
             ...(body.image[1] ? [body.image[1]] : []),
           ],
-          resolution: body.size,
+          resolution: body.resolution,
           ratio: body.ratio,
           imageUrls: [],
         },

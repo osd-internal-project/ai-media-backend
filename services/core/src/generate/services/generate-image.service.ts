@@ -220,7 +220,7 @@ export class GenerateImageService {
             duration: 0,
             modelName: body.model,
             imageCount: body.maxImages,
-            resolution: body.size,
+            resolution: body.resolution,
             generateAudio: false,
           }),
           users: {
@@ -229,7 +229,7 @@ export class GenerateImageService {
             username: user.username,
           },
           referenceImages: imageUrls,
-          resolution: body.size,
+          resolution: body.resolution,
           ratio: body.ratio,
           imageUrls: [],
         },

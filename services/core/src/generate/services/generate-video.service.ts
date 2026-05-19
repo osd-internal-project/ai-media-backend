@@ -130,7 +130,7 @@ export class GenerateVideoService {
             duration: +body.duration,
             modelName: body.model,
             imageCount: 0,
-            resolution: body.size,
+            resolution: body.resolution,
             draft: body.draft,
             generateAudio: body.generateAudio,
             watermark: body.watermark,
@@ -154,7 +154,7 @@ export class GenerateVideoService {
             body.image.length > 0
               ? body.image.filter((item) => item !== null)
               : [],
-          resolution: body.size,
+          resolution: body.resolution,
           ratio: body.ratio,
           generateConfig: this.generateHelperService.buildGenerateConfig({
             ratio: body.ratio,
@@ -164,7 +164,7 @@ export class GenerateVideoService {
             duration: +body.duration,
             modelName: body.model,
             imageCount: 0,
-            resolution: body.size,
+            resolution: body.resolution,
             draft: body.draft,
             generateAudio: body.generateAudio,
             watermark: body.watermark,
@@ -251,7 +251,7 @@ export class GenerateVideoService {
             duration: body.duration.toString(),
             modelName: body.model,
             imageCount: 0,
-            resolution: body.size,
+            resolution: body.resolution,
             draft: body.draft,
             generateAudio: body.generateAudio,
             watermark: body.watermark,
@@ -266,7 +266,7 @@ export class GenerateVideoService {
             ...(body.image[0] ? [body.image[0]] : []),
             ...(body.image[1] ? [body.image[1]] : []),
           ],
-          resolution: body.size,
+          resolution: body.resolution,
           ratio: body.ratio,
           imageUrls: [],
         },
@@ -439,7 +439,7 @@ export class GenerateVideoService {
       ratio: body.ratio,
       duration: body.duration,
       watermark: body.watermark,
-      resolution: body.size,
+      resolution: body.resolution,
     } as ByteplusePayloadVideo;
     return { basePayload, axiosConfig };
   }

@@ -17,6 +17,7 @@ import {
   ProjectRepository,
   ProjectMemberRepository,
   CreditBalanceRepository,
+  MasterdataModelTypeRepository,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
@@ -51,6 +52,7 @@ export class ImageProcessor extends WorkerHost {
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly generateHelperService: GenerateHelperService,
+    private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
   ) {
     super();
     this.agent = new https.Agent({
@@ -93,10 +95,13 @@ export class ImageProcessor extends WorkerHost {
       const totalImages = dataImage.length;
       const uploadedImages: string[] = [];
       const bytepluseUrl = [];
+      const model = await this.masterModelTypeRepo.findOne({
+        where: { modelType: body.model },
+      });
       const credit = await this.generateHelperService.getUsedCredit(
         0,
         body,
-        body.model,
+        model,
       );
       // 1. ส่ง event "started" ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:started', {
@@ -184,7 +189,7 @@ export class ImageProcessor extends WorkerHost {
               duration: 0,
               modelName: body.model,
               imageCount: body.maxImages,
-              resolution: body.size,
+              resolution: body.resolution,
               generateAudio: false,
             }),
           },
@@ -220,7 +225,7 @@ export class ImageProcessor extends WorkerHost {
           prompt: body.prompt,
           typeGenerate: 'image',
           status: 'success',
-          resolution: body.size,
+          resolution: body.resolution,
           ratio: body.ratio,
           generateAudio: false,
           tokenUsed: usage.total_tokens || 0,
@@ -236,7 +241,7 @@ export class ImageProcessor extends WorkerHost {
             duration: 0,
             modelName: body.model,
             imageCount: body.maxImages,
-            resolution: body.size,
+            resolution: body.resolution,
             generateAudio: false,
           }),
         },
@@ -292,7 +297,7 @@ export class ImageProcessor extends WorkerHost {
             duration: 0,
             modelName: body.model,
             imageCount: body.maxImages,
-            resolution: body.size,
+            resolution: body.resolution,
             generateAudio: false,
           }),
         },
@@ -336,14 +341,14 @@ export class ImageProcessor extends WorkerHost {
             duration: 0,
             modelName: body.model,
             imageCount: body.maxImages,
-            resolution: body.size,
+            resolution: body.resolution,
             generateAudio: false,
           }),
         },
       };
-    } catch (error) {
+    } catch (error:any) {
       this.logger.error(
-        `❌ Job ${job.id} failed: ${error.message}`,
+        `❌ Job ${job.id} failed: ${(error as Error).message}`,
         error.stack,
       );
 
@@ -386,7 +391,7 @@ export class ImageProcessor extends WorkerHost {
             duration: 0,
             modelName: body.model,
             imageCount: body.maxImages,
-            resolution: body.size,
+            resolution: body.resolution,
             generateAudio: false,
           }),
         },
@@ -400,7 +405,7 @@ export class ImageProcessor extends WorkerHost {
           prompt: body.prompt,
           typeGenerate: 'image',
           status: 'failed',
-          resolution: body.size,
+          resolution: body.resolution,
           ratio: body.ratio,
           generateAudio: false,
           tokenUsed: 0,
@@ -414,7 +419,7 @@ export class ImageProcessor extends WorkerHost {
             duration: 0,
             modelName: body.model,
             imageCount: body.maxImages,
-            resolution: body.size,
+            resolution: body.resolution,
             generateAudio: false,
           }),
         },
@@ -439,7 +444,7 @@ export class ImageProcessor extends WorkerHost {
           timestamp: new Date().toISOString(),
         }),
       );
-    } catch (error) {
+    } catch (error:any) {
       this.logger.error(`Failed to publish event: ${error.message}`);
     }
   }
