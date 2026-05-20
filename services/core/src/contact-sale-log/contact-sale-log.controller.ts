@@ -26,7 +26,7 @@ export class ContactSaleLogController {
 
     const emailPayload = {
       to: receiveEmail, // Sending to ourselves (admin/support)
-      subject: '🚨 New Contact Sales Submission',
+      subject: 'AI Cave : Contact Sales Submission',
       template: 'contact-sale',
       context: {
         firstName: newLog.firstName,
