@@ -68,7 +68,7 @@ export class OrganizationService {
     }
     return data;
   }
-  
+
   async createBySystemAdmin(createOrganizationDto: {
     name: string;
     description: string;
@@ -438,8 +438,9 @@ export class OrganizationService {
     });
   }
 
-  async findManyByUserId(userId: string, search: { type: string }) {
+  async findManyByUserId(userId: string, search: { type?: string }) {
     // console.log(userId);
+    const { type } = search;
     const user = await this.usersRepo.findOne({
       where: { userId },
     });
@@ -448,7 +449,7 @@ export class OrganizationService {
       user.role === 'SUPER_ADMIN' || user.role === 'SYSTEM_ADMIN  ';
     return await this.organizationRepo.findMany({
       where: {
-        type: search.type,
+        ...(type && { type: search.type }),
         status: true,
         ...(!superAdminRole && {
           OR: [
@@ -459,6 +460,7 @@ export class OrganizationService {
           ],
         }),
       },
+      orderBy: [{ type: 'asc' }, { createdAt: 'desc' }],
     });
   }
 
