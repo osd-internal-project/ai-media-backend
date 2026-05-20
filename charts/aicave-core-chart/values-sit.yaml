@@ -28,7 +28,7 @@ env:
   redisHost: "my-redis-master.redis.svc.cluster.local"
   redisPort: "6379"
   emailApiUrl: "http://aicave-email-api-service.aicave-sit.svc.cluster.local:8974"
-  receive: "taksapongk@osd.co.th"
+  receiveEmail: "taksapongk@osd.co.th"
 
 
 # Secrets managed via GitHub Actions secrets and passed with --set:

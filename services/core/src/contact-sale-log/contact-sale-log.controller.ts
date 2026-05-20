@@ -23,7 +23,7 @@ export class ContactSaleLogController {
 
     // Send email alert to admin
     const receiveEmail = appConfigs().receiveEmail;
-    
+
     const emailPayload = {
       to: receiveEmail, // Sending to ourselves (admin/support)
       subject: '🚨 New Contact Sales Submission',
@@ -41,13 +41,14 @@ export class ContactSaleLogController {
         }),
       },
     };
+    console.log('Email payload:', emailPayload);
     try {
       const emailApiUrl = appConfigs().emailApiUrl;
       const { data } = await firstValueFrom(
         this.httpService.post(`${emailApiUrl}/email/send`, emailPayload),
       );
       Logger.log(`Email sent: ${JSON.stringify(data)}`);
-    } catch (error) {
+    } catch (error: any) {
       Logger.error(`Failed to send email: ${error.message}`);
       // Not throwing error to avoid rolling back invitation? Or should we?
       // Usually better to log failure but leave invitation pending so admin can resend or manual link.
