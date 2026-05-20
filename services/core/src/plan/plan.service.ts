@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PlanRepository, PlanPriceRepository } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
+import { access } from 'fs';
 
 @Injectable()
 export class PlanService {
@@ -168,6 +169,7 @@ export class PlanService {
       popular: plan.isPopular,
       isDefault: plan.isDefault,
       borderColor: plan.borderColor,
+      accessCodes: plan.accessCodes,
       prices: formattedPrices,
      
       features:
