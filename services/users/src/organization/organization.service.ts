@@ -68,6 +68,7 @@ export class OrganizationService {
     }
     return data;
   }
+  
   async createBySystemAdmin(createOrganizationDto: {
     name: string;
     description: string;
@@ -106,6 +107,7 @@ export class OrganizationService {
         slug: createOrganizationDto.name + '-team',
         status: true,
         maxUserAccess: maxUserAccess,
+        accessCodes: plan?.accessCodes || [],
       },
     });
     const packageTransaction = await this.packageTransactionRepo.create({
@@ -441,17 +443,21 @@ export class OrganizationService {
     const user = await this.usersRepo.findOne({
       where: { userId },
     });
-    return this.organizationRepo.findMany({
+    // console.log(user);
+    const superAdminRole =
+      user.role === 'SUPER_ADMIN' || user.role === 'SYSTEM_ADMIN  ';
+    return await this.organizationRepo.findMany({
       where: {
         type: search.type,
-        OR: [
-          ...(user.role !== 'SUPER_ADMIN' && [
+        status: true,
+        ...(!superAdminRole && {
+          OR: [
             {
               organizationMember: { some: { userId } },
             },
-          ]),
-          { createdById: userId },
-        ],
+            { createdById: userId },
+          ],
+        }),
       },
     });
   }
