@@ -46,7 +46,10 @@ export class OrganizationController {
   createInvitation(@Body() createInvitationDto: CreateInvitationDto) {
     return this.organizationService.createInvitation(createInvitationDto);
   }
-
+@Get('invitation/organization/:organizationId')
+  findInvitationsByOrganizationId(@Param('organizationId') organizationId: string) {
+    return this.organizationService.findInvitationsByOrganizationId(organizationId);
+  }
   @Get('invitation/:token')
   verifyInvitation(@Param('token') token: string) {
     return this.organizationService.verifyInvitation(token);

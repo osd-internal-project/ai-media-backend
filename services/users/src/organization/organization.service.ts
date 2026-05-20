@@ -253,7 +253,13 @@ export class OrganizationService {
 
     return { message: 'Invitation sent', token };
   }
+  findInvitationsByOrganizationId(organizationId: string) {
+    return this.invitationRepo.findMany({
+      where: { organizationId },
+    });
+  }
 
+  
   async verifyInvitation(token: string) {
     const invite = await this.invitationRepo.findOne({
       where: { token, status: 'PENDING' },
