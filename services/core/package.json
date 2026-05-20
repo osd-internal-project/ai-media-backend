@@ -1,7 +1,7 @@
 {
   "name": "@ai-media/core",
   "description": "",
-  "version": "1.0.50",
+  "version": "1.0.51",
   "author": "",
   "dependencies": {
     "@ai-media/share": "0.0.1",
@@ -54,6 +54,7 @@
     "reflect-metadata": "^0.1.13",
     "rimraf": "^4.0.4",
     "rxjs": "^7.5.7",
+    "sharp": "^0.34.5",
     "sheetjs-style": "^0.15.8",
     "shuffle-array": "^1.0.1",
     "socket.io": "^4.8.3",
@@ -72,6 +73,7 @@
     "@types/jest": "29.0.3",
     "@types/multer": "^1.4.7",
     "@types/node": "^16.0.0",
+    "@types/sharp": "^0.32.0",
     "@types/supertest": "^2.0.11",
     "@typescript-eslint/eslint-plugin": "^5.38.1",
     "@typescript-eslint/parser": "^5.38.1",
