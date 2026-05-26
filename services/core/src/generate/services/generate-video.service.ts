@@ -1,366 +1,324 @@
 import {
-  AuditLogRepository,
-  ErrorLogRepository,
   GalleryRepository,
   LogRepository,
-  MasterDataConfigApiRepository,
   MasterdataModelTypeRepository,
-  ProjectMemberRepository,
   QUEUE_NAME_VDO,
-  UsersRepository,
   RequestVideoGenerateDto,
   ByteplusePayloadVideo,
   TosService,
-  CreditBalanceRepository,
-  ProjectRepository,
   MasterModelTypeDto,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
-import axios, { AxiosRequestConfig } from 'axios';
+import { Injectable } from '@nestjs/common';
+import { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
-import * as https from 'https';
 import Redis from 'ioredis';
 import { tosConfigs } from 'src/configs';
+import {
+  BaseGenerateService,
+  CreditQuotaResult,
+} from './base-generate.service';
 import { GenerateHelperService } from './generate-helper.service';
 
 @Injectable()
-export class GenerateVideoService {
-  private readonly agent = new https.Agent({ rejectUnauthorized: false });
-
+export class GenerateVideoService extends BaseGenerateService {
   constructor(
-    private readonly generateHelperService: GenerateHelperService,
-    private readonly galleryRepo: GalleryRepository,
-    private readonly logrepo: LogRepository,
-    private readonly modeltypeRepo: MasterdataModelTypeRepository,
-    @InjectRedis() private readonly redis: Redis,
-    @InjectQueue(QUEUE_NAME_VDO) private videoQueue: Queue,
+    generateHelperService: GenerateHelperService,
+    galleryRepo: GalleryRepository,
+    logrepo: LogRepository,
+    modeltypeRepo: MasterdataModelTypeRepository,
+    @InjectRedis() redis: Redis,
+    @InjectQueue(QUEUE_NAME_VDO) private readonly videoQueue: Queue,
     private readonly tosService: TosService,
-  ) {}
-
-  async createVideoGenerationTask(
-    body: RequestVideoGenerateDto,
-    clientId: string,
   ) {
-    let taskId = body.taskId;
-    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/video_used_${body.userId}`;
-
-    try {
-      const { user, projectMember } =
-        await this.generateHelperService.validateUserAndProject(
-          body.userId,
-          body.projectId,
-        );
-
-      if (!projectMember) {
-        return { status: 400, data: 'Team member not found' };
-      }
-
-      if (user) {
-        await this.generateHelperService.logAudit(
-          user.userId,
-          'CREATE',
-          body,
-          taskId,
-        );
-      }
-
-      const modelDetail = await this.modeltypeRepo.findOne({
-        where: { modelType: body.model, type: 'video' },
-      });
-
-      if (!modelDetail) {
-        return { status: 400, data: 'Model not found' };
-      }
-
-      const {
-        isQuotaExceeded,
-        incrementCredit,
-        limitAllowance,
-        usedCredit,
-        onhandToken,
-      } = await this.checkCreditVideoQuota(
-        user.userId,
-        body,
-        projectMember,
-        redisVideoCacheKey,
-        modelDetail,
-      );
-
-      if (isQuotaExceeded) {
-        return {
-          status: 400,
-          data: `Token used ${usedCredit} exceed max credit ${limitAllowance}`,
-        };
-      }
-
-      const { basePayload, axiosConfig } =
-        await this.prepareGenerationPayloadVideo(
-          body,
-          modelDetail.sendConfig,
-          body.organizationId,
-        );
-
-      Logger.debug('basePayload', basePayload);
-
-      const res = await this.executeGenerationRequestVideo(
-        modelDetail.sendApi,
-        basePayload,
-        axiosConfig,
-      );
-
-      taskId = res.data.id;
-      await this.galleryRepo.create({
-        data: {
-          taskId,
-          projectId: body.projectId,
-          userId: user.userId,
-          prompt: body.prompt,
-          imageUrl: '',
-          typeGenerate: 'video',
-          genneratedStatus: 'PENDING',
-          status: false,
-          usedCredit: incrementCredit,
-          generateConfig: this.generateHelperService.buildGenerateConfig({
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
-            prompt: body.prompt,
-            duration: +body.duration,
-            modelName: body.model,
-            imageCount: 0,
-            resolution: body.resolution,
-            draft: body.draft,
-            generateAudio: body.generateAudio,
-            watermark: body.watermark,
-          }),
-        },
-      });
-      const log = await this.logrepo.create({
-        data: {
-          taskId,
-          projectId: body.projectId,
-          userId: user.userId,
-          prompt: body.prompt,
-          typeGenerate: 'video',
-          status: 'pending',
-          tokenUsed: onhandToken,
-          usedCredit: incrementCredit,
-          usedImage: 1,
-          ImageUsed: 1,
-          generateAudio: body.generateAudio,
-          referenceImages:
-            body.image.length > 0
-              ? body.image.filter((item) => item !== null)
-              : [],
-          resolution: body.resolution,
-          ratio: body.ratio,
-          generateConfig: this.generateHelperService.buildGenerateConfig({
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
-            prompt: body.prompt,
-            duration: +body.duration,
-            modelName: body.model,
-            imageCount: 0,
-            resolution: body.resolution,
-            draft: body.draft,
-            generateAudio: body.generateAudio,
-            watermark: body.watermark,
-            files: body.files,
-          }),
-        },
-      });
-      if (log) {
-        await this.generateHelperService.updateHoldCreditBalance(
-          user.userId,
-          body.organizationId,
-          body.projectId,
-          'credit',
-          incrementCredit,
-        );
-      }
-
-      await this.redis.set(
-        redisVideoCacheKey,
-        usedCredit.toString(),
-        'EX',
-        24 * 60 * 60,
-      );
-
-      const job = await this.videoQueue.add(
-        QUEUE_NAME_VDO,
-        {
-          taskId,
-          clientId,
-          body: { ...body },
-          userId: user.userId,
-          videoTaskId: res.data.id,
-        },
-        {
-          jobId: taskId,
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 2000,
-          },
-          removeOnComplete: 100,
-          removeOnFail: 50,
-        },
-      );
-
-      await this.redis.set(
-        `task:${taskId}`,
-        JSON.stringify({
-          taskId,
-          jobId: job.id,
-          clientId,
-          userId: user.userId,
-          projectId: body.projectId,
-          status: 'queued',
-          type: 'video',
-          videoTaskId: res.data.id,
-          createdAt: new Date().toISOString(),
-        }),
-        'EX',
-        24 * 60 * 60,
-      );
-
-      console.log(`✅ Video Task created: ${taskId}, Job ID: ${job.id}`);
-
-      return {
-        status: 200,
-        data: {
-          taskId,
-          projectId: body.projectId,
-          userId: user.userId,
-          prompt: body.prompt,
-          typeGenerate: 'video',
-          genneratedStatus: 'PENDING',
-          createdAt: new Date().toISOString(),
-          status: false,
-          videoTaskId: res.data.id,
-          message: 'Video generation queued',
-          usedCredit: incrementCredit,
-          generateConfig: {
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
-            content: body.prompt,
-            duration: body.duration.toString(),
-            modelName: body.model,
-            imageCount: 0,
-            resolution: body.resolution,
-            draft: body.draft,
-            generateAudio: body.generateAudio,
-            watermark: body.watermark,
-            files: body.files,
-          },
-          users: {
-            fullname: user.fullname,
-            userId: user.userId,
-            username: user.username,
-          },
-          referenceImages: [
-            ...(body.image[0] ? [body.image[0]] : []),
-            ...(body.image[1] ? [body.image[1]] : []),
-          ],
-          resolution: body.resolution,
-          ratio: body.ratio,
-          imageUrls: [],
-        },
-      };
-    } catch (error) {
-      console.error('Error creating video generation task:', error);
-      this.generateHelperService.handleGenerationError(error, body.userId);
-      throw error;
-    }
+    super(generateHelperService, galleryRepo, logrepo, modeltypeRepo, redis);
   }
 
-  private async checkCreditVideoQuota(
+  protected get modelType(): string {
+    return 'video';
+  }
+  protected get queue(): Queue {
+    return this.videoQueue;
+  }
+  protected getCreditCacheKeyPrefix(): string {
+    return 'video_used';
+  }
+
+  protected calculateCreditToken(body: RequestVideoGenerateDto): number {
+    return (body.width * body.height * body.duration * 24) / 1024;
+  }
+
+  protected async checkCreditQuota(
     userId: string,
     body: RequestVideoGenerateDto,
     projectMember: any,
     cacheKey: string,
-    model: MasterModelTypeDto,
-  ): Promise<{
-    isQuotaExceeded: boolean;
-    incrementCredit: number;
-    limitAllowance: number;
-    usedCredit: number;
-    onhandToken: number;
-  }> {
-    const frameRate = 24;
-    let currentCreditUsed = 0;
-
-    let cachedCreditUsed: string | null = null;
-    if (cacheKey) {
-      cachedCreditUsed = await this.redis.get(cacheKey);
-    }
-
-    if (cachedCreditUsed) {
-      currentCreditUsed = parseInt(cachedCreditUsed);
-    } else {
-      currentCreditUsed =
-        projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
-    }
-    const onhandToken =
-      (body.width * body.height * body.duration * frameRate) / 1024;
-    const onhandCredit = await this.generateHelperService.getUsedCredit(
-      onhandToken,
+    modelDetail: MasterModelTypeDto,
+  ): Promise<CreditQuotaResult> {
+    return this.defaultCheckCreditQuota(
+      userId,
       body,
-      model,
+      projectMember,
+      cacheKey,
+      modelDetail,
     );
-    if (!onhandCredit) {
-      return {
-        isQuotaExceeded: true,
-        incrementCredit: 0,
-        limitAllowance: 0,
-        usedCredit: 0,
-        onhandToken: 0,
-      };
-    }
-    const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
-    const limitAllowance = projectMember.limitCreditAllowance || 0;
-
-    if (usedCredit > limitAllowance) {
-      Logger.error(
-        `Token used ${usedCredit} exceed max token ${limitAllowance}`,
-      );
-      return {
-        isQuotaExceeded: true,
-        incrementCredit: onhandCredit.credit,
-        limitAllowance: limitAllowance,
-        usedCredit: usedCredit,
-        onhandToken: onhandCredit.token,
-      };
-    }
-
-    return {
-      isQuotaExceeded: false,
-      incrementCredit: onhandCredit.credit,
-      limitAllowance: limitAllowance,
-      usedCredit: usedCredit,
-      onhandToken: onhandCredit.token,
-    };
   }
 
-  private async prepareGenerationPayloadVideo(
+  protected extractExternalTaskId(apiRes: any): string | null {
+    return apiRes?.data?.id ?? null;
+  }
+
+  protected async buildPayload(
     body: RequestVideoGenerateDto,
-    config: any,
-    organizationId: string,
-  ) {
+    modelDetail: any,
+  ): Promise<{ basePayload: any; axiosConfig: AxiosRequestConfig }> {
     const axiosConfig: AxiosRequestConfig = {
       headers: {
-        'Content-Type': config.configType,
-        Authorization: `${config.authorization}`,
+        'Content-Type': modelDetail.sendConfig.configType,
+        Authorization: `${modelDetail.sendConfig.authorization}`,
       },
       httpsAgent: this.agent,
     };
 
+    const builder = this.payloadBuilders[modelDetail.sendConfig.type];
+    console.log(1);
+    const basePayload = await builder(body, modelDetail);
+    console.log('Built payload for video generation:', basePayload);
+    console.log(2);
+
+    return { basePayload, axiosConfig };
+  }
+
+  protected buildQueueJobData(
+    taskId: string,
+    clientId: string,
+    body: any,
+    userId: string,
+    apiRes: any,
+    modelDetail: MasterModelTypeDto,
+  ): object {
+    return {
+      taskId,
+      clientId,
+      body: { ...body },
+      userId,
+      videoTaskId: apiRes.data.id,
+      statusBaseUrl: modelDetail?.taskPollApi ?? null,
+      authorization: modelDetail?.sendConfig?.authorization ?? null,
+    };
+  }
+
+  protected buildGalleryData(
+    taskId: string,
+    body: RequestVideoGenerateDto,
+    user: any,
+    creditResult: CreditQuotaResult,
+  ): object {
+    return {
+      taskId,
+      projectId: body.projectId,
+      userId: user.userId,
+      prompt: body.prompt,
+      imageUrl: '',
+      typeGenerate: 'video',
+      genneratedStatus: 'PENDING',
+      status: false,
+      usedCredit: creditResult.incrementCredit,
+      generateConfig: this.generateHelperService.buildGenerateConfig({
+        ratio: body.ratio,
+        width: body.width,
+        height: body.height,
+        prompt: body.prompt,
+        duration: +body.duration,
+        modelName: body.model,
+        imageCount: 0,
+        resolution: body.resolution,
+        draft: body.draft,
+        generateAudio: body.generateAudio,
+        watermark: body.watermark,
+      }),
+    };
+  }
+
+  protected buildLogData(
+    taskId: string,
+    body: RequestVideoGenerateDto,
+    user: any,
+    creditResult: CreditQuotaResult,
+  ): object {
+    return {
+      taskId,
+      projectId: body.projectId,
+      userId: user.userId,
+      prompt: body.prompt,
+      typeGenerate: 'video',
+      status: 'pending',
+      tokenUsed: creditResult.onhandToken,
+      usedCredit: creditResult.incrementCredit,
+      usedImage: 1,
+      ImageUsed: 1,
+      generateAudio: body.generateAudio,
+      referenceImages:
+        body.image.length > 0 ? body.image.filter((item) => item !== null) : [],
+      resolution: body.resolution,
+      ratio: body.ratio,
+      generateConfig: this.generateHelperService.buildGenerateConfig({
+        ratio: body.ratio,
+        width: body.width,
+        height: body.height,
+        prompt: body.prompt,
+        duration: +body.duration,
+        modelName: body.model,
+        imageCount: 0,
+        resolution: body.resolution,
+        draft: body.draft,
+        generateAudio: body.generateAudio,
+        watermark: body.watermark,
+        files: body.files,
+      }),
+    };
+  }
+
+  protected buildRedisTaskMetadata(
+    taskId: string,
+    jobId: string | undefined,
+    clientId: string,
+    userId: string,
+    body: any,
+    apiRes: any,
+  ): object {
+    return {
+      ...super.buildRedisTaskMetadata(
+        taskId,
+        jobId,
+        clientId,
+        userId,
+        body,
+        apiRes,
+      ),
+      videoTaskId: apiRes.data.id,
+    };
+  }
+
+  protected async buildReturnResponse(
+    taskId: string,
+    body: RequestVideoGenerateDto,
+    user: any,
+    apiRes: any,
+    creditResult: CreditQuotaResult,
+  ): Promise<object> {
+    return {
+      taskId,
+      projectId: body.projectId,
+      userId: user.userId,
+      prompt: body.prompt,
+      typeGenerate: 'video',
+      genneratedStatus: 'PENDING',
+      createdAt: new Date().toISOString(),
+      status: false,
+      videoTaskId: apiRes.data.id,
+      message: 'Video generation queued',
+      usedCredit: creditResult.incrementCredit,
+      generateConfig: {
+        ratio: body.ratio,
+        width: body.width,
+        height: body.height,
+        content: body.prompt,
+        duration: body.duration.toString(),
+        modelName: body.model,
+        imageCount: 0,
+        resolution: body.resolution,
+        draft: body.draft,
+        generateAudio: body.generateAudio,
+        watermark: body.watermark,
+        files: body.files,
+      },
+      users: {
+        fullname: user.fullname,
+        userId: user.userId,
+        username: user.username,
+      },
+      referenceImages: [
+        ...(body.image[0] ? [body.image[0]] : []),
+        ...(body.image[1] ? [body.image[1]] : []),
+      ],
+      resolution: body.resolution,
+      ratio: body.ratio,
+      imageUrls: [],
+    };
+  }
+
+  /** GenerateService delegates here */
+  async createVideoGenerationTask(
+    body: RequestVideoGenerateDto,
+    clientId: string,
+  ) {
+    return this.createGenerationTask(body, clientId);
+  }
+
+  // แยก builder แต่ละ model เป็น private method
+  private readonly payloadBuilders: Record<
+    string,
+    (body: RequestVideoGenerateDto, modelDetail: any) => any
+  > = {
+    seedance1: this.buildSeedance1Payload.bind(this),
+    seedance2: this.buildSeedance2Payload.bind(this),
+  };
+
+  private async buildSeedance1Payload(
+    body: RequestVideoGenerateDto,
+    modelDetail: any,
+  ) {
+    return {
+      model: body.model,
+      content: [
+        { type: 'text', text: body.prompt },
+
+        ...(body.image[0]
+          ? [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[0],
+                  ),
+                },
+                role: 'first_frame',
+              },
+            ]
+          : []),
+        ...(body.image[1]
+          ? [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[1],
+                  ),
+                },
+                role: 'last_frame',
+              },
+            ]
+          : []),
+      ],
+      draft: body.draft,
+      generate_audio: body.generateAudio,
+      ratio: body.ratio,
+      duration: body.duration,
+      watermark: body.watermark,
+      resolution: body.resolution,
+    };
+  }
+
+  private async buildSeedance2Payload(
+    body: RequestVideoGenerateDto,
+    modelDetail: any,
+  ) {
     const filesUrl = await Promise.all(
-      body.files.map(async (file, index) => {
+      body.files.map(async (file) => {
         if (file.type === 'image') {
           return {
             type: 'image_url',
@@ -383,7 +341,7 @@ export class GenerateVideoService {
             },
             role: 'reference_video',
           };
-        } else if (file.type === 'audio') {
+        } else {
           return {
             type: 'audio_url',
             audio_url: {
@@ -397,13 +355,10 @@ export class GenerateVideoService {
         }
       }),
     );
-    const basePayload = {
+    return {
       model: body.model,
       content: [
-        {
-          type: 'text',
-          text: body.prompt,
-        },
+        { type: 'text', text: body.prompt },
         ...filesUrl,
         ...(body.image[0]
           ? [
@@ -440,15 +395,6 @@ export class GenerateVideoService {
       duration: body.duration,
       watermark: body.watermark,
       resolution: body.resolution,
-    } as ByteplusePayloadVideo;
-    return { basePayload, axiosConfig };
-  }
-
-  private async executeGenerationRequestVideo(
-    url: string,
-    payload: any,
-    config: AxiosRequestConfig,
-  ) {
-    return await axios.post(url, payload, config);
+    };
   }
 }

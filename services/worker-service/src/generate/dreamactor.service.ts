@@ -4,7 +4,6 @@ import { Logger, Injectable, BadRequestException } from '@nestjs/common';
 import {
   GalleryRepository,
   LogRepository,
-  MasterDataConfigApiRepository,
   QUEUE_NAME_DREAMACTOR,
   RefImageRepository,
   RequestDreamactorGenerateDto,
@@ -34,6 +33,7 @@ interface DreamactorProcessJob {
   userId: string;
   dreamactorTaskId: string;
   reqKey: string;
+  statusBaseUrl: string;
 }
 
 interface BytepluseResponse {
@@ -73,7 +73,6 @@ export class DreamactorProcessor extends WorkerHost {
     private readonly galleryRepo: GalleryRepository,
     private readonly logrepo: LogRepository,
     private readonly refImageRepository: RefImageRepository,
-    private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly tosService: TosService,
     private readonly generateHelperService: GenerateHelperService,
   ) {
@@ -108,7 +107,7 @@ export class DreamactorProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId, reqKey, dreamactorTaskId } =
+    const { taskId, clientId, body, userId, reqKey, dreamactorTaskId, statusBaseUrl } =
       job.data as DreamactorProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
 
@@ -132,9 +131,6 @@ export class DreamactorProcessor extends WorkerHost {
       const sleep = (ms: number) =>
         new Promise((resolve) => setTimeout(resolve, ms));
 
-      // const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-      //   where: { id: 1 },
-      // });
       while (true) {
         await this.publishToCore(clientId, 'worker:dreamactor-progress', {
           taskId,
@@ -142,7 +138,7 @@ export class DreamactorProcessor extends WorkerHost {
           type: 'dreamactor',
           projectId: body.projectId,
         });
-        const url = 'https://cv.byteplusapi.com/';
+        const url = statusBaseUrl;
         const accessKey =
           process.env.BYTEPLUS_ACCESS_KEY ||
           'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';

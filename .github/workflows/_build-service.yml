@@ -54,7 +54,7 @@ jobs:
       # ---------------------------------------------------------------------
       - name: Build Docker Image
         run: |
-          docker build --no-cache --platform linux/amd64 \
+          docker build --platform linux/amd64 \
             -t ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }} \
             -f ${{ inputs.service_path }}/Dockerfile .
 

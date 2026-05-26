@@ -4,7 +4,6 @@ import { Logger, Injectable, BadRequestException } from '@nestjs/common';
 import {
   GalleryRepository,
   LogRepository,
-  MasterDataConfigApiRepository,
   QUEUE_NAME_OMNIHUMEN,
   RefImageRepository,
   RequestOmnihumenGenerateDto,
@@ -34,6 +33,7 @@ interface OmnihumenProcessJob {
   userId: string;
   omnihumenTaskId: string;
   reqKey: string;
+  statusBaseUrl: string;
 }
 
 interface BytepluseResponse {
@@ -73,7 +73,6 @@ export class OmnihumenProcessor extends WorkerHost {
     private readonly galleryRepo: GalleryRepository,
     private readonly logrepo: LogRepository,
     private readonly refImageRepository: RefImageRepository,
-    private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly tosService: TosService,
     private readonly generateHelperService: GenerateHelperService,
   ) {
@@ -108,7 +107,7 @@ export class OmnihumenProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId, reqKey, omnihumenTaskId } =
+    const { taskId, clientId, body, userId, reqKey, omnihumenTaskId, statusBaseUrl } =
       job.data as OmnihumenProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
@@ -142,7 +141,7 @@ export class OmnihumenProcessor extends WorkerHost {
           type: 'omnihumen',
           projectId: body.projectId,
         });
-        const url = 'https://cv.byteplusapi.com/';
+        const url = statusBaseUrl;
         const accessKey =
           process.env.BYTEPLUS_ACCESS_KEY ||
           'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';

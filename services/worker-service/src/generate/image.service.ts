@@ -1,3 +1,8 @@
+/** Extract a value from a nested object using a dot-notation path (e.g. "data.task_id") */
+function getByPath(obj: unknown, path: string): unknown {
+  return path.split('.').reduce((cur: any, key) => cur?.[key], obj);
+}
+
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
@@ -18,9 +23,17 @@ import {
   ProjectMemberRepository,
   CreditBalanceRepository,
   MasterdataModelTypeRepository,
+  MasterModelTypeDto,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
+
+interface TaskResponseMap {
+  taskIdPath: string;
+  statusPath: string;
+  doneValue: string;
+  resultPath: string;
+}
 
 interface ImageProcessJob {
   taskId: string;
@@ -32,6 +45,16 @@ interface ImageProcessJob {
     generated_images: number;
     output_tokens: number;
     total_tokens: number;
+  };
+  // NEW: optional async-task polling fields (set when modelDetail.taskPollApi is configured)
+  externalTaskId?: string;
+  taskPollApi?: string;
+  taskPollSec?: number;
+  taskResponseMap?: TaskResponseMap;
+  sendConfig?: {
+    configType: string;
+    authorization: string;
+    [k: string]: unknown;
   };
 }
 
@@ -346,7 +369,7 @@ export class ImageProcessor extends WorkerHost {
           }),
         },
       };
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(
         `❌ Job ${job.id} failed: ${(error as Error).message}`,
         error.stack,
@@ -444,7 +467,7 @@ export class ImageProcessor extends WorkerHost {
           timestamp: new Date().toISOString(),
         }),
       );
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(`Failed to publish event: ${error.message}`);
     }
   }

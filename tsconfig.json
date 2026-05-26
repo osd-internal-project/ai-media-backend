@@ -1,14 +1,28 @@
 {
   "compilerOptions": {
+    "module": "commonjs",
     "experimentalDecorators": true,
-    "lib": ["es2017", "es2019", "dom"],
+    "lib": ["es2017", "es2019"],
     "moduleResolution": "node",
     "noUnusedLocals": false,
-    "noUnusedParameters": true,
+    "noUnusedParameters": false,
     "sourceMap": true,
     "target": "es2017",
     "esModuleInterop": true,
     "baseUrl": ".",
+    "paths": {
+      "src/*": [
+        "libs/share/src/*",
+        "libs/prisma/src/*",
+        "services/core/src/*",
+        "services/chat-assistant/src/*",
+        "services/users/src/*",
+        "services/worker-service/src/*",
+        "services/report/src/*",
+        "services/email-api/src/*",
+        "services/email-worker/src/*"
+      ]
+    },
     "skipLibCheck": true,
     "strictNullChecks": false,
     "noImplicitAny": false,

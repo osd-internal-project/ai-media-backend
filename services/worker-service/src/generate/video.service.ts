@@ -4,7 +4,6 @@ import { Logger, Injectable, BadRequestException } from '@nestjs/common';
 import {
   GalleryRepository,
   LogRepository,
-  MasterDataConfigApiRepository,
   MasterdataModelTypeRepository,
   QUEUE_NAME_VDO,
   RefImageRepository,
@@ -52,6 +51,8 @@ interface VideoProcessJob {
   body: RequestVideoGenerateDto;
   userId: string;
   videoTaskId: string;
+  statusBaseUrl: string | null;
+  authorization: string | null;
 }
 
 interface BytepluseResponse {
@@ -91,7 +92,6 @@ export class VideoProcessor extends WorkerHost {
     private readonly galleryRepo: GalleryRepository,
     private readonly logrepo: LogRepository,
     private readonly refImageRepository: RefImageRepository,
-    private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly tosService: TosService,
     private readonly generateHelperService: GenerateHelperService,
     private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
@@ -105,7 +105,7 @@ export class VideoProcessor extends WorkerHost {
     this.redisPublisher = new Redis({
       host: process.env.REDIS_HOST,
       port: Number(process.env.REDIS_PORT),
-         ...(process.env.REDIS_PASSWORD && {
+      ...(process.env.REDIS_PASSWORD && {
         password: process.env.REDIS_PASSWORD,
       }),
     });
@@ -127,7 +127,8 @@ export class VideoProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId } = job.data as VideoProcessJob;
+    const { taskId, clientId, body, userId, statusBaseUrl, authorization } =
+      job.data as VideoProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
@@ -150,9 +151,6 @@ export class VideoProcessor extends WorkerHost {
       const sleep = (ms: number) =>
         new Promise((resolve) => setTimeout(resolve, ms));
 
-      const getConfigApi = await this.masterdataconfigapiRepo.findOne({
-        where: { id: 1 },
-      });
       while (true) {
         await this.publishToCore(clientId, 'worker:video-progress', {
           taskId,
@@ -160,11 +158,12 @@ export class VideoProcessor extends WorkerHost {
           type: 'video',
           projectId: body.projectId,
         });
-        const url = `${getConfigApi.apiCreateTaskVdo}/${taskId}`;
-        const token = getConfigApi.authorization;
-        const authHeader = token.startsWith('Bearer ')
-          ? token
-          : `Bearer ${token}`;
+        const url = `${statusBaseUrl}/${taskId}`;
+        const rawToken = authorization ?? '';
+        const authHeader = rawToken.startsWith('Bearer ')
+          ? rawToken
+          : `Bearer ${rawToken}`;
+        // Logger.debug('Status API response', { url, taskId, authHeader });
 
         const getResult = await axios.get(url, {
           headers: {
@@ -173,6 +172,7 @@ export class VideoProcessor extends WorkerHost {
           },
           httpsAgent: this.agent,
         });
+        Logger.debug('Status API response', getResult.data);
 
         // mockdata
         // const getResult = {
@@ -294,14 +294,14 @@ export class VideoProcessor extends WorkerHost {
           //Update used credit
           if (log) {
             const updated =
-              await this.generateHelperService.updateUsedCreditSuccess(
+              (await this.generateHelperService.updateUsedCreditSuccess(
                 userId,
                 body.organizationId,
                 body.projectId,
                 'credit',
                 realCredit.credit,
                 log.usedCredit,
-              ) as ProjectMemberCredit;
+              )) as ProjectMemberCredit;
             const usedCredit =
               updated.usedCreditAllowance + updated.holdCreditAllowance;
             await this.redis.set(
@@ -323,13 +323,14 @@ export class VideoProcessor extends WorkerHost {
           const failedLog = await this.logrepo.findOne({
             where: { taskId },
           });
-          const updated = await this.generateHelperService.updateUsedCreditFail(
-            userId,
-            body.organizationId,
-            body.projectId,
-            'credit',
-            failedLog.usedCredit,
-          ) as ProjectMemberCredit;
+          const updated =
+            (await this.generateHelperService.updateUsedCreditFail(
+              userId,
+              body.organizationId,
+              body.projectId,
+              'credit',
+              failedLog.usedCredit,
+            )) as ProjectMemberCredit;
 
           const usedCredit =
             updated.usedCreditAllowance + updated.holdCreditAllowance;
@@ -392,10 +393,7 @@ export class VideoProcessor extends WorkerHost {
       };
     } catch (error) {
       const err = error as Error;
-      this.logger.error(
-        `❌ Job ${job.id} failed: ${err.message}`,
-        err.stack,
-      );
+      this.logger.error(`❌ Job ${job.id} failed: ${err.message}`, err.stack);
 
       // อัพเดทสถานะเป็น failed
       await this.updateTaskStatus(taskId, {
@@ -423,13 +421,13 @@ export class VideoProcessor extends WorkerHost {
       const failedLog = await this.logrepo.findOne({
         where: { taskId },
       });
-      const updated = await this.generateHelperService.updateUsedCreditFail(
+      const updated = (await this.generateHelperService.updateUsedCreditFail(
         userId,
         body.organizationId,
         body.projectId,
         'credit',
         failedLog.usedCredit,
-      ) as ProjectMemberCredit;
+      )) as ProjectMemberCredit;
 
       const usedCredit =
         updated.usedCreditAllowance + updated.holdCreditAllowance;
@@ -573,7 +571,9 @@ export class VideoProcessor extends WorkerHost {
       };
     } catch (error) {
       console.error('Error in uploadVideoWithThumbnail:', error);
-      throw new BadRequestException('Error processing video: ' + (error as Error).message);
+      throw new BadRequestException(
+        'Error processing video: ' + (error as Error).message,
+      );
     } finally {
       // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
       try {
