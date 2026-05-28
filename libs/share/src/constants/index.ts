@@ -22,3 +22,5 @@ export const QUEUE_NAME_IMAGE = 'image-generate-queue';
 export const QUEUE_NAME_VDO = 'vdo-generate-queue';
 export const QUEUE_NAME_OMNIHUMEN = 'omnihumen-generate-queue';
 export const QUEUE_NAME_DREAMACTOR = 'dreamactor-generate-queue';
+
+export const MAX_CONCURRENT_TASKS_PER_TYPE = 10;

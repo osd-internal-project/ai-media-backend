@@ -4,6 +4,7 @@ import { Logger, Injectable, BadRequestException } from '@nestjs/common';
 import {
   GalleryRepository,
   LogRepository,
+  MAX_CONCURRENT_TASKS_PER_TYPE,
   QUEUE_NAME_OMNIHUMEN,
   RefImageRepository,
   RequestOmnihumenGenerateDto,
@@ -62,7 +63,7 @@ interface BytepluseResponse {
 // บอกว่า Class นี้รับผิดชอบคิวชื่อ 'image-Video-queue'
 // concurrency: 5 คือ ทำพร้อมกันได้ 5 งาน (ถ้าเครื่องไหว)
 @Injectable()
-@Processor(QUEUE_NAME_OMNIHUMEN)
+@Processor(QUEUE_NAME_OMNIHUMEN, { concurrency: MAX_CONCURRENT_TASKS_PER_TYPE })
 export class OmnihumenProcessor extends WorkerHost {
   private readonly logger = new Logger(OmnihumenProcessor.name);
   private agent: https.Agent;

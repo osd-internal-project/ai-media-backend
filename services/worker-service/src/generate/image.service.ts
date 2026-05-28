@@ -17,6 +17,7 @@ import {
   GalleryRepository,
   LogRepository,
   QUEUE_NAME_IMAGE,
+  MAX_CONCURRENT_TASKS_PER_TYPE,
   RefImageRepository,
   TosService,
   ProjectRepository,
@@ -59,7 +60,7 @@ interface ImageProcessJob {
 }
 
 @Injectable()
-@Processor(QUEUE_NAME_IMAGE)
+@Processor(QUEUE_NAME_IMAGE, { concurrency: MAX_CONCURRENT_TASKS_PER_TYPE })
 export class ImageProcessor extends WorkerHost {
   private readonly logger = new Logger(ImageProcessor.name);
   private agent: https.Agent;

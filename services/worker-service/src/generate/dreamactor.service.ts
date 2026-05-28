@@ -4,6 +4,7 @@ import { Logger, Injectable, BadRequestException } from '@nestjs/common';
 import {
   GalleryRepository,
   LogRepository,
+  MAX_CONCURRENT_TASKS_PER_TYPE,
   QUEUE_NAME_DREAMACTOR,
   RefImageRepository,
   RequestDreamactorGenerateDto,
@@ -62,7 +63,7 @@ interface BytepluseResponse {
 // บอกว่า Class นี้รับผิดชอบคิวชื่อ 'image-Video-queue'
 // concurrency: 5 คือ ทำพร้อมกันได้ 5 งาน (ถ้าเครื่องไหว)
 @Injectable()
-@Processor(QUEUE_NAME_DREAMACTOR)
+@Processor(QUEUE_NAME_DREAMACTOR, { concurrency: MAX_CONCURRENT_TASKS_PER_TYPE })
 export class DreamactorProcessor extends WorkerHost {
   private readonly logger = new Logger(DreamactorProcessor.name);
   private agent: https.Agent;
