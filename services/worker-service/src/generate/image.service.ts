@@ -18,6 +18,7 @@ import {
   ProjectMemberRepository,
   CreditBalanceRepository,
   MasterdataModelTypeRepository,
+  MAX_CONCURRENT_TASKS_PER_TYPE,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
@@ -36,7 +37,9 @@ interface ImageProcessJob {
 }
 
 @Injectable()
-@Processor(QUEUE_NAME_IMAGE)
+@Processor(QUEUE_NAME_IMAGE, {
+  concurrency: MAX_CONCURRENT_TASKS_PER_TYPE,
+})
 export class ImageProcessor extends WorkerHost {
   private readonly logger = new Logger(ImageProcessor.name);
   private agent: https.Agent;
@@ -346,7 +349,7 @@ export class ImageProcessor extends WorkerHost {
           }),
         },
       };
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(
         `❌ Job ${job.id} failed: ${(error as Error).message}`,
         error.stack,
@@ -444,7 +447,7 @@ export class ImageProcessor extends WorkerHost {
           timestamp: new Date().toISOString(),
         }),
       );
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(`Failed to publish event: ${error.message}`);
     }
   }

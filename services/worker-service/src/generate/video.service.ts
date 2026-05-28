@@ -6,6 +6,7 @@ import {
   LogRepository,
   MasterDataConfigApiRepository,
   MasterdataModelTypeRepository,
+  MAX_CONCURRENT_TASKS_PER_TYPE,
   QUEUE_NAME_VDO,
   RefImageRepository,
   RequestVideoGenerateDto,
@@ -80,7 +81,9 @@ interface BytepluseResponse {
 // บอกว่า Class นี้รับผิดชอบคิวชื่อ 'image-Video-queue'
 // concurrency: 5 คือ ทำพร้อมกันได้ 5 งาน (ถ้าเครื่องไหว)
 @Injectable()
-@Processor(QUEUE_NAME_VDO)
+@Processor(QUEUE_NAME_VDO, {
+  concurrency: MAX_CONCURRENT_TASKS_PER_TYPE,
+})
 export class VideoProcessor extends WorkerHost {
   private readonly logger = new Logger(VideoProcessor.name);
   private agent: https.Agent;
@@ -105,7 +108,7 @@ export class VideoProcessor extends WorkerHost {
     this.redisPublisher = new Redis({
       host: process.env.REDIS_HOST,
       port: Number(process.env.REDIS_PORT),
-         ...(process.env.REDIS_PASSWORD && {
+      ...(process.env.REDIS_PASSWORD && {
         password: process.env.REDIS_PASSWORD,
       }),
     });
@@ -294,14 +297,14 @@ export class VideoProcessor extends WorkerHost {
           //Update used credit
           if (log) {
             const updated =
-              await this.generateHelperService.updateUsedCreditSuccess(
+              (await this.generateHelperService.updateUsedCreditSuccess(
                 userId,
                 body.organizationId,
                 body.projectId,
                 'credit',
                 realCredit.credit,
                 log.usedCredit,
-              ) as ProjectMemberCredit;
+              )) as ProjectMemberCredit;
             const usedCredit =
               updated.usedCreditAllowance + updated.holdCreditAllowance;
             await this.redis.set(
@@ -323,13 +326,14 @@ export class VideoProcessor extends WorkerHost {
           const failedLog = await this.logrepo.findOne({
             where: { taskId },
           });
-          const updated = await this.generateHelperService.updateUsedCreditFail(
-            userId,
-            body.organizationId,
-            body.projectId,
-            'credit',
-            failedLog.usedCredit,
-          ) as ProjectMemberCredit;
+          const updated =
+            (await this.generateHelperService.updateUsedCreditFail(
+              userId,
+              body.organizationId,
+              body.projectId,
+              'credit',
+              failedLog.usedCredit,
+            )) as ProjectMemberCredit;
 
           const usedCredit =
             updated.usedCreditAllowance + updated.holdCreditAllowance;
@@ -392,10 +396,7 @@ export class VideoProcessor extends WorkerHost {
       };
     } catch (error) {
       const err = error as Error;
-      this.logger.error(
-        `❌ Job ${job.id} failed: ${err.message}`,
-        err.stack,
-      );
+      this.logger.error(`❌ Job ${job.id} failed: ${err.message}`, err.stack);
 
       // อัพเดทสถานะเป็น failed
       await this.updateTaskStatus(taskId, {
@@ -423,13 +424,13 @@ export class VideoProcessor extends WorkerHost {
       const failedLog = await this.logrepo.findOne({
         where: { taskId },
       });
-      const updated = await this.generateHelperService.updateUsedCreditFail(
+      const updated = (await this.generateHelperService.updateUsedCreditFail(
         userId,
         body.organizationId,
         body.projectId,
         'credit',
         failedLog.usedCredit,
-      ) as ProjectMemberCredit;
+      )) as ProjectMemberCredit;
 
       const usedCredit =
         updated.usedCreditAllowance + updated.holdCreditAllowance;
@@ -573,7 +574,9 @@ export class VideoProcessor extends WorkerHost {
       };
     } catch (error) {
       console.error('Error in uploadVideoWithThumbnail:', error);
-      throw new BadRequestException('Error processing video: ' + (error as Error).message);
+      throw new BadRequestException(
+        'Error processing video: ' + (error as Error).message,
+      );
     } finally {
       // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
       try {

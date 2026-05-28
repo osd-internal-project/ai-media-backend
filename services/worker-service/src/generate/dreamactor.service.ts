@@ -5,6 +5,7 @@ import {
   GalleryRepository,
   LogRepository,
   MasterDataConfigApiRepository,
+  MAX_CONCURRENT_TASKS_PER_TYPE,
   QUEUE_NAME_DREAMACTOR,
   RefImageRepository,
   RequestDreamactorGenerateDto,
@@ -62,7 +63,9 @@ interface BytepluseResponse {
 // บอกว่า Class นี้รับผิดชอบคิวชื่อ 'image-Video-queue'
 // concurrency: 5 คือ ทำพร้อมกันได้ 5 งาน (ถ้าเครื่องไหว)
 @Injectable()
-@Processor(QUEUE_NAME_DREAMACTOR)
+@Processor(QUEUE_NAME_DREAMACTOR, {
+  concurrency: MAX_CONCURRENT_TASKS_PER_TYPE,
+})
 export class DreamactorProcessor extends WorkerHost {
   private readonly logger = new Logger(DreamactorProcessor.name);
   private agent: https.Agent;
@@ -362,7 +365,7 @@ export class DreamactorProcessor extends WorkerHost {
           }),
         },
       };
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(
         `❌ Job ${job.id} failed: ${error.message}`,
         error.stack,
@@ -435,7 +438,7 @@ export class DreamactorProcessor extends WorkerHost {
           timestamp: new Date().toISOString(),
         }),
       );
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(`Failed to publish event: ${error.message}`);
     }
   }
@@ -541,7 +544,7 @@ export class DreamactorProcessor extends WorkerHost {
         file: objectName,
         thumbnail: thumbnailObjectName,
       };
-    } catch (error:any) {
+    } catch (error: any) {
       console.error('Error in uploadVideoWithThumbnail:', error);
       throw new BadRequestException('Error processing video: ' + error.message);
     } finally {
