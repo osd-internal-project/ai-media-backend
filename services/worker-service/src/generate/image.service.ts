@@ -4,12 +4,12 @@ function getByPath(obj: unknown, path: string): unknown {
 }
 
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import * as https from 'https';
 import * as path from 'path';
 import {
@@ -41,22 +41,19 @@ interface ImageProcessJob {
   clientId: string;
   body: RequestImageGenerateDto;
   userId: string;
-  dataImage: { url: string; size: string }[];
-  usage: {
-    generated_images: number;
-    output_tokens: number;
-    total_tokens: number;
-  };
-  // NEW: optional async-task polling fields (set when modelDetail.taskPollApi is configured)
-  externalTaskId?: string;
-  taskPollApi?: string;
-  taskPollSec?: number;
-  taskResponseMap?: TaskResponseMap;
-  sendConfig?: {
+  // Fields forwarded from modelDetail so the worker can call the API itself
+  sendApi: string;
+  sendConfig: {
+    type: string;
     configType: string;
     authorization: string;
+    stream?: boolean;
+    watermark?: boolean;
     [k: string]: unknown;
   };
+  taskPollApi?: string | null;
+  taskPollSec?: number;
+  taskResponseMap?: TaskResponseMap | null;
 }
 
 @Injectable()
@@ -109,14 +106,13 @@ export class ImageProcessor extends WorkerHost {
   }
 
   async process(job: any): Promise<any> {
-    const { taskId, clientId, body, userId, dataImage, usage } =
+    const { taskId, clientId, body, userId, sendApi, sendConfig } =
       job.data as ImageProcessJob;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
     const redisImageCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
     try {
-      const totalImages = dataImage.length;
       const uploadedImages: string[] = [];
       const bytepluseUrl = [];
       const model = await this.masterModelTypeRepo.findOne({
@@ -127,6 +123,73 @@ export class ImageProcessor extends WorkerHost {
         body,
         model,
       );
+
+      // 0. Call the external API here so queue concurrency limits simultaneous API calls.
+      // Backward-compat: if old core put dataImage in job data, use it directly.
+      let dataImage: { url: string; size: string }[];
+      let usage: { generated_images?: number; output_tokens?: number; total_tokens?: number };
+      if ((job.data as any).dataImage?.length > 0) {
+        dataImage = (job.data as any).dataImage;
+        usage = (job.data as any).usage ?? {};
+      } else {
+        const axiosConfig: AxiosRequestConfig = {
+          headers: {
+            'Content-Type': sendConfig.configType,
+            Authorization: `${sendConfig.authorization}`,
+          },
+          httpsAgent: this.agent,
+        };
+
+        const refImages = body.image?.length
+          ? await Promise.all(
+              body.image.map((img) =>
+                this.tosService.getPreSignedUrl(tosConfigs().tosBucket, img),
+              ),
+            )
+          : null;
+
+        const payload = {
+          model: body.model,
+          prompt:
+            body.maxImages > 1
+              ? `create ${body.maxImages} images ${body.prompt}`
+              : body.prompt,
+          response_format: 'url',
+          ratio: body.ratio,
+          size: `${body.width}x${body.height}`,
+          stream: sendConfig.stream ?? false,
+          watermark: sendConfig.watermark ?? false,
+          sequential_image_generation: body.sequentialImageGeneration,
+          ...(refImages && refImages.length > 0 && { image: refImages }),
+          ...(body.maxImages && {
+            sequential_image_generation_options: { max_images: body.maxImages },
+          }),
+        };
+
+        let apiRes: any;
+        try {
+          apiRes = await axios.post(sendApi, payload, axiosConfig);
+        } catch (apiError: any) {
+          await this.publishToCore(clientId, 'worker:image-error', {
+            taskId,
+            error: apiError.message,
+            timestamp: new Date().toISOString(),
+            type: 'image',
+            projectId: body.projectId,
+            message: apiError.message,
+          });
+          await this.updateTaskStatus(taskId, { status: 'failed', failedAt: new Date().toISOString(), error: apiError.message });
+          throw new UnrecoverableError(apiError.message);
+        }
+        dataImage = apiRes.data.data;
+        usage = apiRes.data.usage ?? {};
+
+        // Patch totalImages into Redis now that the API has responded
+        await this.updateTaskStatus(taskId, { totalImages: dataImage.length });
+      }
+
+      const totalImages = dataImage.length;
+
       // 1. ส่ง event "started" ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:started', {
         taskId,
@@ -297,7 +360,7 @@ export class ImageProcessor extends WorkerHost {
       });
 
       // 5. ส่ง event "complete" ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:complete', {
+      await this.publishToCore(clientId, 'worker:image-complete', {
         taskId,
         success: true,
         imageCount: uploadedImages.length,
@@ -382,15 +445,20 @@ export class ImageProcessor extends WorkerHost {
         failedAt: new Date().toISOString(),
         error: error.message,
       });
+      const creditForFailure = await this.generateHelperService.getUsedCredit(
+        0,
+        body,
+        await this.masterModelTypeRepo.findOne({ where: { modelType: body.model } }),
+      );
       await this.generateHelperService.updateUsedCreditFail(
         userId,
         body.organizationId,
         body.projectId,
-        'image',
-        body.maxImages,
+        'credit',
+        creditForFailure?.credit ?? 0,
       );
       // ส่ง error event ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:generate:error', {
+      await this.publishToCore(clientId, 'worker:image-error', {
         taskId,
         error: error.message,
         timestamp: new Date().toISOString(),
@@ -457,10 +525,12 @@ export class ImageProcessor extends WorkerHost {
    * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
    */
   private async publishToCore(clientId: string, event: string, payload: any) {
-    console.log(`worker:${event.split(':')[1] || 'event'}`);
+    // Use the last segment so 'worker:generate:error' → channel 'worker:error' (not 'worker:generate')
+    const parts = event.split(':');
+    const channel = `worker:${parts[parts.length - 1] || 'event'}`;
     try {
       await this.redisPublisher.publish(
-        `worker:${event.split(':')[1] || 'event'}`,
+        channel,
         JSON.stringify({
           clientId,
           event,

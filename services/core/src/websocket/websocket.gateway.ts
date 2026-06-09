@@ -98,8 +98,8 @@ export class WebsocketGatewayService
       'worker:started',
       'worker:progress',
       'worker:image-complete',
-      'worker:error',
-      'worker:complete',
+      'worker:image-error',
+      'worker:image-complete',
       'worker:video-started',
       'worker:video-progress',
       'worker:video-url-success',
@@ -132,10 +132,10 @@ export class WebsocketGatewayService
         if (payload && payload.projectId && payload.type) {
           const roomName = `${payload.projectId}:${payload.type}`;
           this.server.to(roomName).emit(event, payload);
-          // Also emit to specific client if needed/redundant but safe
-          // if (clientId) {
-          //   this.server.to(clientId).emit(event, payload);
-          // }
+          // Also emit directly to the originating client (handles case where client isn't in room)
+          if (clientId) {
+            this.server.to(clientId).emit(event, payload);
+          }
         } else {
           // Fallback: ส่ง event ไปยัง client ที่เกี่ยวข้องแบบเดิม
           if (clientId) {
@@ -165,7 +165,9 @@ export class WebsocketGatewayService
     const activeTasks = await this.redis.smembers(
       `ws:client-tasks:${client.id}`,
     );
-    await Promise.all(activeTasks.map((taskId) => this.generateService.cancelImageTask(taskId)));
+    await Promise.all(
+      activeTasks.map((taskId) => this.generateService.cancelImageTask(taskId)),
+    );
     await this.redis.del(`ws:client-tasks:${client.id}`);
   }
 
@@ -182,7 +184,10 @@ export class WebsocketGatewayService
 
       // เรียก service เพื่อสร้าง task
       // Broadcast to room
-      const result = await this.generateService.createImageGenerationTask(data, client.id)
+      const result = await this.generateService.createImageGenerationTask(
+        data,
+        client.id,
+      );
       this.server.to(roomName).emit('task:started', {
         taskId: data.taskId,
         message: 'Task started',
@@ -245,7 +250,10 @@ export class WebsocketGatewayService
       const { projectId } = data;
       const roomName = `${projectId}:video`;
 
-      const result = await this.generateService.createVideoGenerationTask(data, client.id)
+      const result = await this.generateService.createVideoGenerationTask(
+        data,
+        client.id,
+      );
       // console.log('🎥 Generate Video result: ', result);
       // Broadcast to room
       this.server.to(roomName).emit('video-task:created', {
@@ -510,6 +518,7 @@ export class WebsocketGatewayService
     },
     @ConnectedSocket() client: Socket,
   ) {
+    Logger.debug('Received chat:get-used-credit with data:', data);
     const projectId = data.projectId;
     const organizationId = data.organizationId;
     const token = data.userId;
@@ -517,6 +526,13 @@ export class WebsocketGatewayService
 
     const usedCreditKey = `${organizationId}/${projectId}/credit_used_${token}`;
     const totalCreditKey = `${organizationId}/${projectId}/credit_total_${token}`;
+    Logger.debug(
+      `Fetching used credit for ${data.type} - Project: ${projectId}, Org: ${organizationId}, User: ${token}`,
+    );
+    Logger.debug(
+      `Used Credit Redis Key: ${usedCreditKey}, Total Credit Redis Key: ${totalCreditKey}`,
+    );
+
     try {
       // const redisUsedCredit = await this.redis.get(usedCreditKey);
       // const redisTotalCredit = await this.redis.get(totalCreditKey);
@@ -532,6 +548,7 @@ export class WebsocketGatewayService
         token,
         data.type,
       );
+      Logger.debug(`{ usedCredit, totalCredit }:`, { usedCredit, totalCredit });
       await this.redis.set(usedCreditKey, usedCredit);
       await this.redis.set(totalCreditKey, totalCredit);
       client.emit('chat:used-credit', {
@@ -645,7 +662,9 @@ export class WebsocketGatewayService
       this.server.to(roomName).emit('chat:message', payload);
       this.logger.log(`Message sent to room ${roomName}: ${message}`);
     } catch (error) {
-      this.logger.error(`Error sending message: ${this.getErrorMessage(error)}`);
+      this.logger.error(
+        `Error sending message: ${this.getErrorMessage(error)}`,
+      );
       client.emit('error', { message: 'Failed to send message' });
     }
   }

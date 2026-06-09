@@ -5,7 +5,7 @@ import {
   MasterModelTypeDto,
 } from '@ai-media/share';
 import { Logger } from '@nestjs/common';
-import axios, { AxiosRequestConfig } from 'axios';
+import { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
 import * as https from 'https';
 import Redis from 'ioredis';
@@ -46,14 +46,17 @@ export abstract class BaseGenerateService {
   protected abstract get queue(): Queue;
 
   /**
-   * Build the external API payload and axios config.
-   * modelDetail typed as any — the actual Prisma MasterModelType has sendConfig/sendApi
-   * fields not present in MasterModelTypeDto.
+   * Payload building has moved to each worker processor.
+   * This stub exists only to satisfy TypeScript — it is never called.
    */
-  protected abstract buildPayload(
-    body: any,
-    modelDetail: any,
-  ): Promise<{ basePayload: any; axiosConfig: AxiosRequestConfig }>;
+  protected async buildPayload(
+    _body: any,
+    _modelDetail: any,
+  ): Promise<{ basePayload: any; axiosConfig: AxiosRequestConfig }> {
+    throw new Error(
+      'buildPayload must not be called in core — API call happens in worker',
+    );
+  }
 
   /** Credit quota check — logic differs significantly per type */
   protected abstract checkCreditQuota(
@@ -148,6 +151,15 @@ export abstract class BaseGenerateService {
   protected get holdReservedInCreditCheck(): boolean {
     return false;
   }
+
+  /**
+   * When true, the template skips buildPayload + axios.post so the external API
+   * is called inside the worker processor instead (respects queue concurrency).
+   * Only image overrides this to return true.
+   */
+  // protected get deferApiCallToWorker(): boolean {
+  //   return false;
+  // }
 
   /** Called in the catch block to undo a reserved credit hold on error */
   protected async onErrorCancelHold(
@@ -264,22 +276,24 @@ export abstract class BaseGenerateService {
         };
       }
 
-      const { basePayload, axiosConfig } = await this.buildPayload(
-        body,
-        modelDetail,
-      );
-      Logger.debug('basePayload', basePayload);
-      console.log('axiosConfig', axiosConfig);
-      console.log('Calling external API with payload:', basePayload);
-      // return;
-      const apiRes = await axios.post(
-        modelDetail.sendApi,
-        basePayload,
-        axiosConfig,
-      );
+      let apiRes: any = undefined;
+      // if (!this.deferApiCallToWorker) {
+      //   const { basePayload, axiosConfig } = await this.buildPayload(
+      //     body,
+      //     modelDetail,
+      //   );
+      //   Logger.debug('basePayload', basePayload);
+      //   console.log('axiosConfig', axiosConfig);
+      //   console.log('Calling external API with payload:', basePayload);
+      //   apiRes = await axios.post(
+      //     modelDetail.sendApi,
+      //     basePayload,
+      //     axiosConfig,
+      //   );
 
-      const externalTaskId = this.extractExternalTaskId(apiRes);
-      if (externalTaskId) taskId = externalTaskId;
+      //   const externalTaskId = this.extractExternalTaskId(apiRes);
+      //   if (externalTaskId) taskId = externalTaskId;
+      // }
 
       const galleryData = this.buildGalleryData(
         taskId,

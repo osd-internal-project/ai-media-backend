@@ -3,7 +3,6 @@ import {
   LogRepository,
   MasterdataModelTypeRepository,
   QUEUE_NAME_IMAGE,
-  ByteplusePayloadImage,
   RequestImageGenerateDto,
   TosService,
   CreditBalanceRepository,
@@ -13,7 +12,6 @@ import {
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
-import { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { tosConfigs } from 'src/configs';
@@ -23,16 +21,8 @@ import {
 } from './base-generate.service';
 import { GenerateHelperService } from './generate-helper.service';
 
-/** Extract a value from a nested object using a dot-notation path (e.g. "data.task_id") */
-function getByPath(obj: unknown, path: string): unknown {
-  return path.split('.').reduce((cur: any, key) => cur?.[key], obj);
-}
-
 @Injectable()
 export class GenerateImageService extends BaseGenerateService {
-  /** Holds modelDetail for the current request so extractExternalTaskId can read it */
-  private _currentModelDetail: any;
-
   constructor(
     generateHelperService: GenerateHelperService,
     galleryRepo: GalleryRepository,
@@ -71,13 +61,8 @@ export class GenerateImageService extends BaseGenerateService {
     );
   }
 
-  protected extractExternalTaskId(apiRes: any): string | null {
-    // NEW: async API — extract task ID using taskResponseMap.taskIdPath from schema
-    const taskIdPath = this._currentModelDetail?.taskResponseMap?.taskIdPath;
-    if (taskIdPath) return getByPath(apiRes.data, taskIdPath) as string | null;
-
-    // OLD: image API is synchronous, no external task ID
-    // return null;
+  /** API call happens in the worker — no external task ID to extract here */
+  protected extractExternalTaskId(_apiRes: any): string | null {
     return null;
   }
 
@@ -201,54 +186,24 @@ export class GenerateImageService extends BaseGenerateService {
     }
   }
 
-  protected async buildPayload(
-    body: RequestImageGenerateDto,
-    modelDetail: any,
-  ): Promise<{ basePayload: any; axiosConfig: AxiosRequestConfig }> {
-    // Store for extractExternalTaskId — called by the base template after buildPayload
-    this._currentModelDetail = modelDetail;
-
-    const axiosConfig: AxiosRequestConfig = {
-      headers: {
-        'Content-Type': modelDetail.sendConfig.configType,
-        Authorization: `${modelDetail.sendConfig.authorization}`,
-      },
-      httpsAgent: this.agent,
-    };
-
-    // หา builder จาก modelType prefix (เช่น "seedream-4-5-251128" → "seedream")
-    const matchedKey = modelDetail.sendConfig.type;
-    const builder = this.payloadBuilders[matchedKey];
-    const basePayload = await builder(body, modelDetail);
-    return { basePayload, axiosConfig };
-  }
-
   protected buildQueueJobData(
     taskId: string,
     clientId: string,
     body: any,
     userId: string,
-    apiRes: any,
+    _apiRes: any,
     modelDetail: any,
   ): object {
-    const isAsync = !!modelDetail?.taskPollApi;
-
-    // NEW: async API — pass poll config to worker; dataImage is empty (worker will fetch via poll)
-    // OLD: return { taskId, clientId, body: { ...body }, userId, dataImage: apiRes.data.data, usage: apiRes.data.usage };
     return {
       taskId,
       clientId,
       body: { ...body },
       userId,
-      dataImage: isAsync ? [] : apiRes.data.data,
-      usage: apiRes.data.usage ?? {},
-      ...(isAsync && {
-        externalTaskId: taskId,
-        taskPollApi: modelDetail.taskPollApi,
-        taskPollSec: modelDetail.taskPollSec ?? 10,
-        taskResponseMap: modelDetail.taskResponseMap,
-        sendConfig: modelDetail.sendConfig,
-      }),
+      sendApi: modelDetail.sendApi,
+      sendConfig: modelDetail.sendConfig,
+      taskPollApi: modelDetail.taskPollApi ?? null,
+      taskPollSec: modelDetail.taskPollSec ?? 10,
+      taskResponseMap: modelDetail.taskResponseMap ?? null,
     };
   }
 
@@ -266,18 +221,11 @@ export class GenerateImageService extends BaseGenerateService {
     clientId: string,
     userId: string,
     body: any,
-    apiRes: any,
+    _apiRes: any,
   ): object {
     return {
-      ...super.buildRedisTaskMetadata(
-        taskId,
-        jobId,
-        clientId,
-        userId,
-        body,
-        apiRes,
-      ),
-      totalImages: apiRes.data.data.length,
+      ...super.buildRedisTaskMetadata(taskId, jobId, clientId, userId, body, _apiRes),
+      totalImages: null,
     };
   }
 
@@ -285,7 +233,7 @@ export class GenerateImageService extends BaseGenerateService {
     taskId: string,
     body: RequestImageGenerateDto,
     user: any,
-    apiRes: any,
+    _apiRes: any,
     _creditResult: CreditQuotaResult,
   ): Promise<object> {
     let referenceImages: string[] = [];
@@ -302,10 +250,10 @@ export class GenerateImageService extends BaseGenerateService {
       projectId: body.projectId,
       userId: user.userId,
       prompt: body.prompt,
-      imageUrl: apiRes.data.data,
+      imageUrl: [],
       typeGenerate: 'image',
-      genneratedStatus: 'SUCCESS',
-      status: true,
+      genneratedStatus: 'PENDING',
+      status: false,
       generateConfig: this.generateHelperService.buildGenerateConfig({
         ratio: body.ratio,
         width: body.width,
@@ -394,46 +342,5 @@ export class GenerateImageService extends BaseGenerateService {
       console.error('Error cancelling task:', error);
       return { success: false, message: error.message };
     }
-  }
-  // map ชื่อ model (prefix) → payload builder function
-  private readonly payloadBuilders: Record<
-    string,
-    (body: RequestImageGenerateDto, modelDetail: any) => Promise<any>
-  > = {
-    seedream1: this.buildSeedream1Payload.bind(this),
-  };
-
-  private async buildSeedream1Payload(
-    body: RequestImageGenerateDto,
-    modelDetail: any,
-  ) {
-    const images = (await body?.image)
-      ? await Promise.all(
-          body.image.map(
-            async (img) =>
-              await this.tosService.getPreSignedUrl(
-                tosConfigs().tosBucket,
-                img,
-              ),
-          ),
-        )
-      : null;
-    return {
-      model: body.model,
-      prompt:
-        body.maxImages > 1
-          ? `create ${body.maxImages} images ${body.prompt}`
-          : body.prompt,
-      response_format: 'url',
-      ratio: body.ratio,
-      size: `${body.width}x${body.height}`,
-      stream: modelDetail.sendConfig.stream ?? false,
-      watermark: modelDetail.sendConfig.watermark ?? false,
-      sequential_image_generation: body.sequentialImageGeneration,
-      ...(images && images.length > 0 && { image: images }),
-      ...(body.maxImages && {
-        sequential_image_generation_options: { max_images: body.maxImages },
-      }),
-    };
   }
 }

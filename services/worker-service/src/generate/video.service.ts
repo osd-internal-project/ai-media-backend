@@ -1,5 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { Logger, Injectable, BadRequestException } from '@nestjs/common';
 import {
   GalleryRepository,
@@ -51,9 +51,14 @@ interface VideoProcessJob {
   clientId: string;
   body: RequestVideoGenerateDto;
   userId: string;
-  videoTaskId: string;
+  sendApi: string;
+  sendConfig: {
+    type: string;
+    configType: string;
+    authorization: string;
+    [k: string]: unknown;
+  };
   statusBaseUrl: string | null;
-  authorization: string | null;
 }
 
 interface BytepluseResponse {
@@ -128,7 +133,7 @@ export class VideoProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId, statusBaseUrl, authorization } =
+    const { taskId, clientId, body, userId, statusBaseUrl, sendApi, sendConfig } =
       job.data as VideoProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
@@ -136,6 +141,49 @@ export class VideoProcessor extends WorkerHost {
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
 
     try {
+      // 0. Call external API here so queue concurrency limits simultaneous API calls.
+      // Backward-compat: old jobs already have videoTaskId; new jobs need the API call.
+      let videoTaskId: string;
+      let authToken: string;
+      if ((job.data as any).videoTaskId) {
+        videoTaskId = (job.data as any).videoTaskId;
+        authToken = (job.data as any).authorization ?? '';
+      } else {
+        const axiosConfig = {
+          headers: {
+            'Content-Type': sendConfig.configType,
+            Authorization: `${sendConfig.authorization}`,
+          },
+          httpsAgent: this.agent,
+        };
+        const payload = await this.buildPayload(body, sendConfig);
+        let apiRes: any;
+        try {
+          apiRes = await axios.post(sendApi, payload, axiosConfig);
+        } catch (apiError: any) {
+          // await this.publishToCore(clientId, 'worker:video-error', {
+          //   taskId,
+          //   error: apiError.message,
+          //   timestamp: new Date().toISOString(),
+          //   type: 'video',
+          //   projectId: body.projectId,
+          // });
+          await this.updateTaskStatus(taskId, {
+            status: 'failed',
+            failedAt: new Date().toISOString(),
+            error: apiError.message,
+          });
+          await this.logrepo.updateMany({ where: { taskId }, data: { status: 'failed' } });
+          await this.galleryRepo.updateMany({ where: { taskId }, data: { genneratedStatus: 'FAILED' } });
+          throw new UnrecoverableError(apiError.message);
+          return;
+        }
+        
+        videoTaskId = apiRes.data.id;
+        authToken = String(sendConfig.authorization ?? '');
+        await this.updateTaskStatus(taskId, { videoTaskId });
+      }
+
       // 1. ส่ง event "started" ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:video-started', {
         taskId,
@@ -159,8 +207,8 @@ export class VideoProcessor extends WorkerHost {
           type: 'video',
           projectId: body.projectId,
         });
-        const url = `${statusBaseUrl}/${taskId}`;
-        const rawToken = authorization ?? '';
+        const url = `${statusBaseUrl}/${videoTaskId}`;
+        const rawToken = authToken;
         const authHeader = rawToken.startsWith('Bearer ')
           ? rawToken
           : `Bearer ${rawToken}`;
@@ -410,6 +458,7 @@ export class VideoProcessor extends WorkerHost {
         timestamp: new Date().toISOString(),
         type: 'video',
         projectId: body.projectId,
+        message: err.message,
       });
 
       // บันทึก error log
@@ -453,10 +502,11 @@ export class VideoProcessor extends WorkerHost {
    * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
    */
   private async publishToCore(clientId: string, event: string, payload: any) {
-    console.log(`worker:${event.split(':')[1] || 'event'}`);
+    const parts = event.split(':');
+    const channel = `worker:${parts[parts.length - 1] || 'event'}`;
     try {
       await this.redisPublisher.publish(
-        `worker:${event.split(':')[1] || 'event'}`,
+        channel,
         JSON.stringify({
           clientId,
           event,
@@ -584,6 +634,152 @@ export class VideoProcessor extends WorkerHost {
         console.error('Error cleaning up temp files:', cleanupError);
       }
     }
+  }
+
+  // แยก builder แต่ละ model เป็น private method
+  private readonly payloadBuilders: Record<
+    string,
+    (body: RequestVideoGenerateDto, modelDetail: any) => any
+  > = {
+    seedance1: this.buildSeedance1Payload.bind(this),
+    seedance2: this.buildSeedance2Payload.bind(this),
+  };
+
+  private async buildPayload(body: RequestVideoGenerateDto, sendConfig: any) {
+    const builder = this.payloadBuilders[sendConfig.type];
+    return builder(body, sendConfig);
+  }
+
+  private async buildSeedance1Payload(
+    body: RequestVideoGenerateDto,
+    _modelDetail: any,
+  ) {
+    return {
+      model: body.model,
+      content: [
+        { type: 'text', text: body.prompt },
+
+        ...(body.image[0]
+          ? [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[0],
+                  ),
+                },
+                role: 'first_frame',
+              },
+            ]
+          : []),
+        ...(body.image[1]
+          ? [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[1],
+                  ),
+                },
+                role: 'last_frame',
+              },
+            ]
+          : []),
+      ],
+      draft: body.draft,
+      generate_audio: body.generateAudio,
+      ratio: body.ratio,
+      duration: body.duration,
+      watermark: body.watermark,
+      resolution: body.resolution,
+    };
+  }
+
+  private async buildSeedance2Payload(
+    body: RequestVideoGenerateDto,
+    _modelDetail: any,
+  ) {
+    const filesUrl = await Promise.all(
+      body.files.map(async (file) => {
+        if (file.type === 'image') {
+          return {
+            type: 'image_url',
+            image_url: {
+              url: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                file.url,
+              ),
+            },
+            role: 'reference_image',
+          };
+        } else if (file.type === 'video') {
+          return {
+            type: 'video_url',
+            video_url: {
+              url: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                file.url,
+              ),
+            },
+            role: 'reference_video',
+          };
+        } else {
+          return {
+            type: 'audio_url',
+            audio_url: {
+              url: await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                file.url,
+              ),
+            },
+            role: 'reference_audio',
+          };
+        }
+      }),
+    );
+    return {
+      model: body.model,
+      content: [
+        { type: 'text', text: body.prompt },
+        ...filesUrl,
+        ...(body.image[0]
+          ? [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[0],
+                  ),
+                },
+                role: 'first_frame',
+              },
+            ]
+          : []),
+        ...(body.image[1]
+          ? [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: await this.tosService.getPreSignedUrl(
+                    tosConfigs().tosBucket,
+                    body.image[1],
+                  ),
+                },
+                role: 'last_frame',
+              },
+            ]
+          : []),
+      ],
+      draft: body.draft,
+      generate_audio: body.generateAudio,
+      ratio: body.ratio,
+      duration: body.duration,
+      watermark: body.watermark,
+      resolution: body.resolution,
+    };
   }
 
   async onModuleDestroy() {

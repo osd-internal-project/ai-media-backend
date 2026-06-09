@@ -32,6 +32,7 @@ export class LogsService {
     private readonly tosService: TosService,
     private readonly projectMemberRepository: ProjectMemberRepository,
   ) {}
+
   async findProjectImageByPage(
     projectId: string,
     organizationId: string,
@@ -48,6 +49,7 @@ export class LogsService {
       : null;
     const tasks = await this.logrepo.findMany({
       where: {
+        status: { not: 'failed' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'image',
@@ -70,6 +72,7 @@ export class LogsService {
       where: {
         taskId: { in: targetTaskIds },
         typeGenerate: 'image',
+        genneratedStatus: { not: 'FAILED' },
       },
       include: { users: true },
       orderBy: { createdAt: 'desc' },
@@ -106,10 +109,16 @@ export class LogsService {
         const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
           item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.imageUrl}`,
+              )
             : Promise.resolve(''),
           item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.thumbnailUrl}`,
+              )
             : Promise.resolve(''),
         ]);
         const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
@@ -134,14 +143,26 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl }],
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl,
+              id: item.id,
+              status: item.status,
+              fileName: item.imageUrl,
+            },
+          ],
         });
         delete map.get(item.taskId).imageUrl;
         delete map.get(item.taskId).thumbnailUrl;
       } else {
         map.get(item.taskId).imageUrls.push({
-          imageUrl: url, thumbnailUrl, id: item.id, status: item.status,
-          fileName: item.imageUrl, seq: seqMap.get(item.taskId) || null,
+          imageUrl: url,
+          thumbnailUrl,
+          id: item.id,
+          status: item.status,
+          fileName: item.imageUrl,
+          seq: seqMap.get(item.taskId) || null,
         });
       }
     }
@@ -163,6 +184,7 @@ export class LogsService {
       : null;
     const tasks = await this.logrepo.findMany({
       where: {
+        status: { not: 'failed' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'video',
@@ -188,6 +210,7 @@ export class LogsService {
       where: {
         taskId: { in: targetTaskIds },
         typeGenerate: 'video',
+        genneratedStatus: { not: 'FAILED' },
       },
       include: { users: true },
       orderBy: { createdAt: 'desc' },
@@ -229,7 +252,7 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    
+
     const bucket = tosConfigs().tosBucket;
     const PLACEHOLDER = REF_IMAGE_PLACEHOLDER;
 
@@ -238,10 +261,16 @@ export class LogsService {
         const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
           item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.imageUrl}`,
+              )
             : Promise.resolve(''),
           item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.thumbnailUrl}`,
+              )
             : Promise.resolve(''),
         ]);
         const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
@@ -269,13 +298,25 @@ export class LogsService {
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl }],
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl,
+              id: item.id,
+              status: item.status,
+              fileName: item.imageUrl,
+            },
+          ],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
-          imageUrl: url, thumbnailUrl, id: item.id, fileName: item.imageUrl, status: item.status,
+          imageUrl: url,
+          thumbnailUrl,
+          id: item.id,
+          fileName: item.imageUrl,
+          status: item.status,
         });
       }
     }
@@ -298,6 +339,7 @@ export class LogsService {
       : null;
     const tasks = await this.logrepo.findMany({
       where: {
+        status: { not: 'failed' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'omnihumen',
@@ -318,6 +360,7 @@ export class LogsService {
 
     const data = await this.galleryRepo.findMany({
       where: {
+        genneratedStatus: { not: 'FAILED' },
         taskId: { in: targetTaskIds },
         typeGenerate: 'omnihumen',
       },
@@ -367,10 +410,16 @@ export class LogsService {
         const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
           item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.imageUrl}`,
+              )
             : Promise.resolve(''),
           item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.thumbnailUrl}`,
+              )
             : Promise.resolve(''),
         ]);
         const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
@@ -396,13 +445,25 @@ export class LogsService {
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl }],
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl,
+              id: item.id,
+              status: item.status,
+              fileName: item.imageUrl,
+            },
+          ],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
-          imageUrl: url, thumbnailUrl, id: item.id, fileName: item.imageUrl, status: item.status,
+          imageUrl: url,
+          thumbnailUrl,
+          id: item.id,
+          fileName: item.imageUrl,
+          status: item.status,
         });
       }
     }
@@ -425,6 +486,7 @@ export class LogsService {
       : null;
     const tasks = await this.logrepo.findMany({
       where: {
+        status: { not: 'failed' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'dreamactor',
@@ -447,7 +509,8 @@ export class LogsService {
     const data = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
-        typeGenerate: 'video',
+        typeGenerate: 'dreamactor',
+        genneratedStatus: { not: 'FAILED' },
       },
       include: { users: true },
       orderBy: { createdAt: 'desc' },
@@ -496,10 +559,16 @@ export class LogsService {
         const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
           item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.imageUrl}`,
+              )
             : Promise.resolve(''),
           item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.thumbnailUrl}`,
+              )
             : Promise.resolve(''),
         ]);
         const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
@@ -569,6 +638,7 @@ export class LogsService {
     }
     const data = await this.galleryRepo.findMany({
       where: {
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'video',
@@ -597,6 +667,7 @@ export class LogsService {
       where: {
         taskId: { in: targetTaskIds },
         typeGenerate: 'video',
+        status: { not: 'failed' },
       },
       select: {
         taskId: true,
@@ -634,10 +705,16 @@ export class LogsService {
         const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
           item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.imageUrl}`,
+              )
             : Promise.resolve(''),
           item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
+            ? this.tosService.getPreSignedUrl(
+                bucket,
+                `${base}/${item.thumbnailUrl}`,
+              )
             : Promise.resolve(''),
         ]);
         const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
@@ -664,13 +741,25 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || false,
-          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, fileName: item.imageUrl, status: item.status }],
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl,
+              id: item.id,
+              fileName: item.imageUrl,
+              status: item.status,
+            },
+          ],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
-          imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl,
+          imageUrl: url,
+          thumbnailUrl,
+          id: item.id,
+          status: item.status,
+          fileName: item.imageUrl,
         });
       }
     }

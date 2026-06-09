@@ -3,18 +3,13 @@ import {
   LogRepository,
   MasterdataModelTypeRepository,
   QUEUE_NAME_DREAMACTOR,
-  ByteplusePayloadDreamactor,
-  TosService,
   MasterModelTypeDto,
-  RequestDreamactorGenerateDto,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
-import { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import { tosConfigs } from 'src/configs';
 import {
   BaseGenerateService,
   CreditQuotaResult,
@@ -30,7 +25,6 @@ export class GenerateDreamactorService extends BaseGenerateService {
     modeltypeRepo: MasterdataModelTypeRepository,
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_DREAMACTOR) private readonly dreamactorQueue: Queue,
-    private readonly tosService: TosService,
   ) {
     super(generateHelperService, galleryRepo, logrepo, modeltypeRepo, redis);
   }
@@ -58,42 +52,6 @@ export class GenerateDreamactorService extends BaseGenerateService {
     );
   }
 
-  protected async buildPayload(
-    body: any,
-    modelDetail: MasterModelTypeDto,
-  ): Promise<{ basePayload: any; axiosConfig: AxiosRequestConfig }> {
-    const accessKey =
-      process.env.BYTEPLUS_ACCESS_KEY ||
-      'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';
-    const secretKey =
-      process.env.BYTEPLUS_SECRET_KEY ||
-      'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
-
-    const queryParams = {
-      Action: 'CVSync2AsyncSubmitTask',
-      Version: '2024-06-06',
-    };
-    const matchedKey = modelDetail.sendConfig.type;
-    const builder = this.payloadBuilders[matchedKey];
-    const basePayload = await builder(body, modelDetail);
-    const headers = this.generateHelperService.signBytePlusRequest(
-      'POST',
-      '/',
-      queryParams,
-      basePayload,
-      accessKey,
-      secretKey,
-    );
-
-    const axiosConfig: AxiosRequestConfig = {
-      headers,
-      params: queryParams,
-      httpsAgent: this.agent,
-    };
-
-    return { basePayload, axiosConfig };
-  }
-
   protected buildQueueJobData(
     taskId: string,
     clientId: string,
@@ -107,8 +65,10 @@ export class GenerateDreamactorService extends BaseGenerateService {
       clientId,
       body: { ...body },
       userId,
-      dreamactorTaskId: taskId,
+      sendApi: modelDetail.sendApi,
+      sendConfig: modelDetail.sendConfig,
       reqKey: modelDetail.modelType,
+      dreamactorTaskId: taskId,
       statusBaseUrl: modelDetail?.taskPollApi ?? 'https://cv.byteplusapi.com/',
     };
   }
@@ -189,14 +149,7 @@ export class GenerateDreamactorService extends BaseGenerateService {
     apiRes: any,
   ): object {
     return {
-      ...super.buildRedisTaskMetadata(
-        taskId,
-        jobId,
-        clientId,
-        userId,
-        body,
-        apiRes,
-      ),
+      ...super.buildRedisTaskMetadata(taskId, jobId, clientId, userId, body, apiRes),
       dreamactorTaskId: taskId,
     };
   }
@@ -245,30 +198,5 @@ export class GenerateDreamactorService extends BaseGenerateService {
   /** GenerateService delegates here */
   async createDreamactorGenerationTask(body: any, clientId: string) {
     return this.createGenerationTask(body, clientId);
-  }
-
-  // แยก builder แต่ละ model เป็น private method
-  private readonly payloadBuilders: Record<
-    string,
-    (body: RequestDreamactorGenerateDto, modelDetail: any) => any
-  > = {
-    dreamactor: this.buildDreamacterPayload.bind(this),
-  };
-  private async buildDreamacterPayload(
-    body: RequestDreamactorGenerateDto,
-    modelDetail: any,
-  ) {
-    return {
-      req_key: modelDetail.modelType || 'dreamactor_m20_gen_video_cvtob',
-      image_urls: await Promise.all(
-        [body.image[0]].map((url) =>
-          this.tosService.getPreSignedUrl(tosConfigs().tosBucket, url),
-        ),
-      ),
-      video_url: await this.tosService.getPreSignedUrl(
-        tosConfigs().tosBucket,
-        body.image[1],
-      ),
-    };
   }
 }

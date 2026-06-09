@@ -1,5 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { Logger, Injectable, BadRequestException } from '@nestjs/common';
 import {
   GalleryRepository,
@@ -35,6 +35,8 @@ interface DreamactorProcessJob {
   dreamactorTaskId: string;
   reqKey: string;
   statusBaseUrl: string;
+  sendApi?: string;
+  sendConfig?: { type: string; [k: string]: unknown };
 }
 
 interface BytepluseResponse {
@@ -63,7 +65,9 @@ interface BytepluseResponse {
 // บอกว่า Class นี้รับผิดชอบคิวชื่อ 'image-Video-queue'
 // concurrency: 5 คือ ทำพร้อมกันได้ 5 งาน (ถ้าเครื่องไหว)
 @Injectable()
-@Processor(QUEUE_NAME_DREAMACTOR, { concurrency: MAX_CONCURRENT_TASKS_PER_TYPE })
+@Processor(QUEUE_NAME_DREAMACTOR, {
+  concurrency: MAX_CONCURRENT_TASKS_PER_TYPE,
+})
 export class DreamactorProcessor extends WorkerHost {
   private readonly logger = new Logger(DreamactorProcessor.name);
   private agent: https.Agent;
@@ -108,14 +112,83 @@ export class DreamactorProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId, reqKey, dreamactorTaskId, statusBaseUrl } =
-      job.data as DreamactorProcessJob;
+    const {
+      taskId,
+      clientId,
+      body,
+      userId,
+      reqKey,
+      statusBaseUrl,
+      sendApi,
+      sendConfig,
+    } = job.data as DreamactorProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
     try {
+      // 0. Call external API (CVSync2AsyncSubmitTask) here so queue concurrency limits simultaneous API calls.
+      // Backward-compat: old jobs already have dreamactorTaskId from core; new jobs need the API call.
+      let dreamactorTaskId: string = (job.data as DreamactorProcessJob)
+        .dreamactorTaskId;
+      if (sendApi) {
+        const accessKey =
+          process.env.BYTEPLUS_ACCESS_KEY ||
+          'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';
+        const secretKey =
+          process.env.BYTEPLUS_SECRET_KEY ||
+          'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
+        const modelDetail = { modelType: reqKey };
+        const builder = this.payloadBuilders[sendConfig?.type ?? 'dreamactor'];
+        const submitPayload = await builder(body, modelDetail);
+        const queryParams = {
+          Action: 'CVSync2AsyncSubmitTask',
+          Version: '2024-06-06',
+        };
+        const headers = this.signBytePlusRequest(
+          'POST',
+          '/',
+          queryParams,
+          submitPayload,
+          accessKey,
+          secretKey,
+        );
+        let apiRes: any;
+        try {
+          apiRes = await axios.post(sendApi, submitPayload, {
+            headers,
+            params: queryParams,
+            httpsAgent: this.agent,
+          });
+        } catch (apiError: any) {
+          await this.publishToCore(clientId, 'worker:dreamactor-error', {
+            taskId,
+            error: apiError.message,
+            timestamp: new Date().toISOString(),
+            type: 'dreamactor',
+            projectId: body.projectId,
+            message: apiError.message,
+          });
+          await this.updateTaskStatus(taskId, {
+            status: 'failed',
+            failedAt: new Date().toISOString(),
+            error: apiError.message,
+          });
+          await this.logrepo.updateMany({
+            where: { taskId },
+            data: { status: 'failed' },
+          });
+          await this.galleryRepo.updateMany({
+            where: { taskId },
+            data: { genneratedStatus: 'FAILED' },
+          });
+          throw new UnrecoverableError(apiError.message);
+        }
+        dreamactorTaskId = apiRes.data?.data?.task_id ?? dreamactorTaskId;
+        await this.updateTaskStatus(taskId, { dreamactorTaskId });
+      }
+
       // 1. ส่ง event "started" ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:dreamactor-started', {
         taskId,
@@ -359,7 +432,7 @@ export class DreamactorProcessor extends WorkerHost {
           }),
         },
       };
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(
         `❌ Job ${job.id} failed: ${error.message}`,
         error.stack,
@@ -379,6 +452,7 @@ export class DreamactorProcessor extends WorkerHost {
         timestamp: new Date().toISOString(),
         type: 'dreamactor',
         projectId: body.projectId,
+        message: error.message,
       });
 
       // บันทึก error log
@@ -421,10 +495,11 @@ export class DreamactorProcessor extends WorkerHost {
    * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
    */
   private async publishToCore(clientId: string, event: string, payload: any) {
-    console.log(`worker:${event.split(':')[1] || 'event'}`);
+    const parts = event.split(':');
+    const channel = `worker:${parts[parts.length - 1] || 'event'}`;
     try {
       await this.redisPublisher.publish(
-        `worker:${event.split(':')[1] || 'event'}`,
+        channel,
         JSON.stringify({
           clientId,
           event,
@@ -432,7 +507,7 @@ export class DreamactorProcessor extends WorkerHost {
           timestamp: new Date().toISOString(),
         }),
       );
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(`Failed to publish event: ${error.message}`);
     }
   }
@@ -538,7 +613,7 @@ export class DreamactorProcessor extends WorkerHost {
         file: objectName,
         thumbnail: thumbnailObjectName,
       };
-    } catch (error:any) {
+    } catch (error: any) {
       console.error('Error in uploadVideoWithThumbnail:', error);
       throw new BadRequestException('Error processing video: ' + error.message);
     } finally {
@@ -638,6 +713,32 @@ export class DreamactorProcessor extends WorkerHost {
       'X-Content-Sha256': x_content_sha256,
       'X-Date': x_date,
       Authorization: authorization,
+    };
+  }
+
+  // แยก builder แต่ละ model เป็น private method
+  private readonly payloadBuilders: Record<
+    string,
+    (body: RequestDreamactorGenerateDto, modelDetail: any) => any
+  > = {
+    dreamactor: this.buildDreamacterPayload.bind(this),
+  };
+
+  private async buildDreamacterPayload(
+    body: RequestDreamactorGenerateDto,
+    modelDetail: any,
+  ) {
+    return {
+      req_key: modelDetail.modelType || 'dreamactor_m20_gen_video_cvtob',
+      image_urls: await Promise.all(
+        [body.image[0]].map((url) =>
+          this.tosService.getPreSignedUrl(tosConfigs().tosBucket, url),
+        ),
+      ),
+      video_url: await this.tosService.getPreSignedUrl(
+        tosConfigs().tosBucket,
+        body.image[1],
+      ),
     };
   }
 

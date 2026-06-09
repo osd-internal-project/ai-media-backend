@@ -1,5 +1,5 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { Logger, Injectable, BadRequestException } from '@nestjs/common';
 import {
   GalleryRepository,
@@ -35,6 +35,9 @@ interface OmnihumenProcessJob {
   omnihumenTaskId: string;
   reqKey: string;
   statusBaseUrl: string;
+  sendApi?: string;
+  sendConfig?: { type: string; [k: string]: unknown };
+  modelOptions?: { resolution?: number; seed?: number; fastMode?: boolean };
 }
 
 interface BytepluseResponse {
@@ -108,14 +111,86 @@ export class OmnihumenProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId, reqKey, omnihumenTaskId, statusBaseUrl } =
-      job.data as OmnihumenProcessJob;
+    const {
+      taskId,
+      clientId,
+      body,
+      userId,
+      reqKey,
+      statusBaseUrl,
+      sendApi,
+      sendConfig,
+      modelOptions,
+    } = job.data as OmnihumenProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
 
     try {
+      // 0. Call external API (CVSubmitTask) here so queue concurrency limits simultaneous API calls.
+      // Backward-compat: old jobs already have omnihumenTaskId from core; new jobs need the API call.
+      let omnihumenTaskId: string = (job.data as OmnihumenProcessJob)
+        .omnihumenTaskId;
+      if (sendApi) {
+        const accessKey =
+          process.env.BYTEPLUS_ACCESS_KEY ||
+          'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';
+        const secretKey =
+          process.env.BYTEPLUS_SECRET_KEY ||
+          'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
+        const modelDetail = {
+          modelYype: reqKey,
+          resolution: modelOptions?.resolution,
+          seed: modelOptions?.seed,
+          fastMode: modelOptions?.fastMode,
+        };
+        const builder = this.payloadBuilders[sendConfig?.type ?? 'omnihuman'];
+        const submitPayload = await builder(body, modelDetail);
+        const queryParams = { Action: 'CVSubmitTask', Version: '2024-06-06' };
+        const headers = this.signBytePlusRequest(
+          'POST',
+          '/',
+          queryParams,
+          submitPayload,
+          accessKey,
+          secretKey,
+        );
+        let apiRes: any;
+        try {
+          apiRes = await axios.post(sendApi, submitPayload, {
+            headers,
+            params: queryParams,
+            httpsAgent: this.agent,
+          });
+        } catch (apiError: any) {
+          await this.publishToCore(clientId, 'worker:omnihumen-error', {
+            taskId,
+            error: apiError.message,
+            timestamp: new Date().toISOString(),
+            type: 'omnihumen',
+            projectId: body.projectId,
+            message: apiError.message,
+          });
+          await this.updateTaskStatus(taskId, {
+            status: 'failed',
+            failedAt: new Date().toISOString(),
+            error: apiError.message,
+          });
+          await this.logrepo.updateMany({
+            where: { taskId },
+            data: { status: 'failed' },
+          });
+          await this.galleryRepo.updateMany({
+            where: { taskId },
+            data: { genneratedStatus: 'FAILED' },
+          });
+          throw new UnrecoverableError(apiError.message);
+        }
+        omnihumenTaskId = apiRes.data?.data?.task_id ?? omnihumenTaskId;
+        await this.updateTaskStatus(taskId, { omnihumenTaskId });
+      }
+
       // 1. ส่ง event "started" ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:omnihumen-started', {
         taskId,
@@ -382,7 +457,7 @@ export class OmnihumenProcessor extends WorkerHost {
           }),
         },
       };
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(
         `❌ Job ${job.id} failed: ${error.message}`,
         error.stack,
@@ -402,6 +477,7 @@ export class OmnihumenProcessor extends WorkerHost {
         timestamp: new Date().toISOString(),
         type: 'omnihumen',
         projectId: body.projectId,
+        message: error.message,
       });
 
       // บันทึก error log
@@ -444,10 +520,11 @@ export class OmnihumenProcessor extends WorkerHost {
    * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
    */
   private async publishToCore(clientId: string, event: string, payload: any) {
-    console.log(`worker:${event.split(':')[1] || 'event'}`);
+    const parts = event.split(':');
+    const channel = `worker:${parts[parts.length - 1] || 'event'}`;
     try {
       await this.redisPublisher.publish(
-        `worker:${event.split(':')[1] || 'event'}`,
+        channel,
         JSON.stringify({
           clientId,
           event,
@@ -455,7 +532,7 @@ export class OmnihumenProcessor extends WorkerHost {
           timestamp: new Date().toISOString(),
         }),
       );
-    } catch (error:any) {
+    } catch (error: any) {
       this.logger.error(`Failed to publish event: ${error.message}`);
     }
   }
@@ -561,7 +638,7 @@ export class OmnihumenProcessor extends WorkerHost {
         file: objectName,
         thumbnail: thumbnailObjectName,
       };
-    } catch (error:any) {
+    } catch (error: any) {
       console.error('Error in uploadVideoWithThumbnail:', error);
       throw new BadRequestException('Error processing video: ' + error.message);
     } finally {
@@ -661,6 +738,35 @@ export class OmnihumenProcessor extends WorkerHost {
       'X-Content-Sha256': x_content_sha256,
       'X-Date': x_date,
       Authorization: authorization,
+    };
+  }
+
+  // แยก builder แต่ละ model เป็น private method
+  private readonly payloadBuilders: Record<
+    string,
+    (body: RequestOmnihumenGenerateDto, modelDetail: any) => any
+  > = {
+    omnihuman: this.buildOmnihumanPayload.bind(this),
+  };
+
+  private async buildOmnihumanPayload(
+    body: RequestOmnihumenGenerateDto,
+    modelDetail: any,
+  ) {
+    return {
+      req_key: modelDetail.modelYype || 'realman_avatar_picture_omni15_cv',
+      image_url: await this.tosService.getPreSignedUrl(
+        tosConfigs().tosBucket,
+        body.image[0],
+      ),
+      audio_url: await this.tosService.getPreSignedUrl(
+        tosConfigs().tosBucket,
+        body.image[1],
+      ),
+      output_resolution: modelDetail.resolution,
+      prompt: body.prompt,
+      seed: modelDetail.seed,
+      pe_fast_mode: modelDetail.fastMode,
     };
   }
 
