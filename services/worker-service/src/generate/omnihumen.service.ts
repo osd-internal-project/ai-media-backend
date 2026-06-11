@@ -163,29 +163,28 @@ export class OmnihumenProcessor extends WorkerHost {
             params: queryParams,
             httpsAgent: this.agent,
           });
-        } catch (apiError: any) {
-          await this.publishToCore(clientId, 'worker:omnihumen-error', {
+          await this.generateHelperService.logAudit(
+            userId,
+            'CREATE',
+            body,
             taskId,
-            error: apiError.message,
-            timestamp: new Date().toISOString(),
-            type: 'omnihumen',
-            projectId: body.projectId,
-            message: apiError.message,
-          });
-          await this.updateTaskStatus(taskId, {
-            status: 'failed',
-            failedAt: new Date().toISOString(),
-            error: apiError.message,
-          });
-          await this.logrepo.updateMany({
-            where: { taskId },
-            data: { status: 'failed' },
-          });
-          await this.galleryRepo.updateMany({
-            where: { taskId },
-            data: { genneratedStatus: 'FAILED' },
-          });
-          throw new UnrecoverableError(apiError.message);
+          );
+        } catch (error: any) {
+          // Surface the real API rejection reason. Log the verbose detail
+          // (payload + response) server-side for debugging, but throw only the
+          // clean message. The outer catch owns all failure reporting (status,
+          // event, credit refund, DB rows) — don't duplicate it here.
+          const apiStatus = error.response?.status;
+          const apiBody = error.response?.data;
+          const apiMessage =
+            apiBody?.error?.message ?? apiBody?.message ?? error.message;
+          this.logger.error(
+            `❌ Omnihumen API call failed: API ${apiStatus}: ${apiMessage} | payload=${JSON.stringify(
+              submitPayload,
+            )} | response=${JSON.stringify(apiBody)}`,
+          );
+
+          throw new UnrecoverableError(apiMessage);
         }
         omnihumenTaskId = apiRes.data?.data?.task_id ?? omnihumenTaskId;
         await this.updateTaskStatus(taskId, { omnihumenTaskId });

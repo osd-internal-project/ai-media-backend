@@ -35,6 +35,8 @@ import {
   CouponCodeRepository,
   CouponCodeUsageRepository,
   ContactSaleLogRepository,
+  WorkflowConversationRepository,
+  WorkflowBlockRepository,
 } from 'src/repositories';
 
 const services = [
@@ -73,6 +75,8 @@ const services = [
   CouponCodeRepository,
   CouponCodeUsageRepository,
   ContactSaleLogRepository,
+  WorkflowConversationRepository,
+  WorkflowBlockRepository,
 ];
 
 @Module({

@@ -106,6 +106,7 @@ export class ImageProcessor extends WorkerHost {
   }
 
   async process(job: any): Promise<any> {
+    //
     const { taskId, clientId, body, userId, sendApi, sendConfig } =
       job.data as ImageProcessJob;
 
@@ -127,7 +128,11 @@ export class ImageProcessor extends WorkerHost {
       // 0. Call the external API here so queue concurrency limits simultaneous API calls.
       // Backward-compat: if old core put dataImage in job data, use it directly.
       let dataImage: { url: string; size: string }[];
-      let usage: { generated_images?: number; output_tokens?: number; total_tokens?: number };
+      let usage: {
+        generated_images?: number;
+        output_tokens?: number;
+        total_tokens?: number;
+      };
       if ((job.data as any).dataImage?.length > 0) {
         dataImage = (job.data as any).dataImage;
         usage = (job.data as any).usage ?? {};
@@ -140,47 +145,46 @@ export class ImageProcessor extends WorkerHost {
           httpsAgent: this.agent,
         };
 
-        const refImages = body.image?.length
-          ? await Promise.all(
-              body.image.map((img) =>
-                this.tosService.getPreSignedUrl(tosConfigs().tosBucket, img),
-              ),
-            )
-          : null;
+        // const refImages = body.image?.length
+        //   ? await Promise.all(
+        //       body.image.map((img) =>
+        //         this.tosService.getPreSignedUrl(tosConfigs().tosBucket, img),
+        //       ),
+        //     )
+        //   : null;
 
-        const payload = {
-          model: body.model,
-          prompt:
-            body.maxImages > 1
-              ? `create ${body.maxImages} images ${body.prompt}`
-              : body.prompt,
-          response_format: 'url',
-          ratio: body.ratio,
-          size: `${body.width}x${body.height}`,
-          stream: sendConfig.stream ?? false,
-          watermark: sendConfig.watermark ?? false,
-          sequential_image_generation: body.sequentialImageGeneration,
-          ...(refImages && refImages.length > 0 && { image: refImages }),
-          ...(body.maxImages && {
-            sequential_image_generation_options: { max_images: body.maxImages },
-          }),
-        };
-
+        const payload = await this.buildPayload(body, sendConfig);
+        console.log('API Payload:', sendApi, payload, axiosConfig);
         let apiRes: any;
         try {
           apiRes = await axios.post(sendApi, payload, axiosConfig);
-        } catch (apiError: any) {
-          await this.publishToCore(clientId, 'worker:image-error', {
-            taskId,
-            error: apiError.message,
-            timestamp: new Date().toISOString(),
-            type: 'image',
-            projectId: body.projectId,
-            message: apiError.message,
-          });
-          await this.updateTaskStatus(taskId, { status: 'failed', failedAt: new Date().toISOString(), error: apiError.message });
-          throw new UnrecoverableError(apiError.message);
+          console.log('API Response:', apiRes.data);
+          if (apiRes) {
+            await this.generateHelperService.logAudit(
+              userId,
+              'CREATE',
+              body,
+              taskId,
+            );
+          }
+        } catch (error: any) {
+          // Surface the real API rejection reason. Log the verbose detail
+          // (payload + response) server-side for debugging, but throw only the
+          // clean message. The outer catch owns all failure reporting (error
+          // event, task status, credit refund, DB rows) — don't duplicate it here.
+          const apiStatus = error.response?.status;
+          const apiBody = error.response?.data;
+          const apiMessage =
+            apiBody?.error?.message ?? apiBody?.message ?? error.message;
+          this.logger.error(
+            `❌ Image API call failed: API ${apiStatus}: ${apiMessage} | payload=${JSON.stringify(
+              payload,
+            )} | response=${JSON.stringify(apiBody)}`,
+          );
+
+          throw new UnrecoverableError(apiMessage);
         }
+
         dataImage = apiRes.data.data;
         usage = apiRes.data.usage ?? {};
 
@@ -249,7 +253,7 @@ export class ImageProcessor extends WorkerHost {
           type: 'image',
         });
 
-        // Upload to MinIO
+        // Upload to Object Storage
         const bucketname = tosConfigs().tosBucket;
         const imagePath = `organize/${body.organizationId}/${body.projectId}/image-generate/${objectName}`;
         await this.tosService.putObject(bucketname, imagePath, buffer);
@@ -434,6 +438,13 @@ export class ImageProcessor extends WorkerHost {
         },
       };
     } catch (error: any) {
+      await this.generateHelperService.logError(
+        userId,
+        error.message,
+        error.stack,
+        body,
+      );
+
       this.logger.error(
         `❌ Job ${job.id} failed: ${(error as Error).message}`,
         error.stack,
@@ -448,7 +459,9 @@ export class ImageProcessor extends WorkerHost {
       const creditForFailure = await this.generateHelperService.getUsedCredit(
         0,
         body,
-        await this.masterModelTypeRepo.findOne({ where: { modelType: body.model } }),
+        await this.masterModelTypeRepo.findOne({
+          where: { modelType: body.model },
+        }),
       );
       await this.generateHelperService.updateUsedCreditFail(
         userId,
@@ -464,6 +477,7 @@ export class ImageProcessor extends WorkerHost {
         timestamp: new Date().toISOString(),
         projectId: body.projectId,
         type: 'image',
+        message: error.message,
       });
       await this.galleryRepo.create({
         data: {
@@ -586,5 +600,51 @@ export class ImageProcessor extends WorkerHost {
 
   async onModuleDestroy() {
     await this.redisPublisher.quit();
+  }
+
+  // map ชื่อ model (prefix) → payload builder function
+  private async buildPayload(body: RequestImageGenerateDto, sendConfig: any) {
+    const builder = this.payloadBuilders[sendConfig.type];
+    return builder(body, sendConfig);
+  }
+  private readonly payloadBuilders: Record<
+    string,
+    (body: RequestImageGenerateDto, modelDetail: any) => Promise<any>
+  > = {
+    seedream1: this.buildSeedream1Payload.bind(this),
+  };
+
+  private async buildSeedream1Payload(
+    body: RequestImageGenerateDto,
+    modelDetail: any,
+  ) {
+    const images = (await body?.image)
+      ? await Promise.all(
+          body.image.map(
+            async (img) =>
+              await this.tosService.getPreSignedUrl(
+                tosConfigs().tosBucket,
+                img,
+              ),
+          ),
+        )
+      : null;
+    return {
+      model: body.model,
+      prompt:
+        body.maxImages > 1
+          ? `create ${body.maxImages} images ${body.prompt}`
+          : body.prompt,
+      response_format: 'url',
+      ratio: body.ratio,
+      size: `${body.width}x${body.height}`,
+      stream: modelDetail.sendConfig?.stream ?? false,
+      watermark: modelDetail.sendConfig?.watermark ?? false,
+      sequential_image_generation: body.sequentialImageGeneration,
+      ...(images && images.length > 0 && { image: images }),
+      ...(body.maxImages && {
+        sequential_image_generation_options: { max_images: body.maxImages },
+      }),
+    };
   }
 }

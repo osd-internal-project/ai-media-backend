@@ -133,8 +133,15 @@ export class VideoProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
-    const { taskId, clientId, body, userId, statusBaseUrl, sendApi, sendConfig } =
-      job.data as VideoProcessJob;
+    const {
+      taskId,
+      clientId,
+      body,
+      userId,
+      statusBaseUrl,
+      sendApi,
+      sendConfig,
+    } = job.data as VideoProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
@@ -160,25 +167,30 @@ export class VideoProcessor extends WorkerHost {
         let apiRes: any;
         try {
           apiRes = await axios.post(sendApi, payload, axiosConfig);
-        } catch (apiError: any) {
-          // await this.publishToCore(clientId, 'worker:video-error', {
-          //   taskId,
-          //   error: apiError.message,
-          //   timestamp: new Date().toISOString(),
-          //   type: 'video',
-          //   projectId: body.projectId,
-          // });
-          await this.updateTaskStatus(taskId, {
-            status: 'failed',
-            failedAt: new Date().toISOString(),
-            error: apiError.message,
-          });
-          await this.logrepo.updateMany({ where: { taskId }, data: { status: 'failed' } });
-          await this.galleryRepo.updateMany({ where: { taskId }, data: { genneratedStatus: 'FAILED' } });
-          throw new UnrecoverableError(apiError.message);
-          return;
+          await this.generateHelperService.logAudit(
+            userId,
+            'CREATE',
+            body,
+            taskId,
+          );
+        } catch (error: any) {
+          // Surface the real API rejection reason. Log the verbose detail
+          // (payload + response) server-side for debugging, but throw only the
+          // clean message. The outer catch owns all failure reporting (status,
+          // event, credit refund, DB rows) — don't duplicate it here.
+          const apiStatus = error.response?.status;
+          const apiBody = error.response?.data;
+          const apiMessage =
+            apiBody?.error?.message ?? apiBody?.message ?? error.message;
+          this.logger.error(
+            `❌ Video API call failed: API ${apiStatus}: ${apiMessage} | payload=${JSON.stringify(
+              payload,
+            )} | response=${JSON.stringify(apiBody)}`,
+          );
+
+          throw new UnrecoverableError(apiMessage);
         }
-        
+
         videoTaskId = apiRes.data.id;
         authToken = String(sendConfig.authorization ?? '');
         await this.updateTaskStatus(taskId, { videoTaskId });

@@ -32,3 +32,5 @@ export * from './brandKitDetailType.repository';
 export * from './coupon-code.repository';
 export * from './coupon-code-usage.repository';
 export * from './contactSaleLog.repository';
+export * from './workflowConversation.repository';
+export * from './workflowBlock.repository';

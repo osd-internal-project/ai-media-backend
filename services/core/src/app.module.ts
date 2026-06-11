@@ -26,6 +26,7 @@ import { BrandKitModule } from './brand-kit/brand-kit.module';
 import { BrandKitDetailModule } from './brand-kit-detail/brand-kit-detail.module';
 import { BrandKitDetailTypeModule } from './brand-kit-detail-type/brand-kit-detail-type.module';
 import { ContactSaleLogModule } from './contact-sale-log/contact-sale-log.module';
+import { WorkflowModule } from './workflow/workflow.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { ContactSaleLogModule } from './contact-sale-log/contact-sale-log.module
       },
     }),
     ContactSaleLogModule,
+    WorkflowModule,
   ],
   controllers: [InventoryController],
   providers: [InventoryService],

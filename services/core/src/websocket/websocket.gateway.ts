@@ -131,11 +131,14 @@ export class WebsocketGatewayService
         // Check format for room broadcast
         if (payload && payload.projectId && payload.type) {
           const roomName = `${payload.projectId}:${payload.type}`;
-          this.server.to(roomName).emit(event, payload);
-          // Also emit directly to the originating client (handles case where client isn't in room)
-          if (clientId) {
-            this.server.to(clientId).emit(event, payload);
-          }
+          // Target the room AND the originating client in a SINGLE emit so a
+          // client that is in both (the normal case) receives the event exactly
+          // once. Socket.IO de-duplicates recipients across rooms within one
+          // emit call; two separate emits would deliver it twice.
+          const target = clientId
+            ? this.server.to(roomName).to(clientId)
+            : this.server.to(roomName);
+          target.emit(event, payload);
         } else {
           // Fallback: ส่ง event ไปยัง client ที่เกี่ยวข้องแบบเดิม
           if (clientId) {

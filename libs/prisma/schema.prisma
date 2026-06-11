@@ -62,6 +62,8 @@ model Project {
   members              ProjectMember[]
   galleries            Gallery[]
   logs                 Log[]
+  // ความสัมพันธ์กับ Workflow (เพิ่มใหม่ แบบ additive ไม่กระทบของเดิม)
+  workflowConversations WorkflowConversation[]
   organizationId       String?         @map("organization_id") @db.VarChar(50)
   // ยอดจำกัด ของ Project
   limitImageAllowance  Int             @default(0) @map("limit_image_allowance")
@@ -126,6 +128,9 @@ model Gallery {
   generateConfig   Json?    @map("generate_config") @db.JsonB
   usedCredit       Float?   @default(0) @map("used_credit")
   usedImage        Int?     @default(0) @map("used_image")
+  // คอลัมน์ใหม่สำหรับแยกประเภทฟีเจอร์ — มี default + nullable เพื่อไม่ให้ insert เดิมพัง
+  featureType      String   @default("chat") @map("feature_type") @db.VarChar(50)
+  refFeatureId     String?  @map("ref_feature_id") @db.VarChar(100)
 
   @@map("gallery")
 }
@@ -152,8 +157,54 @@ model Log {
   galleryId       String?  @map("gallary_id") @db.VarChar(100)
   usedCredit      Float?   @default(0) @map("used_credit")
   usedImage       Int?     @default(0) @map("used_image")
+  // คอลัมน์ใหม่สำหรับแยกประเภทฟีเจอร์ — มี default + nullable เพื่อไม่ให้ insert เดิมพัง
+  featureType     String   @default("chat") @map("feature_type") @db.VarChar(50)
+  refFeatureId    String?  @map("ref_feature_id") @db.VarChar(100)
 
   @@map("log")
+}
+
+/// บทสนทนา/แคนวาสของ Workflow หนึ่งชุด (1 โปรเจกต์มีได้หลายชุด)
+model WorkflowConversation {
+  id          String   @id @default(uuid())
+  projectId   String   @map("project_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  project Project         @relation(fields: [projectId], references: [id])
+  blocks  WorkflowBlock[]
+
+  @@map("workflow_conversation")
+}
+
+/// หนึ่งบล็อก = หนึ่งงาน generate ภายใน Workflow conversation
+model WorkflowBlock {
+  id                     String   @id @default(uuid())
+  workflowConversationId String   @map("workflow_conversation_id")
+  // รายการ id ของบล็อกต้นทางที่นำ output มาเป็น input
+  parentBlockIds         String[] @default([]) @map("parent_block_ids")
+  type                   String   @db.VarChar(20) // "image" | "video"
+  status                 String   @default("pending") @db.VarChar(20) // pending|processing|success|failed
+  prompt                 String
+  model                  String
+  resolution             String
+  // payload เต็มที่ส่งให้ GenerateService (ให้ตรงกับฟอร์มเดิมของ Gen Image/Video)
+  generateConfig         Json?    @map("generate_config") @db.JsonB
+  // ใช้ map บล็อก -> task ของ pipeline เดิม (สำหรับ reuse)
+  taskId                 String?  @map("task_id")
+  outputUrl              String?  @map("output_url")
+  errorMessage           String?  @map("error_message")
+  positionX              Float    @default(0) @map("position_x")
+  positionY              Float    @default(0) @map("position_y")
+  duration               Float? // วินาทีที่ใช้ในการ generate
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  conversation WorkflowConversation @relation(fields: [workflowConversationId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_block")
 }
 
 model groups {
