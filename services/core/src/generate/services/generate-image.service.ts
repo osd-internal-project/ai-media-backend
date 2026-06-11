@@ -295,7 +295,11 @@ export class GenerateImageService {
           projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
       }
 
-      const credit = await this.generateHelperService.getUsedCredit(0, body, model);
+      const credit = await this.generateHelperService.getUsedCredit(
+        0,
+        body,
+        model,
+      );
       if (!credit) {
         return {
           isQuotaExceeded: true,
@@ -388,8 +392,7 @@ export class GenerateImageService {
     body: RequestImageGenerateDto,
     configApi: any,
     userId: string,
-    taskId: string,
-    imageUrls?: string[],
+    taskId: string, 
   ) {
     const axiosConfig: AxiosRequestConfig = {
       headers: {
@@ -399,17 +402,18 @@ export class GenerateImageService {
       httpsAgent: this.agent,
     };
 
-    // let imageUrls: string[] = [];
-    // if (body.image && body.image.length > 0) {
-    //     imageUrls = await Promise.all(
-    //         body.image.map((img) =>
-    //             this.minioClientSerives.getPresignedUrl(
-    //                 this.minioconfig.minioBucketUpload,
-    //                 img,
-    //             ),
-    //         ),
-    //     );
-    // }
+    let imageUrls: string[] = [];
+    if (body.image && body.image.length > 0) {
+      imageUrls = await Promise.all(
+        body.image.map(
+          async (img) =>
+            await this.tosService.getPreSignedUrl(
+              tosConfigs().tosBucket,
+              img,
+            ),
+        ),
+      );
+    }
     // prompt: `create ${body.images || 1} images ${body.text}`,
     const basePayload = {
       model: body.model,
@@ -424,6 +428,7 @@ export class GenerateImageService {
       ...(body.maxImages && {
         sequential_image_generation_options: { max_images: body.maxImages },
       }),
+      image: body.image,
     } as ByteplusePayloadImage;
     // Logger.log(basePayload, 'basePayload');
     return { basePayload, axiosConfig };
@@ -513,7 +518,7 @@ export class GenerateImageService {
       console.log(`🚫 Task cancelled: ${taskId}`);
 
       return { success: true, message: 'Task cancelled successfully' };
-    } catch (error) {
+    } catch (error:any) {
       console.error('Error cancelling task:', error);
       return { success: false, message: error.message };
     }
