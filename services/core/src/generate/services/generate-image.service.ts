@@ -419,7 +419,7 @@ export class GenerateImageService {
       model: body.model,
       prompt: body.prompt,
       response_format: 'url',
-      ...(body.image.length > 0 && { image: imageUrls }),
+      ...(imageUrls.length > 0 && { image: imageUrls }),
       stream: configApi.stream ?? false,
       watermark: configApi.watermark ?? false,
       ratio: body.ratio,
@@ -428,7 +428,6 @@ export class GenerateImageService {
       ...(body.maxImages && {
         sequential_image_generation_options: { max_images: body.maxImages },
       }),
-      image: body.image,
     } as ByteplusePayloadImage;
     // Logger.log(basePayload, 'basePayload');
     return { basePayload, axiosConfig };
