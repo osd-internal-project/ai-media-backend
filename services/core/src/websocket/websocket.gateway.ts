@@ -688,6 +688,19 @@ export class WebsocketGatewayService
     this.server.emit(event, data);
   }
 
+  /**
+   * ส่ง event เข้าห้องที่ระบุ (ใช้ socket.io server ตัวเดียวกับที่ client เชื่อมต่อ)
+   * เพิ่มเพื่อให้ฟีเจอร์ Workflow broadcast เข้าห้อง `${projectId}:workflow` ได้
+   * โดยไม่ต้องมี gateway แยก (ไม่กระทบ handler เดิม)
+   */
+  emitToRoom(room: string, event: string, data: any): void {
+    if (!this.server) {
+      this.logger.warn(`Socket server not ready, skip emit ${event}`);
+      return;
+    }
+    this.server.to(room).emit(event, data);
+  }
+
   async getConnectedClients(): Promise<string[]> {
     return await this.redis.smembers('ws:active-clients');
   }

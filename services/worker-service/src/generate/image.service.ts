@@ -394,17 +394,26 @@ export class ImageProcessor extends WorkerHost {
         },
       });
       if (body.image.length > 0) {
-        body.image.map((image) => {
-          const imageName = path.parse(image).name;
-          this.refImageRepository.update({
-            where: {
-              uid: imageName,
-            },
-            data: {
-              status: 'completed',
-            },
-          });
-        });
+        await Promise.all(
+          body.image
+            // ข้าม reference ที่เป็น URL (เช่น output ของ workflow ที่ presign ตั้งแต่ submit)
+            // เพราะไม่มี refImage record และจะทำให้ update พังด้วย "Record not found"
+            .filter((image) => !/^https?:\/\//i.test(image))
+            .map((image) => {
+              const imageName = path.parse(image).name;
+              // ใช้ updateMany เพื่อไม่ throw ถ้าไม่พบ record (กัน worker crash)
+              return this.refImageRepository
+                .updateMany({
+                  where: { uid: imageName },
+                  data: { status: 'completed' },
+                })
+                .catch((err) =>
+                  this.logger.warn(
+                    `refImage update skipped (${imageName}): ${err?.message}`,
+                  ),
+                );
+            }),
+        );
       }
 
       this.logger.log(
@@ -620,12 +629,15 @@ export class ImageProcessor extends WorkerHost {
   ) {
     const images = (await body?.image)
       ? await Promise.all(
-          body.image.map(
-            async (img) =>
-              await this.tosService.getPreSignedUrl(
-                tosConfigs().tosBucket,
-                img,
-              ),
+          body.image.map(async (img) =>
+            // ค่าที่เป็น URL อยู่แล้ว (เช่น reference จาก workflow ที่ presign ตั้งแต่ submit)
+            // ส่งต่อตรง ๆ ไม่ presign ซ้ำ — ส่วน key ปกติยัง presign เหมือนเดิม
+            /^https?:\/\//i.test(img)
+              ? img
+              : await this.tosService.getPreSignedUrl(
+                  tosConfigs().tosBucket,
+                  img,
+                ),
           ),
         )
       : null;

@@ -1,6 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { WorkflowConversationRepository } from '@ai-media/share';
+import { WorkflowBlock, WorkflowConversation } from '@prisma/client';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { WorkflowMediaService } from './workflow-media.service';
+
+/** conversation พร้อม relation blocks (include ใน findOne รับประกัน blocks ตอน runtime) */
+type ConversationWithBlocks = WorkflowConversation & {
+  blocks: WorkflowBlock[];
+};
 
 /**
  * จัดการ WorkflowConversation (รายการแคนวาส workflow ของแต่ละโปรเจกต์)
@@ -10,6 +17,7 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 export class WorkflowConversationsService {
   constructor(
     private readonly conversationRepo: WorkflowConversationRepository,
+    private readonly mediaService: WorkflowMediaService,
   ) {}
 
   /**
@@ -45,14 +53,30 @@ export class WorkflowConversationsService {
    * @throws NotFoundException เมื่อไม่พบ
    */
   async findOne(id: string) {
-    const conversation = await this.conversationRepo.findOne({
+    const conversation = (await this.conversationRepo.findOne({
       where: { id },
       include: { blocks: { orderBy: { createdAt: 'asc' } } },
-    });
+    })) as ConversationWithBlocks | null;
     if (!conversation) {
       throw new NotFoundException(`Workflow conversation ${id} not found`);
     }
-    return conversation;
+
+    // presign object name ของแต่ละบล็อกตอนอ่าน เพื่อให้รูป/วิดีโอแสดงได้หลังโหลดแคนวาสใหม่
+    // (เหมือน gallery ที่ presign ใหม่ทุกครั้งที่โหลด — outputUrl ที่เก็บใน DB เป็น object name ดิบ)
+    const blocks = await Promise.all(
+      (conversation.blocks ?? []).map(async (block) => ({
+        ...block,
+        outputUrl: block.outputUrl
+          ? await this.mediaService.presignObject(
+              conversation.projectId,
+              block.type,
+              block.outputUrl,
+            )
+          : block.outputUrl,
+      })),
+    );
+
+    return { ...conversation, blocks };
   }
 
   /**

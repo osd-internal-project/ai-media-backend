@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { GenerateService } from '../generate/services/generate.service';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { UpdatePositionDto } from './dto/update-position.dto';
+import { WorkflowMediaService } from './workflow-media.service';
 
 /**
  * จัดการ WorkflowBlock — แต่ละบล็อกคือหนึ่งงาน generate
@@ -30,6 +31,7 @@ export class WorkflowBlocksService {
     private readonly blockRepo: WorkflowBlockRepository,
     private readonly conversationRepo: WorkflowConversationRepository,
     private readonly generateService: GenerateService,
+    private readonly mediaService: WorkflowMediaService,
   ) {}
 
   /**
@@ -203,23 +205,40 @@ export class WorkflowBlocksService {
 
     if (parentOutputs.length === 0) return body;
 
+    // presign output ของบล็อกต้นทางตั้งแต่ตอน submit → ได้ URL ที่ provider ดึงได้จริง
+    // (object name ดิบ presign ที่ worker ไม่ได้เพราะ key ไม่มี path organize/.../-generate)
+    const presignedParents = await Promise.all(
+      parentOutputs.map(async (p) => ({
+        type: p.type,
+        url: await this.mediaService.presignObject(
+          projectId,
+          p.type,
+          p.objectName,
+        ),
+      })),
+    );
+    const validParents = presignedParents.filter(
+      (p): p is { type: string; url: string } => Boolean(p.url),
+    );
+
     if (block.type === 'image') {
-      // รวม reference เดิม (ถ้ามี) กับ output ของบล็อกต้นทาง
+      // image child: รับ reference เป็นรูปเท่านั้น (UI กันไม่ให้ video parent มาที่นี่)
       body.image = [
         ...(Array.isArray(config.image) ? config.image : []),
-        ...parentOutputs,
+        ...validParents.map((p) => p.url),
       ];
     } else {
       // วิดีโอ: seedance2 ใช้ files[] (multi-file) ส่วน seedance1 ใช้ image[] (first/last)
       if (Array.isArray(config.files) && config.files.length > 0) {
         body.files = [
           ...config.files,
-          ...parentOutputs.map((url) => ({ type: 'image', url })),
+          // คงชนิด reference ตาม parent — วิดีโอเป็น type:'video', รูปเป็น type:'image'
+          ...validParents.map((p) => ({ type: p.type, url: p.url })),
         ];
       } else {
         body.image = [
           ...(Array.isArray(config.image) ? config.image : []),
-          ...parentOutputs,
+          ...validParents.map((p) => p.url),
         ];
       }
     }
@@ -228,18 +247,19 @@ export class WorkflowBlocksService {
   }
 
   /**
-   * ดึง outputUrl ของบล็อกต้นทางที่ generate สำเร็จแล้ว
+   * ดึง output ของบล็อกต้นทางที่ generate สำเร็จแล้ว พร้อมชนิด (image/video)
+   * outputUrl ที่เก็บไว้คือ object name ดิบ → ใช้เป็น reference ให้ pipeline เดิมได้ตรง ๆ
    */
   private async collectParentOutputs(
     parentBlockIds: string[],
-  ): Promise<string[]> {
+  ): Promise<{ type: string; objectName: string }[]> {
     if (!parentBlockIds || parentBlockIds.length === 0) return [];
     const parents = await this.blockRepo.findMany({
       where: { id: { in: parentBlockIds } },
     });
     return parents
-      .map((p) => p.outputUrl)
-      .filter((url): url is string => Boolean(url));
+      .filter((p) => Boolean(p.outputUrl))
+      .map((p) => ({ type: p.type, objectName: p.outputUrl as string }));
   }
 
   /**

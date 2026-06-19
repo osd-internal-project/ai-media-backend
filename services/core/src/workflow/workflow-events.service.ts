@@ -12,7 +12,17 @@ import {
 import { WorkflowBlock } from '@prisma/client';
 import Redis from 'ioredis';
 import { redisConfigs } from '../configs';
-import { WorkflowGateway } from './workflow.gateway';
+import { WebsocketGatewayService } from '../websocket/websocket.gateway';
+import { WorkflowMediaService } from './workflow-media.service';
+
+/** payload ของ event workflow.block.updated ที่ส่งให้ frontend */
+interface WorkflowBlockUpdatePayload {
+  blockId: string;
+  status: 'pending' | 'processing' | 'success' | 'failed';
+  progress?: number;
+  outputUrl?: string | null;
+  errorMessage?: string | null;
+}
 
 /**
  * ช่องสัญญาณ Redis ที่ worker-service เดิม publish อยู่แล้ว
@@ -38,7 +48,7 @@ const WORKER_CHANNELS = [
  * ฟัง event จาก worker (ผ่าน Redis) จับคู่ด้วย taskId กลับมายังบล็อก แล้ว:
  *  - อัปเดตสถานะ/progress/outputUrl/errorMessage ของบล็อก
  *  - เมื่อสำเร็จ "ประทับ" แถว log/gallery ที่ pipeline เดิมสร้างไว้ ให้เป็น featureType=workflow
- *  - emit `workflow.block.updated` ผ่าน WorkflowGateway
+ *  - emit `workflow.block.updated` ผ่าน WebsocketGatewayService เดิม (server เดียวกับ client)
  *
  * event ที่ไม่มีบล็อกตรงกับ taskId = งาน generate ปกติ → ข้ามไป (ไม่กระทบของเดิม)
  */
@@ -51,8 +61,24 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
     private readonly blockRepo: WorkflowBlockRepository,
     private readonly logRepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
-    private readonly gateway: WorkflowGateway,
+    private readonly gateway: WebsocketGatewayService,
+    private readonly mediaService: WorkflowMediaService,
   ) {}
+
+  /**
+   * ส่ง event workflow.block.updated เข้าห้อง `${projectId}:workflow`
+   * ผ่าน gateway เดิม (server เดียวกับที่ client เชื่อมต่อ)
+   */
+  private emitUpdate(
+    projectId: string,
+    payload: WorkflowBlockUpdatePayload,
+  ): void {
+    this.gateway.emitToRoom(
+      `${projectId}:workflow`,
+      'workflow.block.updated',
+      payload,
+    );
+  }
 
   async onModuleInit(): Promise<void> {
     const conf = redisConfigs();
@@ -149,7 +175,7 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
       where: { id: block.id },
       data: { status: 'processing' },
     });
-    this.gateway.emitBlockUpdate(payload.projectId, {
+    this.emitUpdate(payload.projectId, {
       blockId: block.id,
       status: 'processing',
       progress,
@@ -169,31 +195,32 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
       await this.onProgress(block, payload);
       return;
     }
-    const outputUrl =
-      payload?.data?.imageUrl ??
-      payload?.imageUrl ??
-      payload?.images?.[0]?.imageUrl ??
-      null;
-    await this.markSuccess(block, outputUrl, payload.projectId);
+    // ดึง object name จาก gallery row ที่ worker เขียนไว้ (canonical) — fallback จาก payload
+    const objectName =
+      (await this.resolveObjectName(block.taskId)) ??
+      this.firstString(payload?.images) ??
+      this.firstString(payload?.data?.imageUrl) ??
+      this.firstString(payload?.imageUrl);
+    await this.markSuccess(block, objectName, payload.projectId);
   }
 
   /**
-   * เก็บ url วิดีโอที่อัปโหลดเสร็จ (ยังไม่ปิดงาน รอ worker:video-complete)
+   * worker:video-upload-success — แค่แจ้ง progress (ยังไม่ปิดงาน รอ worker:video-complete)
    */
   private async onVideoUpload(
     block: WorkflowBlock,
     payload: Record<string, any>,
   ): Promise<void> {
-    const outputUrl = payload?.videoUrl ?? null;
     await this.blockRepo.update({
       where: { id: block.id },
-      data: { status: 'processing', outputUrl },
+      data: { status: 'processing' },
     });
-    this.gateway.emitBlockUpdate(payload.projectId, {
+    this.emitUpdate(payload.projectId, {
       blockId: block.id,
       status: 'processing',
       progress: 0.9,
-      outputUrl,
+      // วิดีโอที่อัปโหลดแล้วมักเป็น presigned url อยู่แล้ว — ใช้แสดง preview ระหว่างรอจบงาน
+      outputUrl: this.firstString(payload?.videoUrl),
     });
   }
 
@@ -204,30 +231,69 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
     block: WorkflowBlock,
     payload: Record<string, any>,
   ): Promise<void> {
-    const outputUrl = payload?.videoUrl ?? block.outputUrl ?? null;
-    await this.markSuccess(block, outputUrl, payload.projectId);
+    const objectName =
+      (await this.resolveObjectName(block.taskId)) ??
+      this.firstString(payload?.videoUrl);
+    await this.markSuccess(block, objectName, payload.projectId);
   }
 
   /**
-   * ตั้งบล็อกเป็น success + ประทับ featureType ลงแถว log/gallery ของ pipeline เดิม
+   * ตั้งบล็อกเป็น success + เก็บ object name + ประทับ featureType + emit presigned url
+   * - เก็บ object name ดิบใน outputUrl (ไม่ใช่ array, ไม่ใช่ presigned ที่หมดอายุ)
+   * - presign ตอน emit เพื่อให้หน้าบ้านแสดงรูป/วิดีโอได้ทันที
    */
   private async markSuccess(
     block: WorkflowBlock,
-    outputUrl: string | null,
+    objectName: string | null,
     projectId: string,
   ): Promise<void> {
     const duration = (Date.now() - block.createdAt.getTime()) / 1000;
     await this.blockRepo.update({
       where: { id: block.id },
-      data: { status: 'success', outputUrl, duration },
+      data: { status: 'success', outputUrl: objectName, duration },
     });
-    await this.stampFeatureRows(block);
-    this.gateway.emitBlockUpdate(projectId, {
+
+    // ประทับ featureType แยก try/catch — ไม่ให้พังการ emit ถ้า stamp ล้มเหลว
+    try {
+      await this.stampFeatureRows(block);
+    } catch (error) {
+      this.logger.error(`stampFeatureRows failed: ${this.errMsg(error)}`);
+    }
+
+    const presignedUrl = await this.mediaService.presignObject(
+      projectId,
+      block.type,
+      objectName,
+    );
+    this.emitUpdate(projectId, {
       blockId: block.id,
       status: 'success',
       progress: 1,
-      outputUrl,
+      outputUrl: presignedUrl,
     });
+  }
+
+  /**
+   * ดึง object name ของ output จาก gallery row (แหล่งข้อมูล canonical ที่ worker เขียนไว้)
+   */
+  private async resolveObjectName(
+    taskId: string | null,
+  ): Promise<string | null> {
+    if (!taskId) return null;
+    const gallery = await this.galleryRepo.findOne({ where: { taskId } });
+    return this.firstString(gallery?.imageUrl);
+  }
+
+  /**
+   * คืนค่า string ตัวแรก — รองรับทั้ง string เดี่ยวและ array (กัน outputUrl เป็น array)
+   */
+  private firstString(value: unknown): string | null {
+    if (typeof value === 'string' && value.length > 0) return value;
+    if (Array.isArray(value)) {
+      const first = value.find((v) => typeof v === 'string' && v.length > 0);
+      return (first as string) ?? null;
+    }
+    return null;
   }
 
   /**
@@ -243,7 +309,7 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
       where: { id: block.id },
       data: { status: 'failed', errorMessage },
     });
-    this.gateway.emitBlockUpdate(payload.projectId, {
+    this.emitUpdate(payload.projectId, {
       blockId: block.id,
       status: 'failed',
       errorMessage,

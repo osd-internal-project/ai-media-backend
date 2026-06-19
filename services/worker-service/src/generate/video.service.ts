@@ -662,6 +662,16 @@ export class VideoProcessor extends WorkerHost {
     return builder(body, sendConfig);
   }
 
+  /**
+   * presign เฉพาะค่าที่เป็น object key — ถ้าเป็น URL อยู่แล้ว (เช่น reference จาก workflow
+   * ที่ presign ตั้งแต่ submit) ส่งต่อตรง ๆ ไม่ presign ซ้ำ
+   */
+  private async presignRef(value: string): Promise<string> {
+    return /^https?:\/\//i.test(value)
+      ? value
+      : this.tosService.getPreSignedUrl(tosConfigs().tosBucket, value);
+  }
+
   private async buildSeedance1Payload(
     body: RequestVideoGenerateDto,
     _modelDetail: any,
@@ -676,10 +686,7 @@ export class VideoProcessor extends WorkerHost {
               {
                 type: 'image_url',
                 image_url: {
-                  url: await this.tosService.getPreSignedUrl(
-                    tosConfigs().tosBucket,
-                    body.image[0],
-                  ),
+                  url: await this.presignRef(body.image[0]),
                 },
                 role: 'first_frame',
               },
@@ -690,10 +697,7 @@ export class VideoProcessor extends WorkerHost {
               {
                 type: 'image_url',
                 image_url: {
-                  url: await this.tosService.getPreSignedUrl(
-                    tosConfigs().tosBucket,
-                    body.image[1],
-                  ),
+                  url: await this.presignRef(body.image[1]),
                 },
                 role: 'last_frame',
               },
@@ -719,10 +723,7 @@ export class VideoProcessor extends WorkerHost {
           return {
             type: 'image_url',
             image_url: {
-              url: await this.tosService.getPreSignedUrl(
-                tosConfigs().tosBucket,
-                file.url,
-              ),
+              url: await this.presignRef(file.url),
             },
             role: 'reference_image',
           };
@@ -730,10 +731,7 @@ export class VideoProcessor extends WorkerHost {
           return {
             type: 'video_url',
             video_url: {
-              url: await this.tosService.getPreSignedUrl(
-                tosConfigs().tosBucket,
-                file.url,
-              ),
+              url: await this.presignRef(file.url),
             },
             role: 'reference_video',
           };
@@ -741,10 +739,7 @@ export class VideoProcessor extends WorkerHost {
           return {
             type: 'audio_url',
             audio_url: {
-              url: await this.tosService.getPreSignedUrl(
-                tosConfigs().tosBucket,
-                file.url,
-              ),
+              url: await this.presignRef(file.url),
             },
             role: 'reference_audio',
           };
@@ -761,10 +756,7 @@ export class VideoProcessor extends WorkerHost {
               {
                 type: 'image_url',
                 image_url: {
-                  url: await this.tosService.getPreSignedUrl(
-                    tosConfigs().tosBucket,
-                    body.image[0],
-                  ),
+                  url: await this.presignRef(body.image[0]),
                 },
                 role: 'first_frame',
               },
@@ -775,10 +767,7 @@ export class VideoProcessor extends WorkerHost {
               {
                 type: 'image_url',
                 image_url: {
-                  url: await this.tosService.getPreSignedUrl(
-                    tosConfigs().tosBucket,
-                    body.image[1],
-                  ),
+                  url: await this.presignRef(body.image[1]),
                 },
                 role: 'last_frame',
               },
