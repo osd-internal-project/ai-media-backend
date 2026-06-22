@@ -333,7 +333,7 @@ export class GenerateImageService extends BaseGenerateService {
         `task:${taskId}`,
         JSON.stringify(task),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
 
       console.log(`🚫 Task cancelled: ${taskId}`);

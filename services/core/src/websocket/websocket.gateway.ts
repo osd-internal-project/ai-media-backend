@@ -552,8 +552,8 @@ export class WebsocketGatewayService
         data.type,
       );
       Logger.debug(`{ usedCredit, totalCredit }:`, { usedCredit, totalCredit });
-      await this.redis.set(usedCreditKey, usedCredit);
-      await this.redis.set(totalCreditKey, totalCredit);
+      await this.redis.set(usedCreditKey, usedCredit, 'EX', 60 * 60);
+      await this.redis.set(totalCreditKey, totalCredit, 'EX', 60 * 60);
       client.emit('chat:used-credit', {
         success: true,
         data: { usedCredit, totalCredit },

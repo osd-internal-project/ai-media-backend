@@ -89,6 +89,16 @@ export class GenerateDreamactorService extends BaseGenerateService {
       genneratedStatus: 'PENDING',
       status: false,
       usedCredit: creditResult.incrementCredit,
+      // denormalize metadata จาก log ลง gallery (dual-write)
+      tokenUsed: creditResult.onhandToken,
+      usedImage: 1,
+      ImageUsed: 1,
+      generateAudio: body.generateAudio,
+      referenceImages:
+        body.image.length > 0
+          ? body.image.filter((item: any) => item !== null)
+          : [],
+      resolution: body.resolution,
       generateConfig: this.generateHelperService.buildGenerateConfig({
         ratio: '',
         width: 0,

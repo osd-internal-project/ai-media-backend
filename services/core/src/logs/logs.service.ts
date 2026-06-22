@@ -47,9 +47,10 @@ export class LogsService {
           where: { token: userId },
         })
       : null;
-    const tasks = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const tasks = await this.galleryRepo.findMany({
       where: {
-        status: { not: 'failed' },
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'image',
@@ -182,9 +183,10 @@ export class LogsService {
           where: { token: userId },
         })
       : null;
-    const tasks = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const tasks = await this.galleryRepo.findMany({
       where: {
-        status: { not: 'failed' },
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'video',
@@ -337,9 +339,10 @@ export class LogsService {
           where: { token: userId },
         })
       : null;
-    const tasks = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const tasks = await this.galleryRepo.findMany({
       where: {
-        status: { not: 'failed' },
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'omnihumen',
@@ -484,9 +487,10 @@ export class LogsService {
           where: { token: userId },
         })
       : null;
-    const tasks = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const tasks = await this.galleryRepo.findMany({
       where: {
-        status: { not: 'failed' },
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'dreamactor',
@@ -663,11 +667,12 @@ export class LogsService {
     //   orderBy: { createdAt: 'desc' },
     // });
 
-    const logData = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const logData = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
         typeGenerate: 'video',
-        status: { not: 'failed' },
+        genneratedStatus: { not: 'FAILED' },
       },
       select: {
         taskId: true,

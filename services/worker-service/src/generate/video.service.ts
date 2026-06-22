@@ -340,6 +340,8 @@ export class VideoProcessor extends WorkerHost {
               thumbnailUrl: result.thumbnail,
               genneratedStatus: 'SUCCESS',
               usedCredit: realCredit.credit,
+              // denormalize token จริงจาก log ลง gallery (dual-write)
+              tokenUsed: usage.total_tokens,
             },
           });
 
@@ -369,7 +371,7 @@ export class VideoProcessor extends WorkerHost {
               redisVideoCacheKey,
               usedCredit.toString(),
               'EX',
-              24 * 60 * 60,
+              60 * 60,
             );
           }
           break;
@@ -399,7 +401,7 @@ export class VideoProcessor extends WorkerHost {
             redisVideoCacheKey,
             usedCredit.toString(),
             'EX',
-            24 * 60 * 60,
+            60 * 60,
           );
           // console.error("Error:", getResult.data.error);
           break;
@@ -497,7 +499,7 @@ export class VideoProcessor extends WorkerHost {
         redisVideoCacheKey,
         usedCredit.toString(),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
       await this.galleryRepo.updateMany({
         where: { taskId },
@@ -543,7 +545,7 @@ export class VideoProcessor extends WorkerHost {
         `task:${taskId}`,
         JSON.stringify(updatedTask),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
     }
   }

@@ -350,6 +350,8 @@ export class OmnihumenProcessor extends WorkerHost {
               imageUrl: result.file,
               thumbnailUrl: result.thumbnail,
               genneratedStatus: 'SUCCESS',
+              // denormalize token จริงจาก log ลง gallery (dual-write)
+              tokenUsed: 0,
             },
           });
           await this.logrepo.updateMany({
@@ -375,7 +377,7 @@ export class OmnihumenProcessor extends WorkerHost {
               redisVideoCacheKey,
               usedCredit.toString(),
               'EX',
-              24 * 60 * 60,
+              60 * 60,
             );
           }
           break;
@@ -403,7 +405,7 @@ export class OmnihumenProcessor extends WorkerHost {
             redisVideoCacheKey,
             usedCredit.toString(),
             'EX',
-            24 * 60 * 60,
+            60 * 60,
           );
           // console.error("Error:", getResult.data.error);
           break;
@@ -502,7 +504,7 @@ export class OmnihumenProcessor extends WorkerHost {
         redisVideoCacheKey,
         usedCredit.toString(),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
       await this.galleryRepo.updateMany({
         where: { taskId },
@@ -548,7 +550,7 @@ export class OmnihumenProcessor extends WorkerHost {
         `task:${taskId}`,
         JSON.stringify(updatedTask),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
     }
   }

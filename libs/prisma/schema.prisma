@@ -131,6 +131,13 @@ model Gallery {
   // คอลัมน์ใหม่สำหรับแยกประเภทฟีเจอร์ — มี default + nullable เพื่อไม่ให้ insert เดิมพัง
   featureType      String   @default("chat") @map("feature_type") @db.VarChar(50)
   refFeatureId     String?  @map("ref_feature_id") @db.VarChar(100)
+  // คอลัมน์ที่ denormalize มาจาก log (metadata ระดับ request) — nullable/default เพื่อไม่ให้ insert เดิมพัง
+  referenceImages  String[] @default([])
+  resolution       String?
+  ratio            String?
+  generateAudio    Boolean? @default(false)
+  tokenUsed        Float?   @default(0)
+  ImageUsed        Int?     @default(0)
 
   @@map("gallery")
 }

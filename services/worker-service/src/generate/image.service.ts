@@ -272,6 +272,14 @@ export class ImageProcessor extends WorkerHost {
             genneratedStatus: 'SUCCESS',
             status: false,
             usedCredit: credit.credit,
+            // denormalize metadata จาก log ลง gallery (dual-write)
+            usedImage: usage.generated_images || 0,
+            tokenUsed: usage.total_tokens || 0,
+            ImageUsed: usage.generated_images || 0,
+            resolution: body.resolution,
+            ratio: body.ratio,
+            generateAudio: false,
+            referenceImages: body.image.length > 0 ? body.image : [],
             generateConfig: this.buildGenerateConfig({
               ratio: body.ratio,
               width: body.width,
@@ -352,7 +360,7 @@ export class ImageProcessor extends WorkerHost {
           redisImageCacheKey,
           usedCredit.toString(),
           'EX',
-          24 * 60 * 60,
+          60 * 60,
         );
       }
       // 4. อัพเดทสถานะเป็น completed
@@ -498,6 +506,13 @@ export class ImageProcessor extends WorkerHost {
           typeGenerate: 'image',
           genneratedStatus: 'FAILED',
           status: false,
+          // denormalize metadata จาก log ลง gallery (dual-write)
+          tokenUsed: 0,
+          ImageUsed: 0,
+          resolution: body.resolution,
+          ratio: body.ratio,
+          generateAudio: false,
+          referenceImages: body.image.length > 0 ? body.image : [],
           generateConfig: this.buildGenerateConfig({
             ratio: body.ratio,
             width: body.width,
@@ -578,7 +593,7 @@ export class ImageProcessor extends WorkerHost {
         `task:${taskId}`,
         JSON.stringify(updatedTask),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
     }
   }

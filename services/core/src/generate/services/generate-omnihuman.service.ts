@@ -95,6 +95,15 @@ export class GenerateOmnihumanService extends BaseGenerateService {
       status: false,
       usedCredit: creditResult.incrementCredit,
       usedImage: 1,
+      // denormalize metadata จาก log ลง gallery (dual-write)
+      tokenUsed: creditResult.onhandToken,
+      ImageUsed: 1,
+      generateAudio: body.generateAudio,
+      referenceImages:
+        body.image.length > 0
+          ? body.image.filter((item: any) => item !== null)
+          : [],
+      resolution: body.resolution,
       generateConfig: this.generateHelperService.buildGenerateConfig({
         resolution: body.resolution,
         seed: body.seed,

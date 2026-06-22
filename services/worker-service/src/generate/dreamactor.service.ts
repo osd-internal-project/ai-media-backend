@@ -348,6 +348,8 @@ export class DreamactorProcessor extends WorkerHost {
               imageUrl: result.file,
               thumbnailUrl: result.thumbnail,
               genneratedStatus: 'SUCCESS',
+              // denormalize token จริงจาก log ลง gallery (dual-write)
+              tokenUsed: 0,
             },
           });
           await this.logrepo.updateMany({
@@ -379,7 +381,7 @@ export class DreamactorProcessor extends WorkerHost {
             redisVideoCacheKey,
             usedCredit.toString(),
             'EX',
-            24 * 60 * 60,
+            60 * 60,
           );
           break;
         } else {
@@ -486,7 +488,7 @@ export class DreamactorProcessor extends WorkerHost {
         redisVideoCacheKey,
         usedCredit.toString(),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
       throw error; // Stop retrying by not throwing error
     }
@@ -525,7 +527,7 @@ export class DreamactorProcessor extends WorkerHost {
         `task:${taskId}`,
         JSON.stringify(updatedTask),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
     }
   }

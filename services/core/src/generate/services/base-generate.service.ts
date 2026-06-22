@@ -320,7 +320,7 @@ export abstract class BaseGenerateService {
         cacheKey,
         creditResult.usedCredit.toString(),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
 
       const job = await this.queue.add(
@@ -355,7 +355,7 @@ export abstract class BaseGenerateService {
           ),
         ),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
 
       console.log(
