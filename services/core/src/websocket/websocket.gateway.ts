@@ -165,7 +165,9 @@ export class WebsocketGatewayService
     const activeTasks = await this.redis.smembers(
       `ws:client-tasks:${client.id}`,
     );
-    await Promise.all(activeTasks.map((taskId) => this.generateService.cancelImageTask(taskId)));
+    await Promise.all(
+      activeTasks.map((taskId) => this.generateService.cancelImageTask(taskId)),
+    );
     await this.redis.del(`ws:client-tasks:${client.id}`);
   }
 
@@ -182,7 +184,10 @@ export class WebsocketGatewayService
 
       // เรียก service เพื่อสร้าง task
       // Broadcast to room
-      const result = await this.generateService.createImageGenerationTask(data, client.id)
+      const result = await this.generateService.createImageGenerationTask(
+        data,
+        client.id,
+      );
       this.server.to(roomName).emit('task:started', {
         taskId: data.taskId,
         message: 'Task started',
@@ -245,7 +250,10 @@ export class WebsocketGatewayService
       const { projectId } = data;
       const roomName = `${projectId}:video`;
 
-      const result = await this.generateService.createVideoGenerationTask(data, client.id)
+      const result = await this.generateService.createVideoGenerationTask(
+        data,
+        client.id,
+      );
       // console.log('🎥 Generate Video result: ', result);
       // Broadcast to room
       this.server.to(roomName).emit('video-task:created', {
@@ -532,8 +540,8 @@ export class WebsocketGatewayService
         token,
         data.type,
       );
-      await this.redis.set(usedCreditKey, usedCredit);
-      await this.redis.set(totalCreditKey, totalCredit);
+      await this.redis.set(usedCreditKey, usedCredit, 'EX', 60 * 60);
+      await this.redis.set(totalCreditKey, totalCredit, 'EX', 60 * 60);
       client.emit('chat:used-credit', {
         success: true,
         data: { usedCredit, totalCredit },
@@ -645,7 +653,9 @@ export class WebsocketGatewayService
       this.server.to(roomName).emit('chat:message', payload);
       this.logger.log(`Message sent to room ${roomName}: ${message}`);
     } catch (error) {
-      this.logger.error(`Error sending message: ${this.getErrorMessage(error)}`);
+      this.logger.error(
+        `Error sending message: ${this.getErrorMessage(error)}`,
+      );
       client.emit('error', { message: 'Failed to send message' });
     }
   }
