@@ -12,4 +12,9 @@ export default () => ({
     redirectUri: process.env.KEYCLOAK_REDIRECT_URI,
   },
   emailApiUrl: process.env.EMAIL_API_URL || 'http://localhost:5000',
+  omise: {
+    secretKey: process.env.OMISE_SECRET_KEY,
+    apiUrl: process.env.OMISE_API_URL || 'https://api.omise.co',
+    apiVersion: process.env.OMISE_API_VERSION || '2019-05-29',
+  },
 });

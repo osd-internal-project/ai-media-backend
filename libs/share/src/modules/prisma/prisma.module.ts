@@ -37,6 +37,15 @@ import {
   ContactSaleLogRepository,
   WorkflowConversationRepository,
   WorkflowBlockRepository,
+  BillingProfileRepository,
+  CustomerRepository,
+  InvoiceRepository,
+  ReceiptRepository,
+  PaymentRepository,
+  WhtRequestRepository,
+  WhtRequestStatusLogRepository,
+  DocumentCounterRepository,
+  PendingPurchaseRepository,
 } from 'src/repositories';
 
 const services = [
@@ -77,6 +86,15 @@ const services = [
   ContactSaleLogRepository,
   WorkflowConversationRepository,
   WorkflowBlockRepository,
+  BillingProfileRepository,
+  CustomerRepository,
+  InvoiceRepository,
+  ReceiptRepository,
+  PaymentRepository,
+  WhtRequestRepository,
+  WhtRequestStatusLogRepository,
+  DocumentCounterRepository,
+  PendingPurchaseRepository,
 ];
 
 @Module({

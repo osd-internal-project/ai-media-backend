@@ -869,3 +869,260 @@ model ContactSaleLog {
 
   @@map("contact_sale_log")
 }
+
+// ─── Payment & Billing Models ─────────────────────────────────────────────────
+// ใช้ scalar FK (organizationId/userId เป็น String) แบบเดียวกับ CouponCodeUsage
+// จึงไม่ต้องแก้ไข model เดิม (Organization/users)
+
+/// ข้อมูลใบกำกับภาษีของผู้ใช้ — มีได้หลายโปรไฟล์ต่อผู้ใช้ (รองรับบริษัทหลายสาขา)
+model BillingProfile {
+  id             String  @id @default(uuid()) @db.Uuid
+  userId         String  @map("user_id") @db.VarChar(50)
+  organizationId String  @map("organization_id") @db.VarChar(50)
+  type           String  @map("type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
+
+  // Individual
+  fullName   String? @map("full_name") @db.VarChar(200)
+  nationalId String? @map("national_id") @db.VarChar(20)
+
+  // Juristic
+  companyName String? @map("company_name") @db.VarChar(200)
+  taxId       String? @map("tax_id") @db.VarChar(20) // เลขประจำตัวผู้เสียภาษี 13 หลัก
+  branchCode  String? @map("branch_code") @db.VarChar(20) // เลขที่สำนักงานใหญ่/สาขา
+  branchName  String? @map("branch_name") @db.VarChar(200)
+  contactName String? @map("contact_name") @db.VarChar(200)
+  phone       String? @map("phone") @db.VarChar(50)
+  email       String? @map("email") @db.VarChar(200)
+
+  address   String   @map("address") @db.Text
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("billing_profile")
+}
+
+/// ทะเบียนลูกค้า — สร้าง customerCode (C-000001) เฉพาะเมื่อชำระเงินสำเร็จเท่านั้น
+model Customer {
+  id             String  @id @default(uuid()) @db.Uuid
+  customerCode   String  @unique @map("customer_code") @db.VarChar(20) // C-000001
+  type           String  @map("type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
+  organizationId String  @map("organization_id") @db.VarChar(50)
+  name           String  @map("name") @db.VarChar(200) // ชื่อบุคคล/บริษัท (snapshot)
+  taxId          String? @map("tax_id") @db.VarChar(20)
+  branchCode     String? @map("branch_code") @db.VarChar(20)
+  branchName     String? @map("branch_name") @db.VarChar(200)
+  address        String  @map("address") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  invoices Invoice[]
+
+  // taxId + branchCode ซ้ำ ⇒ reuse code เดิม; taxId เดิมแต่ branch ต่าง ⇒ record ใหม่
+  @@unique([taxId, branchCode])
+  @@map("customer")
+}
+
+/// ใบแจ้งหนี้ — สร้างทันทีเมื่อผู้ใช้กดดำเนินการชำระเงิน (INV-YYYYMM000001)
+model Invoice {
+  id               String  @id @default(uuid()) @db.Uuid
+  invoiceNo        String  @unique @map("invoice_no") @db.VarChar(30) // INV-YYYYMM000001
+  organizationId   String  @map("organization_id") @db.VarChar(50)
+  userId           String  @map("user_id") @db.VarChar(50)
+  billingProfileId String  @map("billing_profile_id") @db.Uuid
+  customerId       String? @map("customer_id") @db.Uuid // เติมหลังชำระเงินสำเร็จ
+
+  planId       String? @map("plan_id") @db.VarChar(50)
+  planPriceId  String? @map("plan_price_id") @db.VarChar(50)
+  planName     String  @map("plan_name") @db.VarChar(100)
+  planInterval String  @map("plan_interval") @db.VarChar(20)
+
+  subTotal    Decimal @map("sub_total") @db.Decimal(10, 2) // ราคาก่อน VAT
+  vatAmount   Decimal @map("vat_amount") @db.Decimal(10, 2)
+  totalAmount Decimal @map("total_amount") @db.Decimal(10, 2)
+  currency    String  @default("THB") @map("currency") @db.VarChar(3)
+
+  status        String    @default("PENDING") @map("status") @db.VarChar(20) // PENDING | PAID | FAILED | EXPIRED | CANCELLED
+  paymentMethod String    @map("payment_method") @db.VarChar(20) // CARD | PROMPTPAY | INTERNET_BANKING
+  issuedAt      DateTime  @default(now()) @map("issued_at")
+  paidAt        DateTime? @map("paid_at")
+  expiredAt     DateTime? @map("expired_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer    Customer?    @relation(fields: [customerId], references: [id])
+  receipt     Receipt?
+  payments    Payment[]
+  whtRequests WhtRequest[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("invoice")
+}
+
+/// ใบเสร็จรับเงิน/ใบกำกับภาษี — ออกเมื่อชำระเงินสำเร็จ (RTI-YYYYMM000001)
+model Receipt {
+  id            String   @id @default(uuid()) @db.Uuid
+  receiptNo     String   @unique @map("receipt_no") @db.VarChar(30) // RTI-YYYYMM000001
+  invoiceId     String   @unique @map("invoice_id") @db.Uuid
+  customerId    String?  @map("customer_id") @db.Uuid
+  preVatAmount  Decimal  @map("pre_vat_amount") @db.Decimal(10, 2)
+  vatAmount     Decimal  @map("vat_amount") @db.Decimal(10, 2)
+  amount        Decimal  @map("amount") @db.Decimal(10, 2)
+  issuedAt      DateTime @default(now()) @map("issued_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("receipt")
+}
+
+/// บันทึกการชำระเงินผ่าน Omise (charge/source)
+model Payment {
+  id            String   @id @default(uuid()) @db.Uuid
+  invoiceId     String   @map("invoice_id") @db.Uuid
+  method        String   @map("method") @db.VarChar(20) // CARD | PROMPTPAY | INTERNET_BANKING
+  omiseChargeId String?  @map("omise_charge_id") @db.VarChar(100)
+  omiseSourceId String?  @map("omise_source_id") @db.VarChar(100)
+  authorizeUri  String?  @map("authorize_uri") @db.Text
+  qrImageUri    String?  @map("qr_image_uri") @db.Text
+  bank          String?  @map("bank") @db.VarChar(20) // BAY | BBL | KBANK | KTB | SCB
+  status        String   @default("PENDING") @map("status") @db.VarChar(20)
+  rawPayload    Json?    @map("raw_payload") @db.JsonB
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@index([omiseChargeId])
+  @@map("payment")
+}
+
+/// คำขอคืนภาษีหัก ณ ที่จ่าย — เฉพาะลูกค้านิติบุคคล
+model WhtRequest {
+  id             String @id @default(uuid()) @db.Uuid
+  invoiceId      String @map("invoice_id") @db.Uuid
+  receiptId      String @map("receipt_id") @db.Uuid
+  customerId     String @map("customer_id") @db.Uuid
+  organizationId String @map("organization_id") @db.VarChar(50)
+  userId         String @map("user_id") @db.VarChar(50)
+
+  // ข้อมูล lock (read-only) ที่ดึงจากใบเสร็จ
+  receiptNo    String   @map("receipt_no") @db.VarChar(30)
+  receiptDate  DateTime @map("receipt_date")
+  preVatAmount Decimal  @map("pre_vat_amount") @db.Decimal(10, 2)
+
+  whtPercent Int     @map("wht_percent") // 1 | 3
+  whtAmount  Decimal @map("wht_amount") @db.Decimal(10, 2)
+  docRefNo   String  @map("doc_ref_no") @db.VarChar(100)
+  docRefDate DateTime @map("doc_ref_date")
+
+  // บัญชีธนาคารสำหรับรับเงินคืน (บังคับกรอก)
+  bankAccountName   String @map("bank_account_name") @db.VarChar(200)
+  bankName          String @map("bank_name") @db.VarChar(100)
+  bankAccountNumber String @map("bank_account_number") @db.VarChar(50)
+  bankBranchCode    String @map("bank_branch_code") @db.VarChar(50)
+
+  status    String   @default("PENDING") @map("status") @db.VarChar(20) // PENDING | RECEIVED | VERIFIED | REJECTED | REFUNDED
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  invoice    Invoice               @relation(fields: [invoiceId], references: [id])
+  statusLogs WhtRequestStatusLog[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("wht_request")
+}
+
+/// log การเปลี่ยนสถานะ WHT พร้อม admin user id + timestamp
+model WhtRequestStatusLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  whtRequestId String   @map("wht_request_id") @db.Uuid
+  fromStatus   String?  @map("from_status") @db.VarChar(20)
+  toStatus     String   @map("to_status") @db.VarChar(20)
+  adminUserId  String   @map("admin_user_id") @db.VarChar(50)
+  note         String?  @map("note") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  whtRequest WhtRequest @relation(fields: [whtRequestId], references: [id])
+
+  @@index([whtRequestId])
+  @@map("wht_request_status_log")
+}
+
+/// ตัวนับเลขที่เอกสารแบบ atomic (INV / RTI / CUSTOMER)
+model DocumentCounter {
+  id        String   @id @default(uuid()) @db.Uuid
+  docType   String   @map("doc_type") @db.VarChar(20) // INV | RTI | CUSTOMER
+  period    String   @map("period") @db.VarChar(10) // YYYYMM สำหรับ INV/RTI, GLOBAL สำหรับ CUSTOMER
+  lastValue Int      @default(0) @map("last_value")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([docType, period])
+  @@map("document_counter")
+}
+
+/// คำสั่งซื้อแพ็กเกจที่รอชำระเงิน — เก็บข้อมูล org + ภาษี + ราคา ไว้จนกว่าจะจ่ายสำเร็จ
+/// แล้วจึงสร้าง Organization + billing artifacts (org สร้างหลังจ่ายเงินเท่านั้น)
+model PendingPurchase {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.VarChar(50)
+
+  // snapshot ของแพ็กเกจที่เลือก
+  planId       String @map("plan_id") @db.VarChar(50)
+  planPriceId  String @map("plan_price_id") @db.VarChar(50)
+  planName     String @map("plan_name") @db.VarChar(100)
+  planInterval String @map("plan_interval") @db.VarChar(20)
+
+  // ข้อมูลฟอร์มองค์กร
+  orgName        String  @map("org_name") @db.VarChar(150)
+  orgDescription String? @map("org_description") @db.Text
+  orgType        String  @default("team") @map("org_type") @db.VarChar(50)
+
+  // snapshot ข้อมูลภาษี (จะถูกใช้สร้าง BillingProfile/Customer ตอน confirm)
+  billingType String  @map("billing_type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
+  fullName    String? @map("full_name") @db.VarChar(200)
+  nationalId  String? @map("national_id") @db.VarChar(20)
+  companyName String? @map("company_name") @db.VarChar(200)
+  taxId       String? @map("tax_id") @db.VarChar(20)
+  branchCode  String? @map("branch_code") @db.VarChar(20)
+  branchName  String? @map("branch_name") @db.VarChar(200)
+  contactName String? @map("contact_name") @db.VarChar(200)
+  phone       String? @map("phone") @db.VarChar(50)
+  email       String? @map("email") @db.VarChar(200)
+  address     String  @map("address") @db.Text
+
+  // ยอดเงิน
+  subTotal    Decimal @map("sub_total") @db.Decimal(10, 2)
+  vatAmount   Decimal @map("vat_amount") @db.Decimal(10, 2)
+  totalAmount Decimal @map("total_amount") @db.Decimal(10, 2)
+  currency    String  @default("THB") @map("currency") @db.VarChar(3)
+
+  // การชำระเงิน
+  paymentMethod String  @map("payment_method") @db.VarChar(20) // CARD | PROMPTPAY | INTERNET_BANKING
+  omiseChargeId String? @map("omise_charge_id") @db.VarChar(100)
+  omiseSourceId String? @map("omise_source_id") @db.VarChar(100)
+  authorizeUri  String? @map("authorize_uri") @db.Text
+  qrImageUri    String? @map("qr_image_uri") @db.Text
+  bank          String? @map("bank") @db.VarChar(20)
+
+  // วงจรชีวิต
+  status                String    @default("PENDING") @map("status") @db.VarChar(20) // PENDING | PAID | FAILED | EXPIRED
+  createdOrganizationId String?   @map("created_organization_id") @db.VarChar(50)
+  invoiceId             String?   @map("invoice_id") @db.Uuid
+  expiredAt             DateTime? @map("expired_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@index([omiseChargeId])
+  @@map("pending_purchase")
+}
