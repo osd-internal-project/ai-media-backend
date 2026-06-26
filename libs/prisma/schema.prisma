@@ -133,6 +133,8 @@ model Gallery {
   refFeatureId     String?  @map("ref_feature_id") @db.VarChar(100)
   // คอลัมน์ที่ denormalize มาจาก log (metadata ระดับ request) — nullable/default เพื่อไม่ให้ insert เดิมพัง
   referenceImages  String[] @default([])
+  // เก็บ object name ของ output ทุกรูปใน generation เดียว (แทน imageUrl เดี่ยว) — default [] กัน data เก่า
+  resultUrl        String[] @default([])
   resolution       String?
   ratio            String?
   generateAudio    Boolean? @default(false)

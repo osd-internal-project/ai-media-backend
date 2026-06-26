@@ -337,6 +337,7 @@ export class VideoProcessor extends WorkerHost {
             where: { taskId: taskId },
             data: {
               imageUrl: result.file,
+              resultUrl: [result.file],
               thumbnailUrl: result.thumbnail,
               genneratedStatus: 'SUCCESS',
               usedCredit: realCredit.credit,

@@ -519,8 +519,9 @@ export class GenerateImageService implements OnModuleInit {
           galleryId: gallery.id,
           status: 'PROCESSING',
         });
-        await Promise.all(
-          res.data.data.map(async (e, index) => {
+        // อัพโหลดทุกรูปแล้วเก็บ object name ตามลำดับ (Promise.all คงลำดับ array ผลลัพธ์)
+        const objectNames: string[] = await Promise.all(
+          res.data.data.map(async (e) => {
             const imgRes = await axios.get(e.url, {
               responseType: 'arraybuffer',
               httpsAgent: this.agent,
@@ -535,37 +536,22 @@ export class GenerateImageService implements OnModuleInit {
               `organize/${dto.organizationId}/${dto.projectId}/image-generate/${objectName}`,
               buffer,
             );
-
-            if (index === 0) {
-              await this.updateAndEmit(
-                user.userId,
-                gallery.projectId,
-                gallery.id,
-                'SUCCESS',
-                objectName,
-              );
-              Logger.debug('UPDATE TASK SUCCESS ');
-            } else {
-              await this.galleryRepo.create({
-                data: {
-                  taskId: taskId,
-                  projectId: gallery.projectId,
-                  userId: gallery.userId,
-                  prompt: gallery.prompt,
-                  imageUrl: objectName,
-                  typeGenerate: 'image',
-                  genneratedStatus: 'SUCCESS',
-                  status: false,
-                },
-              });
-              // Also emit for extra images?
-              // The frontend handles array of images if fetched.
-              // But if we want real-time appearance of *all* images, we might need to emit for each?
-              // Current updateAndEmit only updates the *primary* gallery item.
-              // Let's assume the primary emit is enough for now or we emit general update.
-            }
+            return objectName;
           }),
         );
+
+        // อัพเดท gallery row เดียว เก็บทุกรูปใน resultUrl[] (เลิกสร้างหลาย record)
+        // imageUrl = รูปแรก เพื่อ backward-compat กับ reader ที่ยังอ่าน imageUrl
+        await this.updateAndEmit(
+          user.userId,
+          gallery.projectId,
+          gallery.id,
+          'SUCCESS',
+          objectNames[0],
+          undefined,
+          objectNames,
+        );
+        Logger.debug('UPDATE TASK SUCCESS ');
 
         await this.logrepo.create({
           data: {
@@ -747,6 +733,7 @@ export class GenerateImageService implements OnModuleInit {
     status: string,
     url?: string,
     thumbnail?: string,
+    resultUrl?: string[],
   ) {
     await this.galleryRepo.update({
       where: { id },
@@ -754,6 +741,8 @@ export class GenerateImageService implements OnModuleInit {
         genneratedStatus: status,
         imageUrl: url,
         thumbnailUrl: thumbnail,
+        // ส่งเฉพาะตอนมีค่า — undefined = Prisma ไม่แตะคอลัมน์นี้ (กัน path FAILED ทับ resultUrl)
+        ...(resultUrl && { resultUrl }),
       },
     });
     this.eventEmitter.emit(`image.update.project.${projectId}`, {

@@ -7,6 +7,7 @@ import {
   AuditLogRepository,
   TosService,
   ProjectMemberRepository,
+  resolveGalleryResultUrls,
 } from '@ai-media/share';
 import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
 import { tosConfigs } from 'src/configs';
@@ -108,13 +109,14 @@ export class LogsService {
     const processed = await Promise.all(
       data.map(async (item) => {
         const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
-        const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.imageUrl}`,
-              )
-            : Promise.resolve(''),
+        // ใช้ resultUrl[] เป็นหลัก, fallback imageUrl เดี่ยวสำหรับ data เก่า
+        const objectNames = resolveGalleryResultUrls(item);
+        const [urls, thumbnailUrl] = await Promise.all([
+          Promise.all(
+            objectNames.map((name) =>
+              this.tosService.getPreSignedUrl(bucket, `${base}/${name}`),
+            ),
+          ),
           item.thumbnailUrl
             ? this.tosService.getPreSignedUrl(
                 bucket,
@@ -122,6 +124,14 @@ export class LogsService {
               )
             : Promise.resolve(''),
         ]);
+        // 1 entry ต่อ 1 รูปใน resultUrl[] (data เก่า = 1 entry จาก imageUrl)
+        const entries = urls.map((imageUrl, i) => ({
+          imageUrl,
+          thumbnailUrl,
+          id: item.id,
+          status: item.status,
+          fileName: objectNames[i],
+        }));
         const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
         const referenceImageUrls = await Promise.all(
           filenames.map(async (filename) => {
@@ -131,12 +141,12 @@ export class LogsService {
               : PLACEHOLDER;
           }),
         );
-        return { item, url, thumbnailUrl, referenceImageUrls };
+        return { item, entries, referenceImageUrls };
       }),
     );
 
     const map = new Map();
-    for (const { item, url, thumbnailUrl, referenceImageUrls } of processed) {
+    for (const { item, entries, referenceImageUrls } of processed) {
       if (!map.has(item.taskId)) {
         map.set(item.taskId, {
           ...item,
@@ -144,27 +154,12 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [
-            {
-              imageUrl: url,
-              thumbnailUrl,
-              id: item.id,
-              status: item.status,
-              fileName: item.imageUrl,
-            },
-          ],
+          imageUrls: [...entries],
         });
         delete map.get(item.taskId).imageUrl;
         delete map.get(item.taskId).thumbnailUrl;
       } else {
-        map.get(item.taskId).imageUrls.push({
-          imageUrl: url,
-          thumbnailUrl,
-          id: item.id,
-          status: item.status,
-          fileName: item.imageUrl,
-          seq: seqMap.get(item.taskId) || null,
-        });
+        map.get(item.taskId).imageUrls.push(...entries);
       }
     }
     return Array.from(map.values());
@@ -261,13 +256,14 @@ export class LogsService {
     const processed = await Promise.all(
       data.map(async (item) => {
         const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
-        const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.imageUrl}`,
-              )
-            : Promise.resolve(''),
+        // ใช้ resultUrl[] เป็นหลัก, fallback imageUrl เดี่ยวสำหรับ data เก่า
+        const objectNames = resolveGalleryResultUrls(item);
+        const [urls, thumbnailUrl] = await Promise.all([
+          Promise.all(
+            objectNames.map((name) =>
+              this.tosService.getPreSignedUrl(bucket, `${base}/${name}`),
+            ),
+          ),
           item.thumbnailUrl
             ? this.tosService.getPreSignedUrl(
                 bucket,
@@ -275,6 +271,14 @@ export class LogsService {
               )
             : Promise.resolve(''),
         ]);
+        // 1 entry ต่อ 1 ไฟล์ใน resultUrl[] (data เก่า = 1 entry จาก imageUrl)
+        const entries = urls.map((imageUrl, i) => ({
+          imageUrl,
+          thumbnailUrl,
+          id: item.id,
+          status: item.status,
+          fileName: objectNames[i],
+        }));
         const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
         const refBase = `organize/${organizationId}/${item.projectId}/uploads`;
         const referenceImageUrls = await Promise.all(
@@ -286,12 +290,12 @@ export class LogsService {
               : PLACEHOLDER;
           }),
         );
-        return { item, url, thumbnailUrl, referenceImageUrls };
+        return { item, entries, referenceImageUrls };
       }),
     );
 
     const newData = new Map();
-    for (const { item, url, thumbnailUrl, referenceImageUrls } of processed) {
+    for (const { item, entries, referenceImageUrls } of processed) {
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
@@ -300,26 +304,12 @@ export class LogsService {
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [
-            {
-              imageUrl: url,
-              thumbnailUrl,
-              id: item.id,
-              status: item.status,
-              fileName: item.imageUrl,
-            },
-          ],
+          imageUrls: [...entries],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
-        newData.get(item.taskId).imageUrls.push({
-          imageUrl: url,
-          thumbnailUrl,
-          id: item.id,
-          fileName: item.imageUrl,
-          status: item.status,
-        });
+        newData.get(item.taskId).imageUrls.push(...entries);
       }
     }
     return Array.from(newData.values());

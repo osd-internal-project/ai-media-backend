@@ -97,3 +97,20 @@ export const utils = {
   checkRefCode,
   formatToNormalType,
 };
+
+/**
+ * คืน list ของ object name (output ทุกรูปใน generation เดียว) จาก gallery row
+ * - ใช้ resultUrl[] ใหม่เป็นหลัก
+ * - ถ้า resultUrl ว่าง (data เก่า) fallback ไป imageUrl เดี่ยว
+ * หมายเหตุ: คืนเป็น object name ไม่ใช่ presigned URL
+ * @param gallery แถว gallery ที่มี resultUrl และ/หรือ imageUrl
+ * @returns array ของ object name (อาจว่างถ้าไม่มีทั้งคู่)
+ */
+export function resolveGalleryResultUrls(gallery: {
+  resultUrl?: string[] | null;
+  imageUrl?: string | null;
+}): string[] {
+  if (gallery.resultUrl && gallery.resultUrl.length > 0) return gallery.resultUrl;
+  if (gallery.imageUrl) return [gallery.imageUrl];
+  return [];
+}

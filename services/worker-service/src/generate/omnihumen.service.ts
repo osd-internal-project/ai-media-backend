@@ -348,6 +348,7 @@ export class OmnihumenProcessor extends WorkerHost {
             where: { taskId: taskId },
             data: {
               imageUrl: result.file,
+              resultUrl: [result.file],
               thumbnailUrl: result.thumbnail,
               genneratedStatus: 'SUCCESS',
               // denormalize token จริงจาก log ลง gallery (dual-write)

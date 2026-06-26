@@ -1,5 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { GalleryRepository, TosService } from '@ai-media/share';
+import {
+  GalleryRepository,
+  TosService,
+  resolveGalleryResultUrls,
+} from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { tosConfigs } from 'src/configs';
 
@@ -40,15 +44,20 @@ export class GalleryService {
     const processedData = await Promise.all(
       data.map(async (item) => {
         const basePath = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
-        const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${basePath}/${item.imageUrl}`)
-            : Promise.resolve(''),
+        // ใช้ resultUrl[] เป็นหลัก, fallback ไป imageUrl เดี่ยวสำหรับ data เก่า
+        const objectNames = resolveGalleryResultUrls(item);
+        const [resultUrl, thumbnailUrl] = await Promise.all([
+          Promise.all(
+            objectNames.map((name) =>
+              this.tosService.getPreSignedUrl(bucket, `${basePath}/${name}`),
+            ),
+          ),
           item.thumbnailUrl
             ? this.tosService.getPreSignedUrl(bucket, `${basePath}/${item.thumbnailUrl}`)
             : Promise.resolve(''),
         ]);
-        return { ...item, imageUrl: url, thumbnailUrl };
+        // คง imageUrl เป็น presigned ของรูปแรกไว้ เพื่อไม่ให้ consumer เดิมพัง
+        return { ...item, resultUrl, imageUrl: resultUrl[0] ?? '', thumbnailUrl };
       }),
     );
     return { data: processedData, total };
@@ -94,16 +103,18 @@ export class GalleryService {
         id,
       },
     });
+    // ใช้รูปแรกจาก resultUrl[] (fallback imageUrl สำหรับ data เก่า)
+    const objectName = resolveGalleryResultUrls(found)[0] ?? '';
     const file = await this.tosService.getObjectV2(
       tosConfigs().tosBucket,
       `organize/${organizationId || ''}/${found.projectId}/${
         `${found.typeGenerate}-generate`
-      }/${found.imageUrl}`,
+      }/${objectName}`,
     );
-    console.log(`download : ${found.imageUrl}`);
+    console.log(`download : ${objectName}`);
     return {
       file,
-      name: found.imageUrl,
+      name: objectName,
       type: found.typeGenerate === 'video' ? 'video/mp4' : 'image/jpeg',
     };
   }

@@ -260,40 +260,6 @@ export class ImageProcessor extends WorkerHost {
 
         uploadedImages.push(objectName);
 
-        // Save to Gallery
-        await this.galleryRepo.create({
-          data: {
-            taskId,
-            projectId: body.projectId,
-            userId,
-            prompt: body.prompt,
-            imageUrl: objectName,
-            typeGenerate: 'image',
-            genneratedStatus: 'SUCCESS',
-            status: false,
-            usedCredit: credit.credit,
-            // denormalize metadata จาก log ลง gallery (dual-write)
-            usedImage: usage.generated_images || 0,
-            tokenUsed: usage.total_tokens || 0,
-            ImageUsed: usage.generated_images || 0,
-            resolution: body.resolution,
-            ratio: body.ratio,
-            generateAudio: false,
-            referenceImages: body.image.length > 0 ? body.image : [],
-            generateConfig: this.buildGenerateConfig({
-              ratio: body.ratio,
-              width: body.width,
-              height: body.height,
-              prompt: body.prompt,
-              duration: 0,
-              modelName: body.model,
-              imageCount: body.maxImages,
-              resolution: body.resolution,
-              generateAudio: false,
-            }),
-          },
-        });
-
         // อัพเดท job progress
         await job.updateProgress({
           stage: 'processing',
@@ -313,6 +279,42 @@ export class ImageProcessor extends WorkerHost {
           type: 'image',
         });
       }
+
+      // Save to Gallery — 1 record ต่อ 1 generation, เก็บ object name ทุกรูปใน resultUrl[]
+      // imageUrl เก็บรูปแรกไว้เพื่อ backward-compat กับ reader ที่ยังอ่าน imageUrl
+      await this.galleryRepo.create({
+        data: {
+          taskId,
+          projectId: body.projectId,
+          userId,
+          prompt: body.prompt,
+          imageUrl: uploadedImages[0] ?? '',
+          resultUrl: uploadedImages,
+          typeGenerate: 'image',
+          genneratedStatus: 'SUCCESS',
+          status: false,
+          usedCredit: credit.credit,
+          // denormalize metadata จาก log ลง gallery (dual-write)
+          usedImage: usage.generated_images || 0,
+          tokenUsed: usage.total_tokens || 0,
+          ImageUsed: usage.generated_images || 0,
+          resolution: body.resolution,
+          ratio: body.ratio,
+          generateAudio: false,
+          referenceImages: body.image.length > 0 ? body.image : [],
+          generateConfig: this.buildGenerateConfig({
+            ratio: body.ratio,
+            width: body.width,
+            height: body.height,
+            prompt: body.prompt,
+            duration: 0,
+            modelName: body.model,
+            imageCount: body.maxImages,
+            resolution: body.resolution,
+            generateAudio: false,
+          }),
+        },
+      });
 
       // ส่
       // 3. Save Log
@@ -385,6 +387,7 @@ export class ImageProcessor extends WorkerHost {
           userId,
           prompt: body.prompt,
           imageUrl: bytepluseUrl,
+          resultUrl: uploadedImages,
           typeGenerate: 'image',
           genneratedStatus: 'SUCCESS',
           status: true,
@@ -438,6 +441,7 @@ export class ImageProcessor extends WorkerHost {
           userId,
           prompt: body.prompt,
           imageUrl: bytepluseUrl,
+          resultUrl: uploadedImages,
           typeGenerate: 'image',
           genneratedStatus: 'SUCCESS',
           status: true,
@@ -503,6 +507,7 @@ export class ImageProcessor extends WorkerHost {
           userId,
           prompt: body.prompt,
           imageUrl: '',
+          resultUrl: [],
           typeGenerate: 'image',
           genneratedStatus: 'FAILED',
           status: false,

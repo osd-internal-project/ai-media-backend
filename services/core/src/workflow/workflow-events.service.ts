@@ -281,7 +281,10 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
   ): Promise<string | null> {
     if (!taskId) return null;
     const gallery = await this.galleryRepo.findOne({ where: { taskId } });
-    return this.firstString(gallery?.imageUrl);
+    // ใช้ resultUrl[] เป็นหลัก, fallback imageUrl เดี่ยวสำหรับ data เก่า (firstString รองรับทั้ง array/string)
+    return (
+      this.firstString(gallery?.resultUrl) ?? this.firstString(gallery?.imageUrl)
+    );
   }
 
   /**
