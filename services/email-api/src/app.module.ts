@@ -1,27 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { BullModule } from '@nestjs/bullmq';
+import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
-import { EMAIL_QUEUE } from '@ai-media/share'; // Import จาก Libs
-import { appConfigs } from './configs';
+import { EmailModule } from './email/email.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    BullModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        connection: {
-          host: appConfigs().REDIS_HOST,
-          port: appConfigs().REDIS_PORT,
-        },
-      }),
-      inject: [ConfigService],
-    }),
-    BullModule.registerQueue({
-      name: EMAIL_QUEUE,
-    }),
-  ],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), EmailModule],
   controllers: [AppController],
 })
-export class AppModule { }
+export class AppModule {}

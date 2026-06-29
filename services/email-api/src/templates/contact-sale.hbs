@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contact Sales Alert - Ai Cave</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f7;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+
+        .header {
+            background-color: #000080;
+            padding: 30px;
+            text-align: center;
+            color: #ffffff;
+        }
+
+        .content {
+            padding: 40px;
+            color: #51545e;
+            line-height: 1.6;
+            font-size: 15px;
+        }
+
+        .detail-item {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eeeeee;
+            padding-bottom: 10px;
+        }
+
+        .detail-label {
+            font-weight: bold;
+            color: #333333;
+            width: 140px;
+            display: inline-block;
+        }
+
+        .footer {
+            background-color: #f4f4f7;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #a8aaaf;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin:0;">🚨 New Contact Sales Submission</h1>
+        </div>
+
+        <div class="content">
+            <h2 style="margin-top:0;">Hello Admin!</h2>
+            <p>You have received a new contact sales form submission. Here are the details:</p>
+
+            <div style="background-color: #fafafa; padding: 20px; border-radius: 5px; margin-top: 25px;">
+                <div class="detail-item">
+                    <span class="detail-label">First Name:</span> {{firstName}}
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Last Name:</span> {{lastName}}
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Company Name:</span> {{companyName}}
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Email:</span> <a href="mailto:{{email}}">{{email}}</a>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Phone Number:</span> {{phoneNumber}}
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Submitted At:</span> {{createdAt}}
+                </div>
+                <div style="margin-top: 25px;">
+                    <span class="detail-label" style="display:block; margin-bottom: 10px;">Message:</span>
+                    <div style="background-color: #ffffff; border: 1px solid #ddd; padding: 15px; border-radius: 4px; white-space: pre-wrap;">{{message}}</div>
+                </div>
+            </div>
+
+            <p style="margin-top: 30px;">Please follow up with this prospect as soon as possible.</p>
+            <p>Best regards,<br>System Auto-mail</p>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2024 Ai Cave Inc. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+
+</html>
