@@ -22,11 +22,11 @@ export class GenerateOmnihumanService extends BaseGenerateService {
     generateHelperService: GenerateHelperService,
     galleryRepo: GalleryRepository,
     logrepo: LogRepository,
-    modeltypeRepo: MasterdataModelTypeRepository,
+    masterModelTypeRepo: MasterdataModelTypeRepository,
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_OMNIHUMEN) private readonly omnihumenQueue: Queue,
   ) {
-    super(generateHelperService, galleryRepo, logrepo, modeltypeRepo, redis);
+    super(generateHelperService, galleryRepo, logrepo, masterModelTypeRepo, redis);
   }
 
   protected get modelType(): string {

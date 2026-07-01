@@ -35,6 +35,14 @@ spec:
           value: {{ .Values.env.redisHost | quote }}
         - name: REDIS_PORT
           value: {{ .Values.env.redisPort | quote }}
+        - name: EMAIL_HOST
+          value: {{ .Values.env.emailHost | quote }}
+        - name: EMAIL_PORT
+          value: {{ .Values.env.emailPort | quote }}
+        - name: EMAIL_SECURE
+          value: {{ .Values.env.emailSecure | quote }}
+        - name: EMAIL_FROM
+          value: {{ .Values.env.emailFrom | quote }}
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

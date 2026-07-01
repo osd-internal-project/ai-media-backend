@@ -27,16 +27,16 @@ enum AuditAction {
 
 model users {
   id                   Int                  @id @default(autoincrement())
-  userId               String               @unique @default(uuid()) @db.VarChar(50)
+  userId               String               @unique @default(uuid()) @map("user_id") @db.VarChar(50)
   username             String               @unique @db.VarChar(100)
   fullname             String               @db.VarChar(200)
   email                String               @db.VarChar(200)
   tier                 String               @default("free") @db.VarChar(200)
   description          String?              @db.Text
-  phoneNumber          String               @default("phone_number") @db.VarChar(50)
+  phoneNumber          String               @default("phone_number") @map("phone_number") @db.VarChar(50)
   status               String               @default("active") @db.VarChar(50) //active, inactive, deleted, banned, invite
   lastOn               DateTime?            @map("last_on")
-  maxToken             Int?                 @default(0)
+  maxToken             Int?                 @default(0) @map("max_token")
   maxImages            Int?                 @default(0) @map("max_images")
   apiKeys              String?              @map("api_keys") @db.Text
   token                String?              @db.VarChar(50)
@@ -53,42 +53,42 @@ model users {
 }
 
 model Project {
-  id                   String          @id @default(uuid())
-  name                 String
-  description          String?
-  createdAt            DateTime        @default(now())
-  status               String?         @default("active") @db.VarChar(10)
+  id                    String                 @id @default(uuid())
+  name                  String
+  description           String?
+  createdAt             DateTime               @default(now()) @map("created_at")
+  status                String?                @default("active") @db.VarChar(10)
   // Relations
-  members              ProjectMember[]
-  galleries            Gallery[]
-  logs                 Log[]
+  members               ProjectMember[]
+  galleries             Gallery[]
+  logs                  Log[]
   // ความสัมพันธ์กับ Workflow (เพิ่มใหม่ แบบ additive ไม่กระทบของเดิม)
   workflowConversations WorkflowConversation[]
-  organizationId       String?         @map("organization_id") @db.VarChar(50)
+  organizationId        String?                @map("organization_id") @db.VarChar(50)
   // ยอดจำกัด ของ Project
-  limitImageAllowance  Int             @default(0) @map("limit_image_allowance")
-  limitCreditAllowance Float           @default(0) @map("limit_credit_allowance")
+  limitImageAllowance   Int                    @default(0) @map("limit_image_allowance")
+  limitCreditAllowance  Float                  @default(0) @map("limit_credit_allowance")
   // ยอดใช้ของ Project
-  usedImageAllowance   Int             @default(0) @map("used_image_allowance")
-  usedCreditAllowance  Float           @default(0) @map("used_credit_allowance")
+  usedImageAllowance    Int                    @default(0) @map("used_image_allowance")
+  usedCreditAllowance   Float                  @default(0) @map("used_credit_allowance")
   // ยอดจัดเก็บของ Project
-  holdImageAllowance   Int             @default(0) @map("hold_image_allowance")
-  holdCreditAllowance  Float           @default(0) @map("hold_credit_allowance")
+  holdImageAllowance    Int                    @default(0) @map("hold_image_allowance")
+  holdCreditAllowance   Float                  @default(0) @map("hold_credit_allowance")
   //ตัวเก่า
-  accessTokenAmount    Int?            @default(0) @map("access_token_amount")
-  accessImageAmount    Int?            @default(0) @map("access_image_amount")
-  remainTokenAmount    Int?            @default(0) @map("remain_token_amount")
-  remainImageAmount    Int?            @default(0) @map("remain_image_amount")
+  accessTokenAmount     Int?                   @default(0) @map("access_token_amount")
+  accessImageAmount     Int?                   @default(0) @map("access_image_amount")
+  remainTokenAmount     Int?                   @default(0) @map("remain_token_amount")
+  remainImageAmount     Int?                   @default(0) @map("remain_image_amount")
 
   @@map("project")
 }
 
 model ProjectMember {
   id        String   @id @default(uuid())
-  projectId String
-  userId    String
+  projectId String   @map("project_id")
+  userId    String   @map("user_id")
   role      String?
-  joinedAt  DateTime @default(now())
+  joinedAt  DateTime @default(now()) @map("joined_at")
 
   project              Project @relation(fields: [projectId], references: [id])
   users                users   @relation(fields: [userId], references: [userId])
@@ -113,18 +113,18 @@ model Gallery {
   id  String @id @default(uuid())
   seq Int    @default(autoincrement()) @db.Integer
 
-  taskId           String?
-  projectId        String
-  userId           String
-  imageUrl         String?
+  taskId           String?  @map("task_id")
+  projectId        String   @map("project_id")
+  userId           String   @map("user_id")
+  imageUrl         String?  @map("image_url")
   prompt           String?
-  thumbnailUrl     String?
-  typeGenerate     String?
-  createdAt        DateTime @default(now())
+  thumbnailUrl     String?  @map("thumbnail_url")
+  typeGenerate     String?  @map("type_generate")
+  createdAt        DateTime @default(now()) @map("created_at")
   status           Boolean? @default(false)
   project          Project  @relation(fields: [projectId], references: [id])
   users            users    @relation(fields: [userId], references: [userId])
-  genneratedStatus String?  @default("PENDING") @db.VarChar(50)
+  genneratedStatus String?  @default("PENDING") @map("gennerated_status") @db.VarChar(50)
   generateConfig   Json?    @map("generate_config") @db.JsonB
   usedCredit       Float?   @default(0) @map("used_credit")
   usedImage        Int?     @default(0) @map("used_image")
@@ -132,14 +132,14 @@ model Gallery {
   featureType      String   @default("chat") @map("feature_type") @db.VarChar(50)
   refFeatureId     String?  @map("ref_feature_id") @db.VarChar(100)
   // คอลัมน์ที่ denormalize มาจาก log (metadata ระดับ request) — nullable/default เพื่อไม่ให้ insert เดิมพัง
-  referenceImages  String[] @default([])
+  referenceImages  String[] @default([]) @map("reference_images")
   // เก็บ object name ของ output ทุกรูปใน generation เดียว (แทน imageUrl เดี่ยว) — default [] กัน data เก่า
-  resultUrl        String[] @default([])
+  resultUrl        String[] @default([]) @map("result_url")
   resolution       String?
   ratio            String?
-  generateAudio    Boolean? @default(false)
-  tokenUsed        Float?   @default(0)
-  ImageUsed        Int?     @default(0)
+  generateAudio    Boolean? @default(false) @map("generate_audio")
+  tokenUsed        Float?   @default(0) @map("token_used")
+  ImageUsed        Int?     @default(0) @map("image_used")
 
   @@map("gallery")
 }
@@ -147,19 +147,19 @@ model Gallery {
 model Log {
   id              String   @id @default(uuid())
   seq             Int      @default(autoincrement()) @db.Integer
-  taskId          String?
+  taskId          String?  @map("task_id")
   status          String?
-  typeGenerate    String?
-  projectId       String
-  userId          String
+  typeGenerate    String?  @map("type_generate")
+  projectId       String   @map("project_id")
+  userId          String   @map("user_id")
   prompt          String
-  tokenUsed       Float
-  ImageUsed       Int
-  referenceImages String[] @default([])
+  tokenUsed       Float    @map("token_used")
+  ImageUsed       Int      @map("image_used")
+  referenceImages String[] @default([]) @map("reference_images")
   resolution      String?
   ratio           String?
-  generateAudio   Boolean? @default(false)
-  createdAt       DateTime @default(now())
+  generateAudio   Boolean? @default(false) @map("generate_audio")
+  createdAt       DateTime @default(now()) @map("created_at")
   generateConfig  Json?    @map("generate_config") @db.JsonB
   project         Project  @relation(fields: [projectId], references: [id])
   users           users    @relation(fields: [userId], references: [userId])
@@ -244,13 +244,13 @@ model role {
 model GroupRole {
   id Int @id @default(autoincrement())
 
-  groupId String @db.VarChar(50)
-  roleId  String @db.VarChar(50)
+  groupId String @map("group_id") @db.VarChar(50)
+  roleId  String @map("role_id") @db.VarChar(50)
 
   group groups @relation(fields: [groupId], references: [groupId])
   role  role   @relation(fields: [roleId], references: [roleId])
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([groupId, roleId])
   @@map("group_role")
@@ -258,12 +258,12 @@ model GroupRole {
 
 model UserGroup {
   id      Int    @id @default(autoincrement())
-  userId  String @db.VarChar(50)
-  groupId String @db.VarChar(50)
+  userId  String @map("user_id") @db.VarChar(50)
+  groupId String @map("group_id") @db.VarChar(50)
   users   users  @relation(fields: [userId], references: [userId])
   group   groups @relation(fields: [groupId], references: [groupId])
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([userId, groupId])
   @@map("user_group")
@@ -286,6 +286,7 @@ model MasterModelType {
   taskPollApi     String?  @map("task_poll_api") @db.Text
   taskPollSec     Int      @default(10) @map("task_poll_sec") @db.Integer
   taskResponseMap Json?    @map("task_response_map")
+  isActive        Boolean  @default(false) @map("is_active")
 
   @@map("master_model_type")
 }
@@ -479,7 +480,7 @@ model OrganizationMember {
 
   apiKeys   String? @map("api_keys") @db.Text
   users     users   @relation(fields: [userId], references: [userId])
-  maxToken  Int?
+  maxToken  Int?    @map("max_token")
   maxImages Int?    @default(0) @map("max_images")
 
   @@map("organization_member")
@@ -534,7 +535,7 @@ model CouponCode {
   updatedAt         DateTime          @updatedAt @map("updated_at")
   onTopCredit       Float             @default(0) @map("on_top_credit")
   couponCodeUsage   CouponCodeUsage[]
-  referenceTag      String?           @db.VarChar(100)
+  referenceTag      String?           @map("reference_tag") @db.VarChar(100)
 
   @@index([id])
   @@map("coupon_code")
@@ -646,7 +647,7 @@ model PlanPrice {
   orderIndex      Int     @default(0) @map("order_index")
   detail          Json?   @map("detail") @db.JsonB
   periodCount     Int     @default(1) @map("period_count")
-  periodUnit      String? @db.VarChar(20)
+  periodUnit      String? @map("period_unit") @db.VarChar(20)
   // priceLevel      Int     @default(0) @map("price_level") @db.Integer()
 
   // @@unique([])
@@ -657,7 +658,7 @@ model PackageTransaction {
   id                 String       @id @default(uuid()) @db.Uuid
   organizationId     String       @map("organization_id") @db.VarChar(50)
   organization       Organization @relation(fields: [organizationId], references: [organizationId])
-  amountPaid         Decimal      @db.Decimal(10, 2)
+  amountPaid         Decimal      @map("amount_paid") @db.Decimal(10, 2)
   currency           String       @default("THB")
   status             String       @default("WAIT")
   paymentMethod      String?      @map("payment_method")
@@ -876,10 +877,10 @@ model ContactSaleLog {
 
 /// ข้อมูลใบกำกับภาษีของผู้ใช้ — มีได้หลายโปรไฟล์ต่อผู้ใช้ (รองรับบริษัทหลายสาขา)
 model BillingProfile {
-  id             String  @id @default(uuid()) @db.Uuid
-  userId         String  @map("user_id") @db.VarChar(50)
-  organizationId String  @map("organization_id") @db.VarChar(50)
-  type           String  @map("type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
+  id             String @id @default(uuid()) @db.Uuid
+  userId         String @map("user_id") @db.VarChar(50)
+  organizationId String @map("organization_id") @db.VarChar(50)
+  type           String @map("type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
 
   // Individual
   fullName   String? @map("full_name") @db.VarChar(200)
@@ -966,15 +967,15 @@ model Invoice {
 
 /// ใบเสร็จรับเงิน/ใบกำกับภาษี — ออกเมื่อชำระเงินสำเร็จ (RTI-YYYYMM000001)
 model Receipt {
-  id            String   @id @default(uuid()) @db.Uuid
-  receiptNo     String   @unique @map("receipt_no") @db.VarChar(30) // RTI-YYYYMM000001
-  invoiceId     String   @unique @map("invoice_id") @db.Uuid
-  customerId    String?  @map("customer_id") @db.Uuid
-  preVatAmount  Decimal  @map("pre_vat_amount") @db.Decimal(10, 2)
-  vatAmount     Decimal  @map("vat_amount") @db.Decimal(10, 2)
-  amount        Decimal  @map("amount") @db.Decimal(10, 2)
-  issuedAt      DateTime @default(now()) @map("issued_at")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  receiptNo    String   @unique @map("receipt_no") @db.VarChar(30) // RTI-YYYYMM000001
+  invoiceId    String   @unique @map("invoice_id") @db.Uuid
+  customerId   String?  @map("customer_id") @db.Uuid
+  preVatAmount Decimal  @map("pre_vat_amount") @db.Decimal(10, 2)
+  vatAmount    Decimal  @map("vat_amount") @db.Decimal(10, 2)
+  amount       Decimal  @map("amount") @db.Decimal(10, 2)
+  issuedAt     DateTime @default(now()) @map("issued_at")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   invoice Invoice @relation(fields: [invoiceId], references: [id])
 
@@ -1017,9 +1018,9 @@ model WhtRequest {
   receiptDate  DateTime @map("receipt_date")
   preVatAmount Decimal  @map("pre_vat_amount") @db.Decimal(10, 2)
 
-  whtPercent Int     @map("wht_percent") // 1 | 3
-  whtAmount  Decimal @map("wht_amount") @db.Decimal(10, 2)
-  docRefNo   String  @map("doc_ref_no") @db.VarChar(100)
+  whtPercent Int      @map("wht_percent") // 1 | 3
+  whtAmount  Decimal  @map("wht_amount") @db.Decimal(10, 2)
+  docRefNo   String   @map("doc_ref_no") @db.VarChar(100)
   docRefDate DateTime @map("doc_ref_date")
 
   // บัญชีธนาคารสำหรับรับเงินคืน (บังคับกรอก)

@@ -1,0 +1,2 @@
+$ rimraf dist
+$ nest build

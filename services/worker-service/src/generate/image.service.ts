@@ -117,7 +117,7 @@ export class ImageProcessor extends WorkerHost {
       const uploadedImages: string[] = [];
       const bytepluseUrl = [];
       const model = await this.masterModelTypeRepo.findOne({
-        where: { modelType: body.model },
+        where: { modelType: body.model, isActive: true },
       });
       const credit = await this.generateHelperService.getUsedCredit(
         0,
@@ -481,7 +481,7 @@ export class ImageProcessor extends WorkerHost {
         0,
         body,
         await this.masterModelTypeRepo.findOne({
-          where: { modelType: body.model },
+          where: { modelType: body.model, isActive: true },
         }),
       );
       await this.generateHelperService.updateUsedCreditFail(

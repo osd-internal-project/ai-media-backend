@@ -205,19 +205,20 @@ export class WorkflowBlocksService {
 
     if (parentOutputs.length === 0) return body;
 
-    // presign output ของบล็อกต้นทางตั้งแต่ตอน submit → ได้ URL ที่ provider ดึงได้จริง
-    // (object name ดิบ presign ที่ worker ไม่ได้เพราะ key ไม่มี path organize/.../-generate)
-    const presignedParents = await Promise.all(
+    // สร้าง canonical key ของ output บล็อกต้นทาง (ไม่ presign) → worker presign เองตอนยิง provider
+    // ผลลัพธ์: reference_images ที่ worker บันทึกเป็น key ถาวร organize/.../{type}-generate/{obj}
+    // แทน presigned URL ที่หมดอายุ
+    const keyedParents = await Promise.all(
       parentOutputs.map(async (p) => ({
         type: p.type,
-        url: await this.mediaService.presignObject(
+        url: await this.mediaService.buildObjectKey(
           projectId,
           p.type,
           p.objectName,
         ),
       })),
     );
-    const validParents = presignedParents.filter(
+    const validParents = keyedParents.filter(
       (p): p is { type: string; url: string } => Boolean(p.url),
     );
 

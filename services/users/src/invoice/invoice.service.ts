@@ -129,7 +129,9 @@ export class InvoiceService {
     if (invoice.status === 'PAID') {
       return invoice;
     }
-    if (invoice.status !== 'PENDING') {
+    // FAILED invoices are retryable (a declined charge isn't terminal); only
+    // EXPIRED/CANCELLED are blocked. The client submits a fresh single-use token.
+    if (invoice.status !== 'PENDING' && invoice.status !== 'FAILED') {
       throw new BadRequestException(`Invoice is ${invoice.status}`);
     }
 
@@ -173,7 +175,8 @@ export class InvoiceService {
     if (invoice.status === 'PAID') {
       return { status: 'PAID', invoice };
     }
-    if (invoice.status !== 'PENDING') {
+    // FAILED invoices are retryable; only EXPIRED/CANCELLED are blocked.
+    if (invoice.status !== 'PENDING' && invoice.status !== 'FAILED') {
       throw new BadRequestException(`Invoice is ${invoice.status}`);
     }
 

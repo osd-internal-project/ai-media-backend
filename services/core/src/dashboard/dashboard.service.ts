@@ -180,29 +180,29 @@ from
 		u.fullname,
 		u.username
 	from
-		organization_member om left join users u on u."userId" = om.user_id 
+		organization_member om left join users u on u."user_id" = om.user_id
 	where
 		organization_id = '${organizationId}' ) om
 left join 
 	(
 	select
-		log."userId"  as user_id ,
-		SUM(CASE WHEN log."typeGenerate" = 'image' THEN log.used_image ELSE 0 END) as used_image,
-		SUM(CASE WHEN log."typeGenerate" != 'image' THEN log.used_credit ELSE 0 END) as used_credit
+		log."user_id"  as user_id ,
+		SUM(CASE WHEN log."type_generate" = 'image' THEN log.used_image ELSE 0 END) as used_image,
+		SUM(CASE WHEN log."type_generate" != 'image' THEN log.used_credit ELSE 0 END) as used_credit
 	from
 		log
 	left join project on
-		log."projectId" = project.id where log.status='success' and project.organization_id = '${organizationId}' ${
-      projectId ? `and log."projectId" = '${projectId}'` : ''
+		log."project_id" = project.id where log.status='success' and project.organization_id = '${organizationId}' ${
+      projectId ? `and log."project_id" = '${projectId}'` : ''
     } ${
       createdAt
-        ? `and log."createdAt" between '${dayjs(createdAt)
+        ? `and log."created_at" between '${dayjs(createdAt)
             .startOf('month')
             .toISOString()}' and '${dayjs(createdAt)
             .endOf('month')
             .toISOString()}'`
         : ''
-    } group by log."userId" ) lg on
+    } group by log."user_id" ) lg on
 	om.user_id = lg.user_id order by fullname`;
     // console.log(sql);
     const result = await this.prismaService.$queryRawUnsafe(sql);

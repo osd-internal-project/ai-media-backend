@@ -24,6 +24,30 @@ export class WorkflowMediaService {
    * @param objectName ชื่อไฟล์ที่เก็บใน object storage
    * @returns presigned URL หรือ null ถ้าไม่มี objectName (fallback: คืน objectName ดิบเมื่อ presign ไม่ได้)
    */
+  /**
+   * สร้าง canonical object key ของ output บล็อก (ไม่ presign) เพื่อส่งเป็น reference key
+   * ให้ pipeline เดิม — worker จะ presign key เองตอนยิง provider และบันทึกลง reference_images
+   * เป็น key ถาวร แทน presigned URL ที่หมดอายุ
+   * @param projectId รหัสโปรเจกต์
+   * @param type ชนิดบล็อก ("image" | "video") ใช้ประกอบ path เหมือน typeGenerate
+   * @param objectName ชื่อไฟล์ที่เก็บใน object storage
+   * @returns organize/${org}/${projectId}/${type}-generate/${objectName} หรือ objectName ดิบเมื่อไม่มี org, null เมื่อไม่มี objectName
+   */
+  async buildObjectKey(
+    projectId: string,
+    type: string,
+    objectName: string | null | undefined,
+  ): Promise<string | null> {
+    if (!objectName) return null;
+    const project = await this.projectRepo.findOne({
+      where: { id: projectId },
+    });
+    const org = project?.organizationId;
+    // คง behavior fallback เดิมของ presignObject เมื่อหา org ไม่เจอ
+    if (!org) return objectName;
+    return `organize/${org}/${projectId}/${type}-generate/${objectName}`;
+  }
+
   async presignObject(
     projectId: string,
     type: string,

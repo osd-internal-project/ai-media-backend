@@ -47,7 +47,7 @@ export class GenerateImageService implements OnModuleInit {
     private readonly generateimagerepo: GenerateImageRepository,
     private readonly logrepo: LogRepository,
     private readonly galleryRepo: GalleryRepository,
-    private readonly modeltypeRepo: MasterdataModelTypeRepository,
+    private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     private readonly masterdataconfigapiRepo: MasterDataConfigApiRepository,
     private readonly projectMemberRepository: ProjectMemberRepository,
 
@@ -291,11 +291,11 @@ export class GenerateImageService implements OnModuleInit {
         : 'image-to-video';
 
     return dto.modelName
-      ? await this.modeltypeRepo.findOne({
-          where: { modelType: dto.modelName, type: dto.type },
+      ? await this.masterModelTypeRepo.findOne({
+          where: { modelType: dto.modelName, type: dto.type, isActive: true },
         } as Prisma.MasterModelTypeFindFirstArgs)
-      : await this.modeltypeRepo.findOne({
-          where: { type: dto.type, description: description },
+      : await this.masterModelTypeRepo.findOne({
+          where: { type: dto.type, description: description, isActive: true },
         } as Prisma.MasterModelTypeFindFirstArgs);
   }
 
@@ -432,7 +432,7 @@ export class GenerateImageService implements OnModuleInit {
       } else {
         throw new Error('No Task ID returned');
       }
-    } catch (error) {
+    } catch (error: any) {
       Logger.error(error);
       if (user) {
         await this.logError(user.userId, error.message, error.stack, dto);
@@ -704,7 +704,12 @@ export class GenerateImageService implements OnModuleInit {
           });
         }
       } else if (res.data.status === 'failed') {
-        await this.updateAndEmit(task.userId, task.projectId, task.id, 'FAILED');
+        await this.updateAndEmit(
+          task.userId,
+          task.projectId,
+          task.id,
+          'FAILED',
+        );
 
         // Update Log status
         const log = await this.logrepo.findOne({
@@ -721,7 +726,12 @@ export class GenerateImageService implements OnModuleInit {
       await this.logError(task.userId, e.message, e.stack, { taskId: task.id });
       this.logger.error(`Polling error for task ${task.taskId}: ${e.message}`);
       if (e.response && e.response.status === 404) {
-        await this.updateAndEmit(task.userId, task.projectId, task.id, 'FAILED');
+        await this.updateAndEmit(
+          task.userId,
+          task.projectId,
+          task.id,
+          'FAILED',
+        );
       }
     }
   }

@@ -117,14 +117,14 @@ export class DashboardService {
       )
       SELECT 
         m.month_label AS "month",
-        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'image' THEN l.used_credit ELSE 0 END), 0)::FLOAT AS "image",
-        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'video' THEN l.used_credit ELSE 0 END), 0)::FLOAT AS "video",
-        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'omnihumen' THEN l.used_credit ELSE 0 END), 0)::FLOAT AS "omnihuman",
-        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'dreamactor' THEN l.used_credit ELSE 0 END), 0)::FLOAT AS "dreamactor"
+        COALESCE(SUM(CASE WHEN l."type_generate" = 'image' THEN l.used_credit ELSE 0 END), 0)::FLOAT AS "image",
+        COALESCE(SUM(CASE WHEN l."type_generate" = 'video' THEN l.used_credit ELSE 0 END), 0)::FLOAT AS "video",
+        COALESCE(SUM(CASE WHEN l."type_generate" = 'omnihumen' THEN l.used_credit ELSE 0 END), 0)::FLOAT AS "omnihuman",
+        COALESCE(SUM(CASE WHEN l."type_generate" = 'dreamactor' THEN l.used_credit ELSE 0 END), 0)::FLOAT AS "dreamactor"
       FROM months m
-      LEFT JOIN log l ON TO_CHAR(l."createdAt", 'YYYY-MM') = m.month_label
+      LEFT JOIN log l ON TO_CHAR(l."created_at", 'YYYY-MM') = m.month_label
         AND l.status = 'success'
-        AND l."projectId" IN (
+        AND l."project_id" IN (
           SELECT id FROM project WHERE organization_id = ${organizationId}
         )
       GROUP BY m.month_label
@@ -153,14 +153,14 @@ export class DashboardService {
       )
       SELECT 
         m.month_label AS "month",
-        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'image' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "image",
-        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'video' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "video",
-        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'omnihumen' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "omnihuman",
-        COALESCE(SUM(CASE WHEN l."typeGenerate" = 'dreamactor' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "dreamactor"
+        COALESCE(SUM(CASE WHEN l."type_generate" = 'image' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "image",
+        COALESCE(SUM(CASE WHEN l."type_generate" = 'video' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "video",
+        COALESCE(SUM(CASE WHEN l."type_generate" = 'omnihumen' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "omnihuman",
+        COALESCE(SUM(CASE WHEN l."type_generate" = 'dreamactor' THEN l.used_image ELSE 0 END), 0)::FLOAT AS "dreamactor"
       FROM months m
-      LEFT JOIN log l ON TO_CHAR(l."createdAt", 'YYYY-MM') = m.month_label
+      LEFT JOIN log l ON TO_CHAR(l."created_at", 'YYYY-MM') = m.month_label
         AND l.status = 'success'
-        AND l."projectId" IN (
+        AND l."project_id" IN (
           SELECT id FROM project WHERE organization_id = ${organizationId}
         )
       GROUP BY m.month_label

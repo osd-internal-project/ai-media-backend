@@ -33,7 +33,7 @@ export abstract class BaseGenerateService {
     protected readonly generateHelperService: GenerateHelperService,
     protected readonly galleryRepo: GalleryRepository,
     protected readonly logrepo: LogRepository,
-    protected readonly modeltypeRepo: MasterdataModelTypeRepository,
+    protected readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     protected readonly redis: Redis,
   ) {}
 
@@ -255,8 +255,8 @@ export abstract class BaseGenerateService {
           taskId,
         );
 
-      const modelDetail = await this.modeltypeRepo.findOne({
-        where: { modelType: body.model, type: this.modelType },
+      const modelDetail = await this.masterModelTypeRepo.findOne({
+        where: { modelType: body.model, type: this.modelType, isActive: true },
       });
       if (!modelDetail) return { status: 400, data: 'Model not found' };
 

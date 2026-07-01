@@ -40,7 +40,7 @@ export class GenerateHelperService {
     private readonly projectRepo: ProjectRepository,
     private readonly errorLogRepo: ErrorLogRepository,
     private readonly auditLogRepo: AuditLogRepository,
-    private readonly modeltypeRepo: MasterdataModelTypeRepository,
+    private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
   ) {}
 
@@ -318,8 +318,8 @@ export class GenerateHelperService {
     if (!body.model) {
       throw new Error('Model not found');
     }
-    const modelDetail = await this.modeltypeRepo.findOne({
-      where: { modelType: body.model, type: body.type },
+    const modelDetail = await this.masterModelTypeRepo.findOne({
+      where: { modelType: body.model, type: body.type, isActive: true },
     });
     if (!modelDetail) {
       throw new Error('Model not found');

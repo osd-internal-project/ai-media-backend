@@ -22,11 +22,11 @@ export class GenerateDreamactorService extends BaseGenerateService {
     generateHelperService: GenerateHelperService,
     galleryRepo: GalleryRepository,
     logrepo: LogRepository,
-    modeltypeRepo: MasterdataModelTypeRepository,
+    masterModelTypeRepo: MasterdataModelTypeRepository,
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_DREAMACTOR) private readonly dreamactorQueue: Queue,
   ) {
-    super(generateHelperService, galleryRepo, logrepo, modeltypeRepo, redis);
+    super(generateHelperService, galleryRepo, logrepo, masterModelTypeRepo, redis);
   }
 
   protected get modelType(): string {

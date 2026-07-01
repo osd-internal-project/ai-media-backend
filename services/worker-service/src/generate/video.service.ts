@@ -326,7 +326,7 @@ export class VideoProcessor extends WorkerHost {
             where: { taskId: taskId },
           });
           const modelDto = await this.masterModelTypeRepo.findOne({
-            where: { modelType: body.model },
+            where: { modelType: body.model, isActive: true },
           });
           const realCredit = await this.generateHelperService.getUsedCredit(
             usage.total_tokens,

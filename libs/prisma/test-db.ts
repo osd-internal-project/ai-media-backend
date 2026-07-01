@@ -12,11 +12,11 @@ async function main() {
     left join credit_balances cb on o.organization_id = cb.organization_id
     left join  (select  p2.organization_id  as "organization_id" ,SUM(COALESCE(image_used,0)) as image_used, SUM(COALESCE(token_used,0)) as token_used from  project p2 
     left join ( select
-        log."projectId",
-        SUM(CASE WHEN log."typeGenerate" = 'image' THEN log."ImageUsed" ELSE 0 END)::int as image_used,
-        SUM(CASE WHEN log."typeGenerate" = 'video' THEN log."tokenUsed" ELSE 0 END)::int as token_used
+        log."project_id",
+        SUM(CASE WHEN log."type_generate" = 'image' THEN log."image_used" ELSE 0 END)::int as image_used,
+        SUM(CASE WHEN log."type_generate" = 'video' THEN log."token_used" ELSE 0 END)::int as token_used
     from
-        log where  log.status='success'   group by log."projectId" ) l on l."projectId" = p2.id   
+        log where  log.status='success'   group by log."project_id" ) l on l."project_id" = p2.id
         group by p2.organization_id ) cal on o.organization_id = cal.organization_id limit 1;
   `
   const result: any = await prisma.$queryRawUnsafe(query);

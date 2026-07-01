@@ -23,11 +23,11 @@ export class GenerateVideoService extends BaseGenerateService {
     generateHelperService: GenerateHelperService,
     galleryRepo: GalleryRepository,
     logrepo: LogRepository,
-    modeltypeRepo: MasterdataModelTypeRepository,
+    masterModelTypeRepo: MasterdataModelTypeRepository,
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_VDO) private readonly videoQueue: Queue,
   ) {
-    super(generateHelperService, galleryRepo, logrepo, modeltypeRepo, redis);
+    super(generateHelperService, galleryRepo, logrepo, masterModelTypeRepo, redis);
   }
 
   protected get modelType(): string {

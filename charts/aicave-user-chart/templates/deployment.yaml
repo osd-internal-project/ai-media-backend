@@ -59,6 +59,15 @@ spec:
               key: KEYCLOAK_CLIENT_SECRET
         - name: KEYCLOAK_REDIRECT_URI
           value: {{ .Values.env.keycloakRedirectUri | quote }}
+        - name: OMISE_API_URL
+          value: {{ .Values.env.omiseApiUrl | quote }}
+        - name: OMISE_API_VERSION
+          value: {{ .Values.env.omiseApiVersion | quote }}
+        - name: OMISE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: OMISE_SECRET_KEY
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

@@ -47,10 +47,13 @@ env:
   keycloakRealm: "eportal"
   keycloakClientId: "eportal-client-id"
   keycloakRedirectUri: "https://www.aicave.ai/callback"
+  omiseApiUrl: "https://api.omise.co"
+  omiseApiVersion: "2019-05-29"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
 #   secretEnv.KEYCLOAK_CLIENT_SECRET
+#   secretEnv.OMISE_SECRET_KEY
 
 resources:
   requests:

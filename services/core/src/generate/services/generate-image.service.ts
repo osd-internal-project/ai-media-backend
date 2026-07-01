@@ -27,14 +27,14 @@ export class GenerateImageService extends BaseGenerateService {
     generateHelperService: GenerateHelperService,
     galleryRepo: GalleryRepository,
     logrepo: LogRepository,
-    modeltypeRepo: MasterdataModelTypeRepository,
+    masterModelTypeRepo: MasterdataModelTypeRepository,
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_IMAGE) private readonly imageQueue: Queue,
     private readonly tosService: TosService,
     private readonly projectRepo: ProjectRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
   ) {
-    super(generateHelperService, galleryRepo, logrepo, modeltypeRepo, redis);
+    super(generateHelperService, galleryRepo, logrepo, masterModelTypeRepo, redis);
   }
 
   protected get modelType(): string {
