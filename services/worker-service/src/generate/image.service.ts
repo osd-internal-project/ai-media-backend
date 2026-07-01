@@ -647,6 +647,7 @@ export class ImageProcessor extends WorkerHost {
     body: RequestImageGenerateDto,
     modelDetail: any,
   ) {
+    Logger.debug(`Building payload for seedream1 with body: ${JSON.stringify(body)}`);
     const images = (await body?.image)
       ? await Promise.all(
           body.image.map(async (img) =>
