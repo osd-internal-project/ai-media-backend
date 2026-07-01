@@ -1,7 +1,7 @@
 {
   "name": "@ai-media/report",
   "description": "",
-  "version": "1.0.3",
+  "version": "1.1.00",
   "author": "",
   "dependencies": {
     "@ai-media/share": "0.0.1",
