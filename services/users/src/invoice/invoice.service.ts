@@ -18,7 +18,7 @@ import {
   ReceiptRepository,
   TQueryClient,
 } from '@ai-media/share';
-import { Prisma } from '@prisma/client';
+import { Prisma, Invoice } from '@prisma/client';
 import * as dayjs from 'dayjs';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { PayCardDto, PaySourceDto } from './dto/pay-invoice.dto';
@@ -60,13 +60,6 @@ export class InvoiceService {
    * INV-YYYYMM###### number atomically.
    */
   async createInvoice(dto: CreateInvoiceDto) {
-    const profile = await this.billingProfileRepo.findUnique({
-      where: { id: dto.billingProfileId },
-    });
-    if (!profile) {
-      throw new NotFoundException('Billing profile not found');
-    }
-
     const planPrice = await this.planPriceRepo.findOne({
       where: { id: dto.planPriceId },
     });
@@ -83,6 +76,37 @@ export class InvoiceService {
     const subTotal = Number(planPrice.price);
     const vatAmount = Number((subTotal * VAT_RATE).toFixed(2));
     const totalAmount = Number((subTotal + vatAmount).toFixed(2));
+    const amounts = { subTotal, vatAmount, totalAmount };
+
+    if (dto.createNewOrganization === true) {
+      return this.createInvoiceForNewOrg(dto, plan, planPrice, amounts);
+    }
+    return this.createInvoiceForExistingOrg(dto, plan, planPrice, amounts);
+  }
+
+  /**
+   * Existing-org invoice: the organization and billing profile must already
+   * exist. Fails fast if the organizationId is unknown so a bad id is rejected
+   * here instead of deep inside payment confirmation.
+   */
+  private async createInvoiceForExistingOrg(
+    dto: CreateInvoiceDto,
+    plan: { id: string; name: string },
+    planPrice: { id: string; interval: string; currency: string },
+    amounts: { subTotal: number; vatAmount: number; totalAmount: number },
+  ) {
+    const organization = await this.prisma.organization.findUnique({
+      where: { organizationId: dto.organizationId },
+    });
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+    const profile = await this.billingProfileRepo.findUnique({
+      where: { id: dto.billingProfileId },
+    });
+    if (!profile) {
+      throw new NotFoundException('Billing profile not found');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const invoiceNo = await this.documentNumberService.nextInvoiceNo(
@@ -91,21 +115,103 @@ export class InvoiceService {
       return tx.invoice.create({
         data: {
           invoiceNo,
-          organizationId: dto.organizationId,
+          organizationId: dto.organizationId as string,
           userId: dto.userId,
-          billingProfileId: dto.billingProfileId,
+          billingProfileId: dto.billingProfileId as string,
           planId: plan.id,
           planPriceId: planPrice.id,
           planName: plan.name,
           planInterval: planPrice.interval,
-          subTotal,
-          vatAmount,
-          totalAmount,
+          subTotal: amounts.subTotal,
+          vatAmount: amounts.vatAmount,
+          totalAmount: amounts.totalAmount,
           currency: planPrice.currency,
           status: 'PENDING',
           paymentMethod: dto.paymentMethod,
           issuedAt: new Date(),
           expiredAt: dayjs().add(1, 'day').toDate(),
+        },
+      });
+    });
+  }
+
+  /**
+   * New-org invoice: the organization does not exist yet. Generate its id now,
+   * create the billing profile inline (BillingProfile has no FK to
+   * Organization, so this is safe), and stamp the org-form fields onto the
+   * invoice. The organization row is created later in confirmInvoice — only
+   * after payment succeeds.
+   */
+  private async createInvoiceForNewOrg(
+    dto: CreateInvoiceDto,
+    plan: { id: string; name: string },
+    planPrice: { id: string; interval: string; currency: string },
+    amounts: { subTotal: number; vatAmount: number; totalAmount: number },
+  ) {
+    const billing = dto.billing;
+    if (!billing) {
+      throw new BadRequestException(
+        'Billing details are required for a new organization',
+      );
+    }
+    // Fail fast if the buyer is not a real user: confirmInvoice will add them as
+    // the OWNER member (FK to users.userId), so reject here BEFORE payment is
+    // taken rather than after the charge succeeds.
+    const user = await this.prisma.users.findUnique({
+      where: { userId: dto.userId },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // No org id is generated here — the organization (and its id) is created
+    // only at payment confirmation. The invoice + billing profile carry a null
+    // organizationId until then, so nothing references a non-existent org.
+    return this.prisma.$transaction(async (tx) => {
+      const billingProfile = await tx.billingProfile.create({
+        data: {
+          userId: dto.userId,
+          organizationId: null,
+          type: billing.type,
+          address: billing.address,
+          isDefault: true,
+          fullName: billing.fullName ?? null,
+          nationalId: billing.nationalId ?? null,
+          companyName: billing.companyName ?? null,
+          taxId: billing.taxId ?? null,
+          branchCode: billing.branchCode ?? null,
+          branchName: billing.branchName ?? null,
+          contactName: billing.contactName ?? null,
+          phone: billing.phone ?? null,
+          email: billing.email ?? null,
+        },
+      });
+
+      const invoiceNo = await this.documentNumberService.nextInvoiceNo(
+        tx as unknown as TQueryClient,
+      );
+      return tx.invoice.create({
+        data: {
+          invoiceNo,
+          organizationId: null,
+          userId: dto.userId,
+          billingProfileId: billingProfile.id,
+          planId: plan.id,
+          planPriceId: planPrice.id,
+          planName: plan.name,
+          planInterval: planPrice.interval,
+          subTotal: amounts.subTotal,
+          vatAmount: amounts.vatAmount,
+          totalAmount: amounts.totalAmount,
+          currency: planPrice.currency,
+          status: 'PENDING',
+          paymentMethod: dto.paymentMethod,
+          issuedAt: new Date(),
+          expiredAt: dayjs().add(1, 'day').toDate(),
+          isNewOrganization: true,
+          orgName: dto.orgName,
+          orgType: dto.orgType ?? 'team',
+          orgDescription: dto.orgDescription ?? null,
         },
       });
     });
@@ -134,14 +240,24 @@ export class InvoiceService {
     if (invoice.status !== 'PENDING' && invoice.status !== 'FAILED') {
       throw new BadRequestException(`Invoice is ${invoice.status}`);
     }
-
+    Logger.log(
+      `Charging invoice ${invoice.invoiceNo} with card token ${dto.token}`,
+    );
     const charge = await this.omiseService.createCardCharge({
       amountBaht: Number(invoice.totalAmount),
       token: dto.token,
       description: invoice.invoiceNo,
       invoiceNo: invoice.invoiceNo,
     });
-
+    Logger.log(
+      `Omise charge result: ${JSON.stringify({
+        invoiceId: invoice.id,
+        method: 'CARD',
+        omiseChargeId: charge.id,
+        status: charge.status,
+        rawPayload: charge as unknown as Prisma.InputJsonValue,
+      })}`,
+    );
     await this.paymentRepo.create({
       data: {
         invoiceId: invoice.id,
@@ -312,6 +428,17 @@ export class InvoiceService {
         return invoice; // already processed — avoid double credit allocation
       }
 
+      // 0. new-org purchase: create the organization now (after payment) before
+      //    any FK-bearing writes (package transaction / subscription / member),
+      //    then switch the buyer's current org to it. The org id is generated by
+      //    the DB here and threaded through the rest of confirmation.
+      const organizationId = invoice.isNewOrganization
+        ? await this.createOrganizationForInvoice(tx, invoice)
+        : invoice.organizationId;
+      if (!organizationId) {
+        throw new BadRequestException('Invoice has no organization');
+      }
+
       const profile = await tx.billingProfile.findUnique({
         where: { id: invoice.billingProfileId },
       });
@@ -329,13 +456,14 @@ export class InvoiceService {
         });
       }
       if (!customer) {
-        const customerCode =
-          await this.documentNumberService.nextCustomerCode(txClient);
+        const customerCode = await this.documentNumberService.nextCustomerCode(
+          txClient,
+        );
         customer = await tx.customer.create({
           data: {
             customerCode,
             type: profile.type,
-            organizationId: invoice.organizationId,
+            organizationId,
             name:
               profile.type === 'JURISTIC'
                 ? profile.companyName ?? profile.fullName ?? ''
@@ -363,8 +491,9 @@ export class InvoiceService {
         where: { invoiceId: invoice.id },
       });
       if (!existingReceipt) {
-        const receiptNo =
-          await this.documentNumberService.nextReceiptNo(txClient);
+        const receiptNo = await this.documentNumberService.nextReceiptNo(
+          txClient,
+        );
         await tx.receipt.create({
           data: {
             receiptNo,
@@ -380,7 +509,7 @@ export class InvoiceService {
 
       // 4. + 5. allocate credits by activating the subscription
       await this.activateSubscription(tx, {
-        organizationId: invoice.organizationId,
+        organizationId,
         planId: invoice.planId,
         planPriceId: invoice.planPriceId,
         amountPaid: invoice.totalAmount,
@@ -393,6 +522,67 @@ export class InvoiceService {
       );
       return paidInvoice;
     });
+  }
+
+  /**
+   * Create the organization for a new-org package purchase. Called from
+   * confirmInvoice after payment succeeds. The org id is generated by the DB
+   * (@default(uuid())) — never before this point — then back-filled onto the
+   * invoice and billing profile. Also adds the buyer as OWNER and switches the
+   * buyer's current org to it. Mirrors the org-creation in purchase.service.ts
+   * confirm(). Returns the new organization id.
+   */
+  private async createOrganizationForInvoice(
+    tx: Prisma.TransactionClient,
+    invoice: Invoice,
+  ): Promise<string> {
+    const plan = invoice.planId
+      ? await tx.plan.findUnique({ where: { id: invoice.planId } })
+      : null;
+    const planDetails =
+      (plan?.detailJson as Record<string, number> | undefined) ?? {};
+    const maxUserAccess = planDetails.maxUserAccess || 0;
+
+    const orgName = invoice.orgName ?? 'My Organization';
+    const org = await tx.organization.create({
+      data: {
+        name: orgName,
+        description: invoice.orgDescription,
+        type: invoice.orgType ?? 'team',
+        createdById: invoice.userId,
+        slug: orgName.toLowerCase().replace(/ /g, '-') + '-team',
+        status: true,
+        maxUserAccess,
+        accessCodes: plan?.accessCodes || [],
+      },
+    });
+
+    // Back-fill the generated org id onto the invoice + its billing profile.
+    await tx.invoice.update({
+      where: { id: invoice.id },
+      data: { organizationId: org.organizationId },
+    });
+    await tx.billingProfile.update({
+      where: { id: invoice.billingProfileId },
+      data: { organizationId: org.organizationId },
+    });
+
+    await tx.organizationMember.create({
+      data: {
+        organizationId: org.organizationId,
+        userId: invoice.userId,
+        role: 'OWNER',
+        maxImages: 0,
+        maxToken: 0,
+      },
+    });
+    // switch the buyer's current org to the newly created one
+    await tx.users.updateMany({
+      where: { userId: invoice.userId },
+      data: { recentOrganizationId: org.organizationId },
+    });
+
+    return org.organizationId;
   }
 
   /**
@@ -411,6 +601,7 @@ export class InvoiceService {
       paymentMethod: string;
     },
   ) {
+    console.log('activateSubscription', input);
     if (!input.planId || !input.planPriceId) return;
 
     const planPrice = await tx.planPrice.findUnique({
@@ -516,8 +707,12 @@ export class InvoiceService {
       }),
       ...((query.startDate || query.endDate) && {
         issuedAt: {
-          ...(query.startDate && { gte: dayjs(query.startDate).startOf('day').toDate() }),
-          ...(query.endDate && { lte: dayjs(query.endDate).endOf('day').toDate() }),
+          ...(query.startDate && {
+            gte: dayjs(query.startDate).startOf('day').toDate(),
+          }),
+          ...(query.endDate && {
+            lte: dayjs(query.endDate).endOf('day').toDate(),
+          }),
         },
       }),
     };

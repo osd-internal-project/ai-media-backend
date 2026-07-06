@@ -1,7 +1,7 @@
 {
   "name": "@ai-media/users",
   "description": "",
-  "version": "1.1.00",
+  "version": "1.1.02",
   "author": "",
   "dependencies": {
     "@ai-media/share": "0.0.1",
@@ -107,7 +107,7 @@
     "db:push": "yarn prisma db push",
     "db:seed": "yarn prisma db seed",
     "dev1": "cross-env NODE_ENV=local DATABASE_URL=postgresql://postgres:1010@localhost:5432/dev ts-node-dev --respawn --exit-child --transpile-only -r tsconfig-paths/register ./src/main.ts",
-    "dev": "cross-env NODE_ENV=local ts-node-dev --respawn --exit-child --transpile-only -r tsconfig-paths/register ./src/main.ts ",
+    "dev": "cross-env NODE_ENV=local NODE_TLS_REJECT_UNAUTHORIZED=0 ts-node-dev --respawn --exit-child --transpile-only -r tsconfig-paths/register ./src/main.ts ",
     "docker:build": "cd ../.. && docker build -t 'd-debt/inventory' -f services/inventory/Dockerfile .",
     "docker:buildx": "cd ../.. && docker build --no-cache --platform linux/amd64 -t 'ai-users-be:v1.0.8' -f services/users/Dockerfile .",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",

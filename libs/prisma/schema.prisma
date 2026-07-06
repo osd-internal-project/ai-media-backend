@@ -437,6 +437,7 @@ model Organization {
   creditBalance       CreditBalance?
   packageTransactions PackageTransaction[]
   brandKits           BrandKit[]
+  apiKey              String?                   @map("api_key") @db.VarChar(100)
 
   @@map("organization")
 }
@@ -877,10 +878,12 @@ model ContactSaleLog {
 
 /// ข้อมูลใบกำกับภาษีของผู้ใช้ — มีได้หลายโปรไฟล์ต่อผู้ใช้ (รองรับบริษัทหลายสาขา)
 model BillingProfile {
-  id             String @id @default(uuid()) @db.Uuid
-  userId         String @map("user_id") @db.VarChar(50)
-  organizationId String @map("organization_id") @db.VarChar(50)
-  type           String @map("type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
+  id             String  @id @default(uuid()) @db.Uuid
+  userId         String  @map("user_id") @db.VarChar(50)
+  // Nullable: a new-org purchase creates the profile before the org exists;
+  // filled in at payment confirmation once the organization is created.
+  organizationId String? @map("organization_id") @db.VarChar(50)
+  type           String  @map("type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
 
   // Individual
   fullName   String? @map("full_name") @db.VarChar(200)
@@ -931,7 +934,9 @@ model Customer {
 model Invoice {
   id               String  @id @default(uuid()) @db.Uuid
   invoiceNo        String  @unique @map("invoice_no") @db.VarChar(30) // INV-YYYYMM000001
-  organizationId   String  @map("organization_id") @db.VarChar(50)
+  // Nullable: for a new-org purchase the org is created only at payment
+  // confirmation, so a PENDING invoice carries no org id until then.
+  organizationId   String? @map("organization_id") @db.VarChar(50)
   userId           String  @map("user_id") @db.VarChar(50)
   billingProfileId String  @map("billing_profile_id") @db.Uuid
   customerId       String? @map("customer_id") @db.Uuid // เติมหลังชำระเงินสำเร็จ
@@ -940,6 +945,12 @@ model Invoice {
   planPriceId  String? @map("plan_price_id") @db.VarChar(50)
   planName     String  @map("plan_name") @db.VarChar(100)
   planInterval String  @map("plan_interval") @db.VarChar(20)
+
+  // --- ข้อมูลสร้างองค์กรใหม่ (ใช้เมื่อซื้อแพ็กเกจแบบสร้าง org หลังชำระเงิน) ---
+  isNewOrganization Boolean @default(false) @map("is_new_organization") // true = สร้าง organization ตอน confirm
+  orgName           String? @map("org_name") @db.VarChar(150)
+  orgType           String? @map("org_type") @db.VarChar(50)
+  orgDescription    String? @map("org_description") @db.Text
 
   subTotal    Decimal @map("sub_total") @db.Decimal(10, 2) // ราคาก่อน VAT
   vatAmount   Decimal @map("vat_amount") @db.Decimal(10, 2)
