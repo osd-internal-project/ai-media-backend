@@ -22,6 +22,10 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export const ORG_TYPES = ['team', 'personal'] as const;
 export type OrgType = (typeof ORG_TYPES)[number];
 
+/** Subscription change intents carried on an invoice. */
+export const CHANGE_TYPES = ['CREATE', 'RENEWAL', 'UPGRADE'] as const;
+export type ChangeType = (typeof CHANGE_TYPES)[number];
+
 /** Billing profile types. Type-specific fields are validated conditionally. */
 export const BILLING_PROFILE_TYPES = ['INDIVIDUAL', 'JURISTIC'] as const;
 export type BillingProfileType = (typeof BILLING_PROFILE_TYPES)[number];
@@ -107,6 +111,16 @@ export class CreateInvoiceDto {
   @IsBoolean()
   @IsOptional()
   createNewOrganization?: boolean;
+
+  /**
+   * Subscription change intent for an existing-org purchase:
+   * CREATE (new org) | RENEWAL (same plan) | UPGRADE (higher plan → prorate now).
+   * Downgrade never reaches here (it does not create an invoice). Defaults to
+   * RENEWAL when omitted for an existing org.
+   */
+  @IsIn(CHANGE_TYPES)
+  @IsOptional()
+  changeType?: ChangeType;
 
   // ── Existing-org purchase ───────────────────────────────────
   @ValidateIf((o: CreateInvoiceDto) => !o.createNewOrganization)

@@ -23,7 +23,7 @@ import * as dayjs from 'dayjs';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { PayCardDto, PaySourceDto } from './dto/pay-invoice.dto';
 import { DocumentNumberService } from '../document-number/document-number.service';
-import { OmiseService } from '../omise/omise.service';
+import { OmiseService, OmiseCharge } from '../omise/omise.service';
 
 /** Thailand standard VAT rate applied to package prices (price is VAT-exclusive). */
 const VAT_RATE = 0.07;
@@ -73,13 +73,64 @@ export class InvoiceService {
       throw new NotFoundException('Plan not found');
     }
 
-    const subTotal = Number(planPrice.price);
+    // UPGRADE charges only the PRORATED DIFFERENCE for the days remaining in the
+    // current cycle: (newPrice − oldPrice) × remainingDays / totalDaysOfPeriod.
+    // Everything else (CREATE / RENEWAL) charges the full plan price.
+    let subTotal = Number(planPrice.price);
+    if (
+      dto.createNewOrganization !== true &&
+      dto.changeType === 'UPGRADE' &&
+      dto.organizationId
+    ) {
+      const sub = await this.prisma.organizationSubscription.findUnique({
+        where: { organizationId: dto.organizationId },
+      });
+      if (sub) {
+        const now = dayjs();
+        const totalDays = Math.max(
+          1,
+          dayjs(sub.currentPeriodEnd).diff(sub.currentPeriodStart, 'day'),
+        );
+        const remainingDays = Math.max(
+          0,
+          dayjs(sub.currentPeriodEnd).diff(now, 'day'),
+        );
+        const diff = Math.max(0, Number(planPrice.price) - Number(sub.price));
+        subTotal = Number(((diff * remainingDays) / totalDays).toFixed(2));
+      }
+    }
     const vatAmount = Number((subTotal * VAT_RATE).toFixed(2));
     const totalAmount = Number((subTotal + vatAmount).toFixed(2));
     const amounts = { subTotal, vatAmount, totalAmount };
 
+    // Free plan (isDefault, price 0) creating a new org: a user may hold only one
+    // free-plan subscription. The signup personal org has no subscription, so it
+    // does not count here.
+    if (dto.createNewOrganization === true && plan.isDefault) {
+      const existingFree = await this.prisma.organizationSubscription.findFirst({
+        where: {
+          plan: { isDefault: true },
+          organization: { createdById: dto.userId },
+        },
+      });
+      if (existingFree) {
+        throw new BadRequestException('You already have a free plan');
+      }
+    }
+
     if (dto.createNewOrganization === true) {
-      return this.createInvoiceForNewOrg(dto, plan, planPrice, amounts);
+      const invoice = await this.createInvoiceForNewOrg(
+        dto,
+        plan,
+        planPrice,
+        amounts,
+      );
+      // Free plan: nothing to charge — confirm now (creates org + subscription)
+      // instead of routing through Omise.
+      if (Number(invoice.totalAmount) === 0) {
+        return this.confirmInvoice(invoice.id);
+      }
+      return invoice;
     }
     return this.createInvoiceForExistingOrg(dto, plan, planPrice, amounts);
   }
@@ -130,6 +181,7 @@ export class InvoiceService {
           paymentMethod: dto.paymentMethod,
           issuedAt: new Date(),
           expiredAt: dayjs().add(1, 'day').toDate(),
+          changeType: dto.changeType ?? 'RENEWAL',
         },
       });
     });
@@ -212,6 +264,7 @@ export class InvoiceService {
           orgName: dto.orgName,
           orgType: dto.orgType ?? 'team',
           orgDescription: dto.orgDescription ?? null,
+          changeType: 'CREATE',
         },
       });
     });
@@ -229,7 +282,91 @@ export class InvoiceService {
     return invoice;
   }
 
-  /** Pay a PENDING invoice with a tokenized card (charge captured immediately). */
+  /**
+   * Resolve the right Omise charge for a card payment: a saved card, a new card
+   * that we also save (via an Omise customer), or a plain one-time token charge.
+   * Saved-card operations require an existing org (new-org invoices carry the
+   * created customer id on the invoice until confirm copies it to the org).
+   */
+  private async chargeCardForInvoice(
+    invoice: {
+      id: string;
+      invoiceNo: string;
+      totalAmount: Prisma.Decimal;
+      organizationId: string | null;
+    },
+    dto: PayCardDto,
+  ): Promise<OmiseCharge> {
+    const base = {
+      amountBaht: Number(invoice.totalAmount),
+      description: invoice.invoiceNo,
+      invoiceNo: invoice.invoiceNo,
+    };
+    const org = invoice.organizationId
+      ? await this.prisma.organization.findUnique({
+          where: { organizationId: invoice.organizationId },
+        })
+      : null;
+
+    // 1) Charge a previously-saved card.
+    if (dto.cardId) {
+      if (!org?.omiseCustomerId) {
+        throw new BadRequestException('No saved cards for this organization');
+      }
+      return this.omiseService.chargeCustomerCard({
+        ...base,
+        customerId: org.omiseCustomerId,
+        cardId: dto.cardId,
+      });
+    }
+
+    if (!dto.token) {
+      throw new BadRequestException('Card token is required');
+    }
+
+    // 2) New card + save it: ensure an Omise customer, then charge it.
+    if (dto.saveCard) {
+      let customerId = org?.omiseCustomerId ?? undefined;
+      let cardId: string | undefined;
+      if (customerId) {
+        const customer = await this.omiseService.addCard(customerId, dto.token);
+        const cards = customer.cards?.data ?? [];
+        cardId = customer.default_card ?? cards[cards.length - 1]?.id;
+      } else {
+        const customer = await this.omiseService.createCustomer({
+          cardToken: dto.token,
+          description: invoice.organizationId
+            ? `org:${invoice.organizationId}`
+            : `invoice:${invoice.invoiceNo}`,
+        });
+        customerId = customer.id;
+        cardId = customer.default_card ?? undefined;
+      }
+      // Persist the customer id: on the org (existing) or on the invoice (new-org
+      // → copied onto the org in confirmInvoice).
+      if (invoice.organizationId) {
+        await this.prisma.organization.update({
+          where: { organizationId: invoice.organizationId },
+          data: { omiseCustomerId: customerId },
+        });
+      } else {
+        await this.invoiceRepo.update({
+          where: { id: invoice.id },
+          data: { omiseCustomerId: customerId },
+        });
+      }
+      return this.omiseService.chargeCustomerCard({ ...base, customerId, cardId });
+    }
+
+    // 3) One-time token charge (not saved).
+    return this.omiseService.createCardCharge({ ...base, token: dto.token });
+  }
+
+  /**
+   * Pay a PENDING invoice with a card (charge captured immediately). Supports:
+   * - a one-time `token` (optionally `saveCard` to store it for the org),
+   * - or a previously-saved `cardId` charged against the org's Omise customer.
+   */
   async payCard(id: string, dto: PayCardDto) {
     const invoice = await this.findOne(id);
     if (invoice.status === 'PAID') {
@@ -240,24 +377,9 @@ export class InvoiceService {
     if (invoice.status !== 'PENDING' && invoice.status !== 'FAILED') {
       throw new BadRequestException(`Invoice is ${invoice.status}`);
     }
-    Logger.log(
-      `Charging invoice ${invoice.invoiceNo} with card token ${dto.token}`,
-    );
-    const charge = await this.omiseService.createCardCharge({
-      amountBaht: Number(invoice.totalAmount),
-      token: dto.token,
-      description: invoice.invoiceNo,
-      invoiceNo: invoice.invoiceNo,
-    });
-    Logger.log(
-      `Omise charge result: ${JSON.stringify({
-        invoiceId: invoice.id,
-        method: 'CARD',
-        omiseChargeId: charge.id,
-        status: charge.status,
-        rawPayload: charge as unknown as Prisma.InputJsonValue,
-      })}`,
-    );
+
+    const charge = await this.chargeCardForInvoice(invoice, dto);
+
     await this.paymentRepo.create({
       data: {
         invoiceId: invoice.id,
@@ -508,19 +630,146 @@ export class InvoiceService {
       }
 
       // 4. + 5. allocate credits by activating the subscription
-      await this.activateSubscription(tx, {
-        organizationId,
-        planId: invoice.planId,
-        planPriceId: invoice.planPriceId,
-        amountPaid: invoice.totalAmount,
-        currency: invoice.currency,
-        paymentMethod: invoice.paymentMethod,
-      });
+      // UPGRADE = ต่อยอด subscription เดิมแบบ pro-rate (ไม่ reset ทั้งรอบ);
+      // CREATE/RENEWAL = activate/ต่ออายุแบบ reset โควตาเต็มรอบ
+      if (invoice.changeType === 'UPGRADE') {
+        await this.applyUpgrade(tx, {
+          organizationId,
+          planId: invoice.planId,
+          planPriceId: invoice.planPriceId,
+          amountPaid: invoice.totalAmount,
+          currency: invoice.currency,
+        });
+      } else {
+        await this.activateSubscription(tx, {
+          organizationId,
+          planId: invoice.planId,
+          planPriceId: invoice.planPriceId,
+          amountPaid: invoice.totalAmount,
+          currency: invoice.currency,
+          paymentMethod: invoice.paymentMethod,
+        });
+      }
 
       this.logger.log(
-        `Invoice ${invoice.invoiceNo} confirmed (charge ${chargeId ?? 'n/a'})`,
+        `Invoice ${invoice.invoiceNo} confirmed (charge ${chargeId ?? 'n/a'}, ${
+          invoice.changeType ?? 'RENEWAL'
+        })`,
       );
       return paidInvoice;
+    });
+  }
+
+  /**
+   * Apply a plan UPGRADE for an existing org after payment — takes effect
+   * IMMEDIATELY (spec workflow 4). The invoice already charged the prorated
+   * difference (see createInvoice). Here we: switch the subscription to the new
+   * plan now (planId/price/allowance snapshot), keep the current cycle dates, and
+   * set the credit balance to `(newAllowance − oldAllowance) + remaining` so the
+   * org instantly gets the upgraded quota on top of what it had left.
+   */
+  private async applyUpgrade(
+    tx: Prisma.TransactionClient,
+    input: {
+      organizationId: string;
+      planId: string | null;
+      planPriceId: string | null;
+      amountPaid: Prisma.Decimal;
+      currency: string;
+    },
+  ): Promise<void> {
+    if (!input.planId || !input.planPriceId) return;
+
+    const sub = await tx.organizationSubscription.findUnique({
+      where: { organizationId: input.organizationId },
+    });
+    // No existing subscription → fall back to a normal activation.
+    if (!sub) {
+      await this.activateSubscription(tx, {
+        ...input,
+        paymentMethod: 'upgrade',
+      });
+      return;
+    }
+
+    const planPrice = await tx.planPrice.findUnique({
+      where: { id: input.planPriceId },
+    });
+    const plan = await tx.plan.findUnique({ where: { id: input.planId } });
+    if (!planPrice || !plan) return;
+
+    const planDetails = (plan.detailJson as Record<string, number>) ?? {};
+    const periodCount = planPrice.periodCount || 1;
+    const now = dayjs();
+
+    const newCreditAllowance =
+      planPrice.creditAllowance || planDetails.creditAllowance || 0;
+    const newImageAllowance =
+      planPrice.imageAllowance || planDetails.imageAllowance || 0;
+    const oldCreditAllowance = sub.creditAllowance || 0;
+    const oldImageAllowance = sub.imageAllowance || 0;
+
+    // New Credit = (New − Old) + Remaining Active Credits (spec formula).
+    const balance = await tx.creditBalance.findUnique({
+      where: { organizationId: input.organizationId },
+    });
+    const remainingCredit = balance?.currentCycleBalance ?? 0;
+    const remainingImage = balance?.currentCycleImage ?? 0;
+    const newCreditBalance = Math.max(
+      0,
+      newCreditAllowance - oldCreditAllowance + remainingCredit,
+    );
+    const newImageBalance = Math.max(
+      0,
+      newImageAllowance - oldImageAllowance + remainingImage,
+    );
+
+    await tx.creditBalance.upsert({
+      where: { organizationId: input.organizationId },
+      create: {
+        organization: { connect: { organizationId: input.organizationId } },
+        currentCycleBalance: newCreditBalance,
+        currentCycleImage: newImageBalance,
+      },
+      update: {
+        currentCycleBalance: newCreditBalance,
+        currentCycleImage: newImageBalance,
+      },
+    });
+
+    // Record the upgrade transaction (amountPaid = the prorated difference).
+    await tx.packageTransaction.create({
+      data: {
+        organizationId: input.organizationId,
+        amountPaid: input.amountPaid,
+        planId: plan.id,
+        currency: input.currency,
+        status: 'complete',
+        paymentMethod: 'upgrade',
+        paidAt: now.toDate(),
+        planName: plan.name,
+        planInterval: planPrice.interval,
+        billingPeriodStart: now.toDate(),
+        billingPeriodEnd: sub.currentPeriodEnd,
+      },
+    });
+
+    // Switch to the new plan NOW (keep current cycle dates + nextBillingDate;
+    // future renewals continue on the new plan via nextPlan*).
+    await tx.organizationSubscription.update({
+      where: { organizationId: input.organizationId },
+      data: {
+        plan: { connect: { id: plan.id } },
+        planName: plan.name,
+        price: planPrice.price,
+        interval: planPrice.interval,
+        creditAllowance: newCreditAllowance,
+        imageAllowance: newImageAllowance,
+        periodCount,
+        status: 'active',
+        nextPlanId: plan.id,
+        nextPlanPriceId: planPrice.id,
+      },
     });
   }
 
@@ -554,6 +803,8 @@ export class InvoiceService {
         status: true,
         maxUserAccess,
         accessCodes: plan?.accessCodes || [],
+        // carry over the saved-card customer created during payment (if any)
+        omiseCustomerId: invoice.omiseCustomerId,
       },
     });
 
@@ -601,7 +852,6 @@ export class InvoiceService {
       paymentMethod: string;
     },
   ) {
-    console.log('activateSubscription', input);
     if (!input.planId || !input.planPriceId) return;
 
     const planPrice = await tx.planPrice.findUnique({
@@ -618,7 +868,20 @@ export class InvoiceService {
     const periodCount = planPrice.periodCount || 1;
     const unit = planPrice.interval === 'YEAR' ? 'year' : 'month';
 
-    const start = dayjs();
+    const existingSub = await tx.organizationSubscription.findUnique({
+      where: { organizationId: input.organizationId },
+    });
+
+    // Renewal seamlessness: if the org still has an active cycle running (paid
+    // early, or before the current cycle ends), append the new cycle right after
+    // the current period end so no remaining days are lost. If the cycle has
+    // already expired (grace period) — or this is a brand-new org — start today.
+    const now = dayjs();
+    const stillActive =
+      !!existingSub && dayjs(existingSub.currentPeriodEnd).isAfter(now);
+    const start = stillActive
+      ? dayjs(existingSub!.currentPeriodEnd).add(1, 'day')
+      : now;
     const periodEnd = dayjs(start).add(periodCount, unit).subtract(1, 'day');
 
     // PackageTransaction record (mirrors existing complete transactions)
@@ -637,11 +900,6 @@ export class InvoiceService {
         billingPeriodEnd: periodEnd.toDate(),
       },
     });
-
-    // Upsert subscription
-    const existingSub = await tx.organizationSubscription.findUnique({
-      where: { organizationId: input.organizationId },
-    });
     const subFields = {
       planName: plan.name,
       price: planPrice.price,
@@ -651,7 +909,8 @@ export class InvoiceService {
       currentPeriodStart: start.toDate(),
       currentPeriodEnd: periodEnd.toDate(),
       nextBillingDate: periodEnd.toDate(),
-      autoRenew: true,
+      // Free plan (price 0) never auto-renews (nothing to charge).
+      autoRenew: Number(planPrice.price) !== 0,
       status: 'active',
       period: planPrice.interval === 'YEAR' ? 'yearly' : 'monthly',
       periodCount,

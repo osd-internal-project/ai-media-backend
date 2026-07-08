@@ -438,6 +438,8 @@ model Organization {
   packageTransactions PackageTransaction[]
   brandKits           BrandKit[]
   apiKey              String?                   @map("api_key") @db.VarChar(100)
+  // Omise customer id — holds the org's saved cards (created on first saved-card payment)
+  omiseCustomerId     String?                   @map("omise_customer_id") @db.VarChar(100)
 
   @@map("organization")
 }
@@ -951,6 +953,10 @@ model Invoice {
   orgName           String? @map("org_name") @db.VarChar(150)
   orgType           String? @map("org_type") @db.VarChar(50)
   orgDescription    String? @map("org_description") @db.Text
+  // ประเภทการเปลี่ยนแปลง subscription: CREATE | RENEWAL | UPGRADE (downgrade ไม่สร้าง invoice)
+  changeType        String? @map("change_type") @db.VarChar(20)
+  // พัก Omise customer id สำหรับ new-org (org ยังไม่มีตอนจ่าย) → คัดลอกไป org ตอน confirm
+  omiseCustomerId   String? @map("omise_customer_id") @db.VarChar(100)
 
   subTotal    Decimal @map("sub_total") @db.Decimal(10, 2) // ราคาก่อน VAT
   vatAmount   Decimal @map("vat_amount") @db.Decimal(10, 2)

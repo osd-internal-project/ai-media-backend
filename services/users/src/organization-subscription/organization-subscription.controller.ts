@@ -42,9 +42,16 @@ export class OrganizationSubscriptionController {
     @Param('organizationId') organizationId: string,
     @Body() body: { priceId: string },
   ) {
-    return this.organizationSubscriptionService.downgradeSubscription(
+    return this.organizationSubscriptionService.upgradeSubscription(
       organizationId,
       body.priceId,
+    );
+  }
+
+  @Post('cancel/:organizationId')
+  cancelSubscription(@Param('organizationId') organizationId: string) {
+    return this.organizationSubscriptionService.cancelSubscription(
+      organizationId,
     );
   }
 }

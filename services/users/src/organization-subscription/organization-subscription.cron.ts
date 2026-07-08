@@ -12,7 +12,7 @@ export class OrganizationSubscriptionCron {
     private readonly organizationSubscriptionService: OrganizationSubscriptionService,
   ) {}
 
-  @Cron('0 23 * * *') // run once a day at 23:00.
+  @Cron('0 0 * * *') // run once a day at 00:00 (cycle transition time).
   async handleSubscriptionRenewal() {
     this.logger.log('Running subscription renewal check...');
     this.organizationSubscriptionService.changeCycleSubscription();
