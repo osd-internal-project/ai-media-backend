@@ -2,6 +2,7 @@ import {
   GalleryRepository,
   LogRepository,
   MasterdataModelTypeRepository,
+  OrganizationRepository,
   QUEUE_NAME_OMNIHUMEN,
   MasterModelTypeDto,
 } from '@ai-media/share';
@@ -25,8 +26,16 @@ export class GenerateOmnihumanService extends BaseGenerateService {
     masterModelTypeRepo: MasterdataModelTypeRepository,
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_OMNIHUMEN) private readonly omnihumenQueue: Queue,
+    organizationRepository: OrganizationRepository,
   ) {
-    super(generateHelperService, galleryRepo, logrepo, masterModelTypeRepo, redis);
+    super(
+      generateHelperService,
+      galleryRepo,
+      logrepo,
+      masterModelTypeRepo,
+      redis,
+      organizationRepository,
+    );
   }
 
   protected get modelType(): string {
@@ -59,6 +68,7 @@ export class GenerateOmnihumanService extends BaseGenerateService {
     userId: string,
     _apiRes: any,
     modelDetail: MasterModelTypeDto,
+    authorization: string | null,
   ): object {
     return {
       taskId,
@@ -70,6 +80,9 @@ export class GenerateOmnihumanService extends BaseGenerateService {
       reqKey: modelDetail.modelType,
       omnihumenTaskId: taskId,
       statusBaseUrl: modelDetail?.taskPollApi ?? 'https://cv.byteplusapi.com/',
+      // Per-org LLM gateway key — carried for the pending gateway migration
+      // (the worker still uses BytePlus HMAC for now).
+      authorization,
       modelOptions: {
         resolution: (modelDetail as any).resolution,
         seed: (modelDetail as any).seed,

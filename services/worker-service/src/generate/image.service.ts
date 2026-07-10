@@ -109,6 +109,9 @@ export class ImageProcessor extends WorkerHost {
     //
     const { taskId, clientId, body, userId, sendApi, sendConfig } =
       job.data as ImageProcessJob;
+    // Per-org LLM gateway key set by the producer (falls back to the model token).
+    const authorization: string | null =
+      (job.data as any).authorization ?? sendConfig?.authorization ?? null;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
     const redisImageCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
@@ -140,7 +143,7 @@ export class ImageProcessor extends WorkerHost {
         const axiosConfig: AxiosRequestConfig = {
           headers: {
             'Content-Type': sendConfig.configType,
-            Authorization: `${sendConfig.authorization}`,
+            Authorization: `Bearer ${authorization}`,
           },
           httpsAgent: this.agent,
         };

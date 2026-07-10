@@ -143,6 +143,9 @@ export class VideoProcessor extends WorkerHost {
       sendConfig,
     } = job.data as VideoProcessJob;
     console.log(`taskId`, taskId, clientId, body, userId);
+    // Per-org LLM gateway key set by the producer (falls back to the model token).
+    const authorization: string =
+      (job.data as any).authorization ?? sendConfig?.authorization ?? '';
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
@@ -151,15 +154,15 @@ export class VideoProcessor extends WorkerHost {
       // 0. Call external API here so queue concurrency limits simultaneous API calls.
       // Backward-compat: old jobs already have videoTaskId; new jobs need the API call.
       let videoTaskId: string;
-      let authToken: string;
+      let authToken: string = authorization;
       if ((job.data as any).videoTaskId) {
         videoTaskId = (job.data as any).videoTaskId;
-        authToken = (job.data as any).authorization ?? '';
+        authToken = authorization;
       } else {
         const axiosConfig = {
           headers: {
             'Content-Type': sendConfig.configType,
-            Authorization: `${sendConfig.authorization}`,
+            Authorization: `Bearer ${authorization}`,
           },
           httpsAgent: this.agent,
         };

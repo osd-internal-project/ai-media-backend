@@ -31,3 +31,9 @@ export const tosConfigs = registerAs('tos', () => ({
   tosRegion: process.env.TOS_REGION,
   tosEndpoint: process.env.TOS_ENDPOINT,
 }));
+export const llmConfigs = registerAs('llm', () => ({
+  llmGatewayUrl: process.env.LLM_GATEWAY_URL || 'https://llmgateway.osd.co.th',
+  llmProjectId: process.env.LLM_PROJECT_ID || 'team-mrcx7er7', //AI Cave Lab
+  llmProjectName: process.env.LLM_PROJECT_NAME || 'AI Cave Lab',
+  llmAdminToken: process.env.LLM_ADMIN_TOKEN,
+}));

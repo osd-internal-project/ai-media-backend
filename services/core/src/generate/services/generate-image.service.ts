@@ -2,6 +2,7 @@ import {
   GalleryRepository,
   LogRepository,
   MasterdataModelTypeRepository,
+  OrganizationRepository,
   QUEUE_NAME_IMAGE,
   RequestImageGenerateDto,
   TosService,
@@ -33,12 +34,23 @@ export class GenerateImageService extends BaseGenerateService {
     private readonly tosService: TosService,
     private readonly projectRepo: ProjectRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
+    organizationRepository: OrganizationRepository,
   ) {
-    super(generateHelperService, galleryRepo, logrepo, masterModelTypeRepo, redis);
+    super(
+      generateHelperService,
+      galleryRepo,
+      logrepo,
+      masterModelTypeRepo,
+      redis,
+      organizationRepository,
+    );
   }
 
   protected get modelType(): string {
     return 'image';
+  }
+  protected get usesLlmGateway(): boolean {
+    return true;
   }
   protected get queue(): Queue {
     return this.imageQueue;
@@ -193,6 +205,7 @@ export class GenerateImageService extends BaseGenerateService {
     userId: string,
     _apiRes: any,
     modelDetail: any,
+    authorization: string | null,
   ): object {
     return {
       taskId,
@@ -204,6 +217,9 @@ export class GenerateImageService extends BaseGenerateService {
       taskPollApi: modelDetail.taskPollApi ?? null,
       taskPollSec: modelDetail.taskPollSec ?? 10,
       taskResponseMap: modelDetail.taskResponseMap ?? null,
+      // Per-org LLM gateway key (falls back to the model's configured token).
+      authorization:
+        authorization ?? modelDetail?.sendConfig?.authorization ?? null,
     };
   }
 

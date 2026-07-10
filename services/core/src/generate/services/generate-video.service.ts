@@ -2,6 +2,7 @@ import {
   GalleryRepository,
   LogRepository,
   MasterdataModelTypeRepository,
+  OrganizationRepository,
   QUEUE_NAME_VDO,
   RequestVideoGenerateDto,
   MasterModelTypeDto,
@@ -26,12 +27,23 @@ export class GenerateVideoService extends BaseGenerateService {
     masterModelTypeRepo: MasterdataModelTypeRepository,
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_VDO) private readonly videoQueue: Queue,
+    organizationRepository: OrganizationRepository,
   ) {
-    super(generateHelperService, galleryRepo, logrepo, masterModelTypeRepo, redis);
+    super(
+      generateHelperService,
+      galleryRepo,
+      logrepo,
+      masterModelTypeRepo,
+      redis,
+      organizationRepository,
+    );
   }
 
   protected get modelType(): string {
     return 'video';
+  }
+  protected get usesLlmGateway(): boolean {
+    return true;
   }
   protected get queue(): Queue {
     return this.videoQueue;
@@ -68,6 +80,7 @@ export class GenerateVideoService extends BaseGenerateService {
     userId: string,
     apiRes: any,
     modelDetail: MasterModelTypeDto,
+    authorization: string | null,
   ): object {
     return {
       taskId,
@@ -78,7 +91,8 @@ export class GenerateVideoService extends BaseGenerateService {
       sendConfig: modelDetail.sendConfig,
       statusBaseUrl: modelDetail?.taskPollApi ?? null,
       videoTaskId: apiRes?.data?.id ?? null,
-      authorization: modelDetail?.sendConfig?.authorization ?? null,
+      // Per-org LLM gateway key (falls back to the model's configured token).
+      authorization: authorization ?? modelDetail?.sendConfig?.authorization ?? null,
     };
   }
 

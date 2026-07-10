@@ -3,13 +3,14 @@ import {
   LogRepository,
   MasterdataModelTypeRepository,
   MasterModelTypeDto,
+  OrganizationRepository,
 } from '@ai-media/share';
 import { Logger } from '@nestjs/common';
 import { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
-import * as https from 'https';
 import Redis from 'ioredis';
 import { GenerateHelperService } from './generate-helper.service';
+import { LlmGatewayService } from './llm-gateway.service';
 
 export interface CreditQuotaResult {
   isQuotaExceeded: boolean;
@@ -26,21 +27,31 @@ export interface CreditQuotaResult {
  * the common validate → find-model → check-credit → call-API → queue → redis flow
  * lives here once.
  */
-export abstract class BaseGenerateService {
-  protected readonly agent = new https.Agent({ rejectUnauthorized: false });
-
+export abstract class BaseGenerateService extends LlmGatewayService {
   constructor(
-    protected readonly generateHelperService: GenerateHelperService,
+    generateHelperService: GenerateHelperService,
     protected readonly galleryRepo: GalleryRepository,
     protected readonly logrepo: LogRepository,
     protected readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     protected readonly redis: Redis,
-  ) {}
+    organizationRepository: OrganizationRepository,
+  ) {
+    super(generateHelperService, organizationRepository);
+  }
 
   // ── Must override ────────────────────────────────────────────────────────────
 
   /** Prisma model type string, e.g. 'video', 'image', 'omnihumen', 'dreamactor' */
   protected abstract get modelType(): string;
+
+  /**
+   * Whether this generation type authenticates through the LLM gateway with the
+   * organization's per-org key. When true, a missing key fails the request.
+   * Override → true in gateway-backed types (image, video).
+   */
+  protected get usesLlmGateway(): boolean {
+    return false;
+  }
 
   /** BullMQ queue for this generation type */
   protected abstract get queue(): Queue;
@@ -75,6 +86,7 @@ export abstract class BaseGenerateService {
     userId: string,
     apiRes: any,
     modelDetail: any,
+    authorization: string | null,
   ): any;
 
   /** Gallery row data; return null to skip gallery creation (image pattern) */
@@ -260,6 +272,14 @@ export abstract class BaseGenerateService {
       });
       if (!modelDetail) return { status: 400, data: 'Model not found' };
 
+      // Resolve the org's LLM gateway key BEFORE reserving credit, so a missing
+      // key fails cleanly without leaving an orphaned credit hold. Gateway-backed
+      // types (image/video) require it; others carry it for a future migration.
+      const authorization = await this.getLlmGatewayApiKey(body.organizationId);
+      if (this.usesLlmGateway && !authorization) {
+        return { status: 500, data: 'generate failed' };
+      }
+
       const creditResult = await this.checkCreditQuota(
         user.userId,
         body,
@@ -332,6 +352,7 @@ export abstract class BaseGenerateService {
           user.userId,
           apiRes,
           modelDetail,
+          authorization,
         ),
         {
           jobId: taskId,

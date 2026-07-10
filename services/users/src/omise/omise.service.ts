@@ -204,6 +204,7 @@ export class OmiseService {
     description?: string;
     invoiceNo: string;
   }): Promise<OmiseCharge> {
+    console.log('Charging customer card with input:', input);
     return this.send<OmiseCharge>('post', '/charges', {
       amount: this.toSatang(input.amountBaht),
       currency: 'thb',
@@ -222,6 +223,7 @@ export class OmiseService {
     description?: string;
     invoiceNo: string;
   }): Promise<OmiseCharge> {
+    console.log('Creating card charge with input:', input);
     return this.post<OmiseCharge>('/charges', {
       amount: this.toSatang(input.amountBaht),
       currency: 'thb',

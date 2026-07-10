@@ -437,7 +437,8 @@ model Organization {
   creditBalance       CreditBalance?
   packageTransactions PackageTransaction[]
   brandKits           BrandKit[]
-  apiKey              String?                   @map("api_key") @db.VarChar(100)
+  llmApiKey           String?                   @map("llm_api_key") @db.VarChar(100)
+  llmOragnizeId       String?                   @map("llm_organization_id") @db.VarChar(100)
   // Omise customer id — holds the org's saved cards (created on first saved-card payment)
   omiseCustomerId     String?                   @map("omise_customer_id") @db.VarChar(100)
 
@@ -976,6 +977,8 @@ model Invoice {
   receipt     Receipt?
   payments    Payment[]
   whtRequests WhtRequest[]
+
+  // llmGatewayKey String? @map("llm_gateway_key") @db.VarChar(100) // บันทึก LLM Gateway Key เฉพาะใบแจ้งหนี้นี้ (ใช้กับการจ่ายเงินผ่าน LLM Gateway)
 
   @@index([organizationId])
   @@index([status])
