@@ -16,3 +16,4 @@ export const tosConfigs = registerAs('tos', () => ({
   tosRegion: process.env.TOS_REGION,
   tosEndpoint: process.env.TOS_ENDPOINT,
 }));
+

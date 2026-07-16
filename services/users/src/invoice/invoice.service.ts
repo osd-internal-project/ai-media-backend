@@ -212,6 +212,7 @@ export class InvoiceService {
     const user = await this.prisma.users.findUnique({
       where: { userId: dto.userId },
     });
+    // console.log('user ',userId)
     if (!user) {
       throw new NotFoundException('User not found');
     }

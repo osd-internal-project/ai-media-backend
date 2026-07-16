@@ -682,10 +682,42 @@ export class VideoProcessor extends WorkerHost {
     body: RequestVideoGenerateDto,
     _modelDetail: any,
   ) {
+    // Reference uploads (Gen Video tab's multi-upload) arrive in `body.files`;
+    // map them to reference_* roles just like seedance2 so they are not dropped.
+    const filesUrl = await Promise.all(
+      body.files.map(async (file) => {
+        if (file.type === 'image') {
+          return {
+            type: 'image_url',
+            image_url: {
+              url: await this.presignRef(file.url),
+            },
+            role: 'reference_image',
+          };
+        } else if (file.type === 'video') {
+          return {
+            type: 'video_url',
+            video_url: {
+              url: await this.presignRef(file.url),
+            },
+            role: 'reference_video',
+          };
+        } else {
+          return {
+            type: 'audio_url',
+            audio_url: {
+              url: await this.presignRef(file.url),
+            },
+            role: 'reference_audio',
+          };
+        }
+      }),
+    );
     return {
       model: body.model,
       content: [
         { type: 'text', text: body.prompt },
+        ...filesUrl,
 
         ...(body.image[0]
           ? [
