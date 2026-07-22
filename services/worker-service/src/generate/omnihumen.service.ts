@@ -27,6 +27,21 @@ const ffprobePath = require('ffprobe-static');
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath.path);
 
+// Local Multer file shape — the ambient `Express.Multer.File` namespace isn't
+// resolved in this build context (mirrors video.service.ts).
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  buffer: Buffer;
+  size: number;
+  stream: null;
+  destination: string;
+  filename: string;
+  path: string;
+}
+
 interface OmnihumenProcessJob {
   taskId: string;
   clientId: string;
@@ -265,28 +280,39 @@ export class OmnihumenProcessor extends WorkerHost {
             projectId: body.projectId,
           });
           const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${body.userId}`;
-          const uuidName = uuidv4();
-          const videoFile = `${uuidName}.mp4`;
-          const thumbFile = `thumb-${uuidName}.jpg`;
-          const videoKey = `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${videoFile}`;
-          const thumbKey = `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${thumbFile}`;
 
-          // Let TOS pull the finished video straight from the provider URL: the
-          // bytes flow provider→TOS and never transit this pod (removes the
-          // download+re-upload egress spike and the whole-video buffering/OOM).
-          await this.tosService.fetchObject(
-            tosConfigs().tosBucket,
-            videoKey,
-            videoUrl,
+          // Download the finished video through this pod, then upload to TOS. TOS
+          // server-side `fetchObject` can't complete the TLS handshake to the
+          // provider's ByteDance/TikTok CDN (net/http: TLS handshake timeout), so
+          // we mirror the working video/dreamactor flows. `axios.get` also throws
+          // on failure, so a genuine fetch error hits the outer catch (proper
+          // failed status + credit refund) instead of faking success.
+          const videoRes = await axios.get(videoUrl, {
+            responseType: 'arraybuffer',
+            httpsAgent: this.agent,
+          });
+          const buffer = Buffer.from(videoRes.data);
+          const uuidName = uuidv4();
+          const ext = 'mp4';
+
+          const mockFile: MulterFile = {
+            fieldname: 'file',
+            originalname: `${uuidName}.${ext}`,
+            encoding: '7bit',
+            mimetype: 'video/mp4',
+            buffer: buffer,
+            size: buffer.length,
+            stream: null,
+            destination: '',
+            filename: '',
+            path: '',
+          };
+          const result = await this.uploadVideoWithThumbnail(
+            body.organizationId,
+            body.projectId,
+            mockFile,
+            taskId,
           );
-          // Thumbnail is produced server-side (TOS video/snapshot); only the
-          // small image passes through this pod.
-          await this.tosService.createVideoThumbnail(
-            tosConfigs().tosBucket,
-            videoKey,
-            thumbKey,
-          );
-          const result = { file: videoFile, thumbnail: thumbFile };
           console.log('returngenerate');
 
           await this.publishToCore(
@@ -552,7 +578,7 @@ export class OmnihumenProcessor extends WorkerHost {
   private async uploadVideoWithThumbnail(
     organizationId: string,
     projectId: string,
-    file: Express.Multer.File,
+    file: MulterFile,
     id: string,
   ) {
     const videoFileName = `${Date.now()}-${file.originalname}`;
