@@ -133,32 +133,17 @@ export class DreamactorProcessor extends WorkerHost {
       let dreamactorTaskId: string = (job.data as DreamactorProcessJob)
         .dreamactorTaskId;
       if (sendApi) {
-        const accessKey =
-          process.env.BYTEPLUS_ACCESS_KEY ||
-          'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';
-        const secretKey =
-          process.env.BYTEPLUS_SECRET_KEY ||
-          'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
         const modelDetail = { modelType: reqKey };
         const builder = this.payloadBuilders[sendConfig?.type ?? 'dreamactor'];
         const submitPayload = await builder(body, modelDetail);
-        const queryParams = {
-          Action: 'CVSync2AsyncSubmitTask',
-          Version: '2024-06-06',
-        };
-        const headers = this.signBytePlusRequest(
-          'POST',
-          '/',
-          queryParams,
-          submitPayload,
-          accessKey,
-          secretKey,
-        );
+        // Auth/content-type/cookie and the full action-versioned URL all come from
+        // the model's DB config now (LLM gateway), so no request signing here and
+        // no axios `params` (the query string is already baked into `sendApi`).
+        const headers = this.buildGatewayHeaders(sendConfig);
         let apiRes: any;
         try {
           apiRes = await axios.post(sendApi, submitPayload, {
             headers,
-            params: queryParams,
             httpsAgent: this.agent,
           });
           await this.generateHelperService.logAudit(
@@ -212,34 +197,17 @@ export class DreamactorProcessor extends WorkerHost {
           projectId: body.projectId,
         });
         const url = statusBaseUrl;
-        const accessKey =
-          process.env.BYTEPLUS_ACCESS_KEY ||
-          'AKAPYzE5OGNhNmRkZDVlNDllYzlhM2MwNTU3MTE0YWM4ZGM';
-        const secretKey =
-          process.env.BYTEPLUS_SECRET_KEY ||
-          'T1RnM09HSTJNVFEwWmpBek5EY3lNMkZqWmpabE5tWm1aR0ZrT0dabU9UVQ==';
-
-        const queryParams = {
-          Action: 'CVSync2AsyncGetResult',
-          Version: '2024-06-06',
-        };
         const bodyPayload = {
           req_key: reqKey,
           task_id: dreamactorTaskId,
         };
 
-        const headers = this.signBytePlusRequest(
-          'POST',
-          '/',
-          queryParams,
-          bodyPayload,
-          accessKey,
-          secretKey,
-        );
+        // `statusBaseUrl` (= taskPollApi) already carries the model/action/version
+        // query string; auth + cookie come from the model's DB config.
+        const headers = this.buildGatewayHeaders(sendConfig);
 
         const getResult = await axios.post(url, bodyPayload, {
           headers: headers,
-          params: queryParams,
           httpsAgent: this.agent,
         });
 
@@ -631,92 +599,34 @@ export class DreamactorProcessor extends WorkerHost {
     }
   }
 
-  private signBytePlusRequest(
-    method: string,
-    path: string,
-    queryParams: Record<string, string>,
-    body: any,
-    accessKey: string,
-    secretKey: string,
-  ) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = require('crypto');
-    const region = 'ap-singapore-1';
-    const service = 'cv';
-    const contentType = 'application/json';
-    const host = 'cv.byteplusapi.com';
-
-    const now = new Date();
-    const x_date = now.toISOString().replace(/[:-]|\.\d{3}/g, ''); // YYYYMMDDTHHMMSSZ
-    const short_date = x_date.slice(0, 8);
-
-    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
-    const x_content_sha256 = crypto
-      .createHash('sha256')
-      .update(bodyStr)
-      .digest('hex');
-
-    const queryString = Object.keys(queryParams)
-      .sort()
-      .map(
-        (key) =>
-          `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}`,
-      )
-      .join('&');
-
-    const canonicalHeaders =
-      `content-type:${contentType}\n` +
-      `host:${host}\n` +
-      `x-content-sha256:${x_content_sha256}\n` +
-      `x-date:${x_date}\n`;
-
-    const signedHeaders = 'content-type;host;x-content-sha256;x-date';
-
-    const canonicalRequest = [
-      method,
-      path,
-      queryString,
-      canonicalHeaders,
-      signedHeaders,
-      x_content_sha256,
-    ].join('\n');
-
-    const credentialScope = `${short_date}/${region}/${service}/request`;
-
-    const stringToSign = [
-      'HMAC-SHA256',
-      x_date,
-      credentialScope,
-      crypto.createHash('sha256').update(canonicalRequest).digest('hex'),
-    ].join('\n');
-
-    const kDate = crypto
-      .createHmac('sha256', secretKey)
-      .update(short_date)
-      .digest();
-    const kRegion = crypto.createHmac('sha256', kDate).update(region).digest();
-    const kService = crypto
-      .createHmac('sha256', kRegion)
-      .update(service)
-      .digest();
-    const kSigning = crypto
-      .createHmac('sha256', kService)
-      .update('request')
-      .digest();
-
-    const signature = crypto
-      .createHmac('sha256', kSigning)
-      .update(stringToSign)
-      .digest('hex');
-
-    const authorization = `HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
+  /**
+   * Build LLM-gateway request headers from the model's `sendConfig`.
+   *
+   * The gateway auth token (`authorization`, already including the `Bearer `
+   * prefix), the content type (`configType`), and an optional WAF `cookie` are
+   * all stored per-model in the DB. The `Authorization`/`Cookie` headers are only
+   * added when present so a config without them still yields a valid request.
+   *
+   * @param sendConfig - The model's `sendConfig` JSON (free-form) from master data.
+   * @returns Header map for the gateway submit/poll requests.
+   */
+  private buildGatewayHeaders(sendConfig?: {
+    [k: string]: unknown;
+  }): Record<string, string> {
+    const authorization =
+      typeof sendConfig?.authorization === 'string'
+        ? sendConfig.authorization
+        : undefined;
+    const cookie =
+      typeof sendConfig?.cookie === 'string' ? sendConfig.cookie : undefined;
+    const contentType =
+      typeof sendConfig?.configType === 'string'
+        ? sendConfig.configType
+        : 'application/json';
     return {
       'Content-Type': contentType,
-      Host: host,
-      'X-Content-Sha256': x_content_sha256,
-      'X-Date': x_date,
-      Authorization: authorization,
+      ...(authorization && { Authorization: authorization }),
+      ...(cookie && { Cookie: cookie }),
     };
   }
 
