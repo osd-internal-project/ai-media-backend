@@ -291,33 +291,28 @@ export class OmnihumenProcessor extends WorkerHost {
             projectId: body.projectId,
           });
           const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${body.userId}`;
-          const videoRes = await axios.get(videoUrl, {
-            responseType: 'arraybuffer',
-            httpsAgent: this.agent,
-          });
-
-          const buffer = Buffer.from(videoRes.data);
           const uuidName = uuidv4();
-          const ext = 'mp4';
+          const videoFile = `${uuidName}.mp4`;
+          const thumbFile = `thumb-${uuidName}.jpg`;
+          const videoKey = `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${videoFile}`;
+          const thumbKey = `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${thumbFile}`;
 
-          const mockFile: Express.Multer.File = {
-            fieldname: 'file',
-            originalname: `${uuidName}.${ext}`,
-            encoding: '7bit',
-            mimetype: 'video/mp4',
-            buffer: buffer,
-            size: buffer.length,
-            stream: null,
-            destination: '',
-            filename: '',
-            path: '',
-          };
-          const result = await this.uploadVideoWithThumbnail(
-            body.organizationId,
-            body.projectId,
-            mockFile,
-            taskId,
+          // Let TOS pull the finished video straight from the provider URL: the
+          // bytes flow provider→TOS and never transit this pod (removes the
+          // download+re-upload egress spike and the whole-video buffering/OOM).
+          await this.tosService.fetchObject(
+            tosConfigs().tosBucket,
+            videoKey,
+            videoUrl,
           );
+          // Thumbnail is produced server-side (TOS video/snapshot); only the
+          // small image passes through this pod.
+          await this.tosService.createVideoThumbnail(
+            tosConfigs().tosBucket,
+            videoKey,
+            thumbKey,
+          );
+          const result = { file: videoFile, thumbnail: thumbFile };
           console.log('returngenerate');
 
           await this.publishToCore(
