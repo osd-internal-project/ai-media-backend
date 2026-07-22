@@ -68,6 +68,65 @@ export class TosService {
     }
   }
 
+  /**
+   * Ask TOS to fetch an object directly from a remote URL (server-side). The
+   * bytes flow source→TOS and never transit this pod — used to store
+   * provider-generated videos without downloading + re-uploading them.
+   * @param url Publicly fetchable source URL (must be reachable by TOS).
+   */
+  async fetchObject(bucketName: string, objectName: string, url: string) {
+    try {
+      const { data } = await this.client.fetchObject({
+        bucket: bucketName,
+        key: objectName,
+        url,
+      });
+      return data;
+    } catch (error) {
+      handleError(error);
+    }
+  }
+
+  /**
+   * Create a poster thumbnail from an already-stored video via TOS server-side
+   * data processing (`video/snapshot`) and persist the small image. Only the
+   * tiny snapshot bytes pass through this pod, never the full video.
+   * @param atMs Snapshot position in milliseconds into the video.
+   * @returns The thumbnail object key, or undefined on failure.
+   */
+  async createVideoThumbnail(
+    bucketName: string,
+    videoObjectName: string,
+    thumbObjectName: string,
+    atMs = 2000,
+  ) {
+    try {
+      const process = `video/snapshot,t_${Math.max(
+        0,
+        Math.floor(atMs),
+      )},f_jpg,w_320`;
+      const {
+        data: { content },
+      } = await this.client.getObjectV2({
+        bucket: bucketName,
+        key: videoObjectName,
+        process,
+      });
+      let snapshot = Buffer.from([]);
+      for await (const chunk of content as any) {
+        snapshot = Buffer.concat([snapshot, chunk]);
+      }
+      await this.client.putObject({
+        bucket: bucketName,
+        key: thumbObjectName,
+        body: snapshot,
+      });
+      return thumbObjectName;
+    } catch (error) {
+      handleError(error);
+    }
+  }
+
   async uploadCallback(bucketName: string, objectName: string, body: Buffer) {
     const callbackUrl = '*** Provide your callback url ***';
     const objectKey = '*** Provide your object key ***';
@@ -132,12 +191,30 @@ export class TosService {
     }
   }
 
-  async getPreSignedUrl(bucketName: string, objectName: string) {
+  async getPreSignedUrl(
+    bucketName: string,
+    objectName: string,
+    options?: {
+      contentType?: string;
+      contentDisposition?: string;
+      expires?: number;
+    },
+  ) {
     try {
       const url = this.client.getPreSignedUrl({
         method: 'GET',
         bucket: bucketName,
         key: objectName,
+        expires: options?.expires,
+        // Let the presigned URL carry download semantics (forces the browser to
+        // save with the right name/type) so the file streams straight from TOS.
+        response:
+          options?.contentType || options?.contentDisposition
+            ? {
+                contentType: options?.contentType,
+                contentDisposition: options?.contentDisposition,
+              }
+            : undefined,
       });
       // console.log('PreSignedUrl:', url);
       return url;
