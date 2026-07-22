@@ -197,6 +197,10 @@ export class VideoProcessor extends WorkerHost {
         videoTaskId = apiRes.data.id;
         authToken = String(sendConfig.authorization ?? '');
         await this.updateTaskStatus(taskId, { videoTaskId });
+        // Persist into the job payload so a BullMQ retry/stalled re-process
+        // resumes polling this provider task instead of submitting a new one
+        // (which would re-generate and re-transfer the video).
+        await job.updateData({ ...(job.data as any), videoTaskId });
       }
 
       // 1. ส่ง event "started" ไปยัง Core Service
@@ -215,7 +219,14 @@ export class VideoProcessor extends WorkerHost {
       const sleep = (ms: number) =>
         new Promise((resolve) => setTimeout(resolve, ms));
 
+      // Bound the poll so a job stuck in a non-terminal provider state fails
+      // cleanly instead of holding a worker slot (and re-running on restart).
+      const POLL_TIMEOUT_MS = 20 * 60 * 1000;
+      const pollStartedAt = Date.now();
       while (true) {
+        if (Date.now() - pollStartedAt > POLL_TIMEOUT_MS) {
+          throw new UnrecoverableError('generation timed out');
+        }
         await this.publishToCore(clientId, 'worker:video-progress', {
           taskId,
           timestamp: new Date().toISOString(),
@@ -276,13 +287,14 @@ export class VideoProcessor extends WorkerHost {
             type: 'video',
             projectId: body.projectId,
           });
-          const videoRes = await axios.get(content.video_url, {
+          const uuidName = uuidv4();
+          //before
+           const videoRes = await axios.get(content.video_url, {
             responseType: 'arraybuffer',
             httpsAgent: this.agent,
           });
-
           const buffer = Buffer.from(videoRes.data);
-          const uuidName = uuidv4();
+          //  const uuidName = uuidv4();
           const ext = 'mp4';
 
           const mockFile: MulterFile = {
@@ -303,6 +315,31 @@ export class VideoProcessor extends WorkerHost {
             mockFile,
             taskId,
           );
+          
+           
+         
+          // const videoFile = `${uuidName}.mp4`;
+          // const thumbFile = `thumb-${uuidName}.jpg`;
+          // const videoKey = `organize/${body.organizationId}/${body.projectId}/video-generate/${videoFile}`;
+          // const thumbKey = `organize/${body.organizationId}/${body.projectId}/video-generate/${thumbFile}`;
+
+          // // Let TOS pull the finished video straight from the provider URL: the
+          // // bytes flow provider→TOS and never transit this pod (removes the
+          // // download+re-upload egress spike and the whole-video buffering/OOM).
+          // await this.tosService.fetchObject(
+          //   tosConfigs().tosBucket,
+          //   videoKey,
+          //   content.video_url,
+          // );
+          // // Thumbnail is produced server-side (TOS video/snapshot); only the
+          // // small image passes through this pod. Snapshot ~20% into the clip.
+          // await this.tosService.createVideoThumbnail(
+          //   tosConfigs().tosBucket,
+          //   videoKey,
+          //   thumbKey,
+          //   Math.floor((Number(body.duration) || 5) * 0.2 * 1000),
+          // );
+          // const result = { file: videoFile, thumbnail: thumbFile };
           console.log('returngenerate');
 
           await this.publishToCore(clientId, 'worker:video-upload-success', {
@@ -682,66 +719,30 @@ export class VideoProcessor extends WorkerHost {
     body: RequestVideoGenerateDto,
     _modelDetail: any,
   ) {
-    // Reference uploads (Gen Video tab's multi-upload) arrive in `body.files`;
-    // map them to reference_* roles just like seedance2 so they are not dropped.
-    const filesUrl = await Promise.all(
-      body.files.map(async (file) => {
-        if (file.type === 'image') {
-          return {
-            type: 'image_url',
-            image_url: {
-              url: await this.presignRef(file.url),
-            },
-            role: 'reference_image',
-          };
-        } else if (file.type === 'video') {
-          return {
-            type: 'video_url',
-            video_url: {
-              url: await this.presignRef(file.url),
-            },
-            role: 'reference_video',
-          };
-        } else {
-          return {
-            type: 'audio_url',
-            audio_url: {
-              url: await this.presignRef(file.url),
-            },
-            role: 'reference_audio',
-          };
-        }
-      }),
+    // seedance1 supports ONLY first_frame / last_frame image roles (no
+    // reference_* roles like seedance2). Explicit frame slots (body.image) take
+    // precedence, then fall back to image-type reference uploads (body.files) —
+    // the seedance1 UI currently sends its uploads there. Video/audio files and
+    // anything beyond two frames are unsupported by seedance1 → skipped.
+    const frameRefs = [
+      ...body.image.filter((ref): ref is string => Boolean(ref)),
+      ...body.files.filter((f) => f.type === 'image').map((f) => f.url),
+    ].slice(0, 2);
+
+    const frameRoles = ['first_frame', 'last_frame'] as const;
+    const frameContent = await Promise.all(
+      frameRefs.map(async (ref, i) => ({
+        type: 'image_url',
+        image_url: {
+          url: await this.presignRef(ref),
+        },
+        role: frameRoles[i],
+      })),
     );
+
     return {
       model: body.model,
-      content: [
-        { type: 'text', text: body.prompt },
-        ...filesUrl,
-
-        ...(body.image[0]
-          ? [
-              {
-                type: 'image_url',
-                image_url: {
-                  url: await this.presignRef(body.image[0]),
-                },
-                role: 'first_frame',
-              },
-            ]
-          : []),
-        ...(body.image[1]
-          ? [
-              {
-                type: 'image_url',
-                image_url: {
-                  url: await this.presignRef(body.image[1]),
-                },
-                role: 'last_frame',
-              },
-            ]
-          : []),
-      ],
+      content: [{ type: 'text', text: body.prompt }, ...frameContent],
       draft: body.draft,
       generate_audio: body.generateAudio,
       ratio: body.ratio,
