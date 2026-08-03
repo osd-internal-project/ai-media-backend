@@ -27,8 +27,8 @@ env:
   frontendUrl: "https://sit.aicave.ai"
   keycloakUrl: "https://id24.aicave.ai"
   keycloakRealm: "eportal"
-  keycloakClientId: "aicave-sit"
-  keycloakRedirectUri: "https://www.aicave.ai/callback"
+  keycloakClientId: "ai-cave-sit"
+  keycloakRedirectUri: "https://sit.aicave.ai/callback"
   omiseApiUrl: "https://api.omise.co"
   omiseApiVersion: "2019-05-29"
 
