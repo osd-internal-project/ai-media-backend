@@ -6,12 +6,14 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   Res,
 } from '@nestjs/common';
 import { Response } from 'express';
 
 import { DashboardService } from './dashboard.service';
 import { CreateDashboardDto } from './dto/create-dashboard.dto';
+import { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import { UpdateDashboardDto } from './dto/update-dashboard.dto';
 import * as dayjs from 'dayjs';
 
@@ -20,18 +22,49 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('overview-summary/:organizationId')
-  findOverviewSummary(@Param('organizationId') organizationId: string) {
-    return this.dashboardService.findOverviewSummary(organizationId);
+  findOverviewSummary(
+    @Param('organizationId') organizationId: string,
+    @Query() filter: DashboardFilterDto,
+  ) {
+    return this.dashboardService.findOverviewSummary(organizationId, filter);
+  }
+
+  @Get('generation-series/:organizationId')
+  findGenerationSeries(
+    @Param('organizationId') organizationId: string,
+    @Query() filter: DashboardFilterDto,
+  ) {
+    return this.dashboardService.findGenerationSeries(organizationId, filter);
+  }
+
+  @Get('recent-generations/:organizationId')
+  findRecentGenerations(
+    @Param('organizationId') organizationId: string,
+    @Query() filter: DashboardFilterDto,
+  ) {
+    return this.dashboardService.findRecentGenerations(organizationId, filter);
   }
 
   @Get('credit-per-month-and-type/:organizationId')
-  countCreditPerMonthAndType(@Param('organizationId') organizationId: string) {
-    return this.dashboardService.countCreditPerMonthAndType(organizationId);
+  countCreditPerMonthAndType(
+    @Param('organizationId') organizationId: string,
+    @Query() filter: DashboardFilterDto,
+  ) {
+    return this.dashboardService.countCreditPerMonthAndType(
+      organizationId,
+      filter,
+    );
   }
 
   @Get('generated-per-month-and-type/:organizationId')
-  countGeneratedPerMonthAndType(@Param('organizationId') organizationId: string) {
-    return this.dashboardService.countGeneratedPerMonthAndType(organizationId);
+  countGeneratedPerMonthAndType(
+    @Param('organizationId') organizationId: string,
+    @Query() filter: DashboardFilterDto,
+  ) {
+    return this.dashboardService.countGeneratedPerMonthAndType(
+      organizationId,
+      filter,
+    );
   }
   @Post()
   create(@Body() createDashboardDto: CreateDashboardDto) {

@@ -18,14 +18,14 @@ FROM base AS dev-deps
 COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/yarn.lock ./yarn.lock
 # เพิ่ม --ignore-engines flag
-RUN yarn install  --ignore-engines
+RUN yarn install --frozen-lockfile --ignore-engines
 
 # production dependencies
 FROM base AS prod-deps
 COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/yarn.lock ./yarn.lock
 # เพิ่ม --ignore-engines flag
-RUN yarn install  --production --ignore-engines
+RUN yarn install --frozen-lockfile --production --ignore-engines
 
 # build
 FROM base AS builder

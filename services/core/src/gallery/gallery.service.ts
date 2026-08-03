@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   GalleryRepository,
   TosService,
@@ -103,20 +109,40 @@ export class GalleryService {
         id,
       },
     });
+    if (!found) {
+      throw new NotFoundException(`Gallery item ${id} not found`);
+    }
+
     // ใช้รูปแรกจาก resultUrl[] (fallback imageUrl สำหรับ data เก่า)
     const objectName = resolveGalleryResultUrls(found)[0] ?? '';
-    const file = await this.tosService.getObjectV2(
+    if (!objectName) {
+      throw new NotFoundException(
+        `Gallery item ${id} has no downloadable file`,
+      );
+    }
+
+    const type = found.typeGenerate === 'video' ? 'video/mp4' : 'image/jpeg';
+    const downloadName = query.filename || objectName;
+    const key = `organize/${organizationId || ''}/${found.projectId}/${
+      `${found.typeGenerate}-generate`
+    }/${objectName}`;
+
+    // Presign a direct-download URL so the file streams from TOS to the client
+    // instead of being buffered through this pod (avoids the egress spike and
+    // the OOM-driven 500s of proxying whole media files).
+    const url = await this.tosService.getPreSignedUrl(
       tosConfigs().tosBucket,
-      `organize/${organizationId || ''}/${found.projectId}/${
-        `${found.typeGenerate}-generate`
-      }/${objectName}`,
+      key,
+      {
+        contentType: type,
+        contentDisposition: `attachment; filename="${downloadName}"`,
+      },
     );
-    console.log(`download : ${objectName}`);
-    return {
-      file,
-      name: objectName,
-      type: found.typeGenerate === 'video' ? 'video/mp4' : 'image/jpeg',
-    };
+    if (!url) {
+      throw new InternalServerErrorException('Failed to presign download URL');
+    }
+
+    return { url };
   }
   async updateById(id: string, updateGalleryDto: Prisma.GalleryUpdateInput) {
     const data = await this.galleryRepo.update({

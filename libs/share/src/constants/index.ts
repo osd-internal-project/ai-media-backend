@@ -1,3 +1,5 @@
+export * from './generation-type';
+
 export class CreateGenerateDto {
     taskId?: string;
     type: 'image' | 'video';
