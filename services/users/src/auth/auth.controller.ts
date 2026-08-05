@@ -1,10 +1,49 @@
-import { Body, Controller, Post, Headers, UnauthorizedException, Get } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Headers,
+  UnauthorizedException,
+  BadRequestException,
+  Get,
+  Param,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { IDP_HINTS, isIdpHint } from '../keycloak/keycloak.service';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
+  /**
+   * Authorization URL for a brokered identity provider.
+   *
+   * Declared before the `google` routes below purely for readability — they are distinct
+   * literal paths, so ordering does not matter here.
+   */
+  @Get('idp/:idp')
+  async idpLogin(@Param('idp') idp: string) {
+    if (!isIdpHint(idp)) {
+      throw new BadRequestException(
+        `Unsupported identity provider '${idp}'. Supported: ${IDP_HINTS.join(', ')}`,
+      );
+    }
+    return { url: await this.authService.getIdpLoginUrl(idp) };
+  }
+
+  /**
+   * Completes a brokered login. Provider-agnostic — Keycloak returns to one registered
+   * redirect URI carrying only the authorization code.
+   */
+  @Post('idp/callback')
+  async idpCallback(@Body() body: { code: string }) {
+    if (!body?.code) {
+      throw new BadRequestException('Missing authorization code');
+    }
+    return this.authService.idpCallback(body.code);
+  }
+
+  /** @deprecated Use `GET /auth/idp/google`. Kept for already-deployed frontends. */
   @Get("google")
   async googleLogin() {
     return {
@@ -12,6 +51,7 @@ export class AuthController {
     };
   }
 
+  /** @deprecated Use `POST /auth/idp/callback`. Kept for already-deployed frontends. */
   @Post("google/callback")
   async googleCallback(@Body() body: any) {
     return this.authService.googleCallback(body.code);

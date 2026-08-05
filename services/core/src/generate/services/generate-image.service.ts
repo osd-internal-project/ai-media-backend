@@ -1,5 +1,6 @@
 import {
   GalleryRepository,
+  LlmGatewayService,
   LogRepository,
   MasterdataModelTypeRepository,
   OrganizationRepository,
@@ -35,6 +36,7 @@ export class GenerateImageService extends BaseGenerateService {
     private readonly projectRepo: ProjectRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     organizationRepository: OrganizationRepository,
+    llmGateway: LlmGatewayService,
   ) {
     super(
       generateHelperService,
@@ -43,6 +45,7 @@ export class GenerateImageService extends BaseGenerateService {
       masterModelTypeRepo,
       redis,
       organizationRepository,
+      llmGateway,
     );
   }
 

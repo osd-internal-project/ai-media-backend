@@ -59,6 +59,17 @@ spec:
               key: KEYCLOAK_CLIENT_SECRET
         - name: KEYCLOAK_REDIRECT_URI
           value: {{ .Values.env.keycloakRedirectUri | quote }}
+        - name: KEYCLOAK_IDP_MICROSOFT_ALIAS
+          value: {{ .Values.env.keycloakIdpMicrosoftAlias | quote }}
+        - name: LLM_GATEWAY_URL
+          value: {{ .Values.env.llmGatewayUrl | quote }}
+        - name: LLM_PROJECT_ID
+          value: {{ .Values.env.llmProjectId | quote }}
+        - name: LLM_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: LLM_ADMIN_TOKEN
         - name: OMISE_API_URL
           value: {{ .Values.env.omiseApiUrl | quote }}
         - name: OMISE_API_VERSION

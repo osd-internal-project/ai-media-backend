@@ -1,5 +1,6 @@
 import {
   GalleryRepository,
+  LlmGatewayService,
   LogRepository,
   MasterdataModelTypeRepository,
   OrganizationRepository,
@@ -27,6 +28,7 @@ export class GenerateDreamactorService extends BaseGenerateService {
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_DREAMACTOR) private readonly dreamactorQueue: Queue,
     organizationRepository: OrganizationRepository,
+    llmGateway: LlmGatewayService,
   ) {
     super(
       generateHelperService,
@@ -35,6 +37,7 @@ export class GenerateDreamactorService extends BaseGenerateService {
       masterModelTypeRepo,
       redis,
       organizationRepository,
+      llmGateway,
     );
   }
 

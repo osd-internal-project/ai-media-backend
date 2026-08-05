@@ -3,7 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { KeycloakService } from '../keycloak/keycloak.service';
+import { IdpHint, KeycloakService } from '../keycloak/keycloak.service';
 import { UsersRepository } from '@ai-media/share';
 
 @Injectable()
@@ -32,12 +32,31 @@ export class AuthService {
     return this.keycloakService.login(loginDto);
   }
 
-  async getGoogleLoginUrl() {
-    return await this.keycloakService.getGoogleLoginUrl();
+  /**
+   * @param idp Identity provider to route the user to.
+   * @returns The Keycloak authorization URL for that provider.
+   */
+  async getIdpLoginUrl(idp: IdpHint) {
+    return await this.keycloakService.getIdpLoginUrl(idp);
   }
 
+  /**
+   * Exchanges an IdP authorization code and provisions the local user.
+   *
+   * @param code Authorization code from the Keycloak redirect.
+   */
+  async idpCallback(code: string) {
+    return await this.keycloakService.idpCallback(code);
+  }
+
+  /** @deprecated Use {@link getIdpLoginUrl}. */
+  async getGoogleLoginUrl() {
+    return await this.keycloakService.getIdpLoginUrl('google');
+  }
+
+  /** @deprecated Use {@link idpCallback}. */
   async googleCallback(code: string) {
-    return await this.keycloakService.googleCallback(code);
+    return await this.keycloakService.idpCallback(code);
   }
 
   async checkUserExists(email: string) {

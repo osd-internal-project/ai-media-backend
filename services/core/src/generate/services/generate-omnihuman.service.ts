@@ -1,5 +1,6 @@
 import {
   GalleryRepository,
+  LlmGatewayService,
   LogRepository,
   MasterdataModelTypeRepository,
   OrganizationRepository,
@@ -27,6 +28,7 @@ export class GenerateOmnihumanService extends BaseGenerateService {
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_OMNIHUMEN) private readonly omnihumenQueue: Queue,
     organizationRepository: OrganizationRepository,
+    llmGateway: LlmGatewayService,
   ) {
     super(
       generateHelperService,
@@ -35,6 +37,7 @@ export class GenerateOmnihumanService extends BaseGenerateService {
       masterModelTypeRepo,
       redis,
       organizationRepository,
+      llmGateway,
     );
   }
 

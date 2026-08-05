@@ -9,5 +9,6 @@ export * from './interceptor';
 export * from './auth';
 export * from './email';
 export * from './constants';
+export * from './llm-gateway';
 export * from './types';
 export * from './tos-sdk';

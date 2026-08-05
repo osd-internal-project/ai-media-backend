@@ -1,5 +1,6 @@
 import {
   GalleryRepository,
+  LlmGatewayService,
   LogRepository,
   MasterdataModelTypeRepository,
   OrganizationRepository,
@@ -28,6 +29,7 @@ export class GenerateVideoService extends BaseGenerateService {
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_VDO) private readonly videoQueue: Queue,
     organizationRepository: OrganizationRepository,
+    llmGateway: LlmGatewayService,
   ) {
     super(
       generateHelperService,
@@ -36,6 +38,7 @@ export class GenerateVideoService extends BaseGenerateService {
       masterModelTypeRepo,
       redis,
       organizationRepository,
+      llmGateway,
     );
   }
 

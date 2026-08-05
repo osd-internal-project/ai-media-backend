@@ -49,6 +49,8 @@ env:
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
   redisHost: "my-redis-master"
   redisPort: "6379"
+  llmGatewayUrl: "https://llm-gateway.aicave.ai"
+  llmProjectId: "team-mrcx7er7"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
@@ -56,6 +58,7 @@ env:
 #   secretEnv.BYTEPLUS_SECRET_KEY
 #   secretEnv.TOS_ACCESS_KEY
 #   secretEnv.TOS_SECRET_KEY
+#   secretEnv.LLM_ADMIN_TOKEN
 
 resources:
   requests:

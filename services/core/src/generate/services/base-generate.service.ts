@@ -1,5 +1,6 @@
 import {
   GalleryRepository,
+  LlmGatewayService,
   LogRepository,
   MasterdataModelTypeRepository,
   MasterModelTypeDto,
@@ -10,7 +11,6 @@ import { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import { GenerateHelperService } from './generate-helper.service';
-import { LlmGatewayService } from './llm-gateway.service';
 
 export interface CreditQuotaResult {
   isQuotaExceeded: boolean;
@@ -27,17 +27,16 @@ export interface CreditQuotaResult {
  * the common validate → find-model → check-credit → call-API → queue → redis flow
  * lives here once.
  */
-export abstract class BaseGenerateService extends LlmGatewayService {
+export abstract class BaseGenerateService {
   constructor(
-    generateHelperService: GenerateHelperService,
+    protected readonly generateHelperService: GenerateHelperService,
     protected readonly galleryRepo: GalleryRepository,
     protected readonly logrepo: LogRepository,
     protected readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     protected readonly redis: Redis,
-    organizationRepository: OrganizationRepository,
-  ) {
-    super(generateHelperService, organizationRepository);
-  }
+    protected readonly organizationRepository: OrganizationRepository,
+    protected readonly llmGateway: LlmGatewayService,
+  ) {}
 
   // ── Must override ────────────────────────────────────────────────────────────
 
@@ -275,7 +274,9 @@ export abstract class BaseGenerateService extends LlmGatewayService {
       // Resolve the org's LLM gateway key BEFORE reserving credit, so a missing
       // key fails cleanly without leaving an orphaned credit hold. Gateway-backed
       // types (image/video) require it; others carry it for a future migration.
-      const authorization = await this.getLlmGatewayApiKey(body.organizationId);
+      const authorization = await this.llmGateway.getOrCreateApiKey(
+        body.organizationId,
+      );
       if (this.usesLlmGateway && !authorization) {
         return { status: 500, data: 'generate failed' };
       }

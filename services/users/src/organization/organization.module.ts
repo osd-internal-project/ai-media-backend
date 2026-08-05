@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { OrganizationController } from './organization.controller';
 import { OrganizationService } from './organization.service';
-import { PrismaModule } from '@ai-media/share';
+import { LlmGatewayModule, PrismaModule } from '@ai-media/share';
 import { KeycloakModule } from '../keycloak/keycloak.module';
 import { HttpModule } from '@nestjs/axios';
 
 @Module({
-  imports: [PrismaModule, KeycloakModule, HttpModule],
+  imports: [PrismaModule, LlmGatewayModule, KeycloakModule, HttpModule],
   controllers: [OrganizationController],
   providers: [OrganizationService],
 })

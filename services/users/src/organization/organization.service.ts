@@ -19,6 +19,7 @@ import {
   OrganizationSubscriptionRepository,
   CreditBalanceRepository,
   PackageTransactionRepository,
+  LlmGatewayService,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
@@ -43,6 +44,7 @@ export class OrganizationService {
     private readonly packageTransactionRepo: PackageTransactionRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly organizationSubscriptionRepo: OrganizationSubscriptionRepository,
+    private readonly llmGateway: LlmGatewayService,
   ) {}
 
   create(createOrganizationDto: Prisma.OrganizationCreateInput) {
@@ -110,6 +112,17 @@ export class OrganizationService {
         accessCodes: plan?.accessCodes || [],
       },
     });
+    // Non-blocking: a gateway outage must not fail organization creation. When this yields
+    // no key, services/core mints one lazily on the first generation.
+    const llmApiKey = await this.llmGateway.getOrCreateApiKey(
+      organization.organizationId,
+    );
+    if (!llmApiKey) {
+      Logger.warn(
+        `No LLM gateway API key provisioned for organization ${organization.organizationId}; it will be created on first generation`,
+      );
+    }
+
     const packageTransaction = await this.packageTransactionRepo.create({
       data: {
         organizationId: organization.organizationId,

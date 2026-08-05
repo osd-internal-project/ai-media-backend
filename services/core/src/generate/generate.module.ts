@@ -7,6 +7,7 @@ import {
   TosModule,
   QUEUE_NAME_OMNIHUMEN,
   QUEUE_NAME_DREAMACTOR,
+  LlmGatewayModule,
 } from '@ai-media/share';
 import { BullModule } from '@nestjs/bullmq';
 import { GenerateService } from './services/generate.service';
@@ -20,6 +21,7 @@ import { GenerateDreamactorService } from './services/generate-dreamactor.servic
   imports: [
     PrismaModule,
     TosModule,
+    LlmGatewayModule,
     BullModule.registerQueue({
       name: QUEUE_NAME_IMAGE,
     }),

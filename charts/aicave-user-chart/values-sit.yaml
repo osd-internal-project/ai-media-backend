@@ -29,6 +29,9 @@ env:
   keycloakRealm: "eportal"
   keycloakClientId: "ai-cave-sit"
   keycloakRedirectUri: "https://sit.aicave.ai/callback"
+  keycloakIdpMicrosoftAlias: "microsoft"
+  llmGatewayUrl: "https://llm-gateway.aicave.ai"
+  llmProjectId: "team-mr8w25rb"
   omiseApiUrl: "https://api.omise.co"
   omiseApiVersion: "2019-05-29"
 
