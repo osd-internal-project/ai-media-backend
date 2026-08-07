@@ -95,7 +95,8 @@ export class GenerateVideoService extends BaseGenerateService {
       statusBaseUrl: modelDetail?.taskPollApi ?? null,
       videoTaskId: apiRes?.data?.id ?? null,
       // Per-org LLM gateway key (falls back to the model's configured token).
-      authorization: authorization ?? modelDetail?.sendConfig?.authorization ?? null,
+      authorization:
+        authorization ?? modelDetail?.sendConfig?.authorization ?? null,
     };
   }
 
@@ -120,8 +121,8 @@ export class GenerateVideoService extends BaseGenerateService {
       usedImage: 1,
       ImageUsed: 1,
       generateAudio: body.generateAudio,
-      referenceImages:
-        body.image.length > 0 ? body.image.filter((item) => item !== null) : [],
+      // เก็บเป็น object key เสมอ (presigned URL หมดอายุ) และรวม files[] ของ seedance2 ด้วย
+      referenceImages: this.generateHelperService.collectReferenceKeys(body),
       resolution: body.resolution,
       ratio: body.ratio,
       generateConfig: this.generateHelperService.buildGenerateConfig({
@@ -158,8 +159,8 @@ export class GenerateVideoService extends BaseGenerateService {
       usedImage: 1,
       ImageUsed: 1,
       generateAudio: body.generateAudio,
-      referenceImages:
-        body.image.length > 0 ? body.image.filter((item) => item !== null) : [],
+      // เก็บเป็น object key เสมอ (presigned URL หมดอายุ) และรวม files[] ของ seedance2 ด้วย
+      referenceImages: this.generateHelperService.collectReferenceKeys(body),
       resolution: body.resolution,
       ratio: body.ratio,
       generateConfig: this.generateHelperService.buildGenerateConfig({
@@ -188,7 +189,14 @@ export class GenerateVideoService extends BaseGenerateService {
     _apiRes: any,
   ): object {
     return {
-      ...super.buildRedisTaskMetadata(taskId, jobId, clientId, userId, body, _apiRes),
+      ...super.buildRedisTaskMetadata(
+        taskId,
+        jobId,
+        clientId,
+        userId,
+        body,
+        _apiRes,
+      ),
       videoTaskId: null,
     };
   }
@@ -231,10 +239,10 @@ export class GenerateVideoService extends BaseGenerateService {
         userId: user.userId,
         username: user.username,
       },
-      referenceImages: [
-        ...(body.image[0] ? [body.image[0]] : []),
-        ...(body.image[1] ? [body.image[1]] : []),
-      ],
+      // response ส่ง URL เสมอ — frontend เอาไปใส่ <img src> ตรง ๆ
+      referenceImages: await this.generateHelperService.toReferenceDisplayUrls(
+        this.generateHelperService.collectReferenceKeys(body),
+      ),
       resolution: body.resolution,
       ratio: body.ratio,
       imageUrls: [],

@@ -1,3 +1,5 @@
-[2K[1G[33mwarning[39m package.json: "dependencies" has dependency "eslint" with range "^8.48.0" that collides with a dependency in "devDependencies" of the same name with version "^8.49.0"
-[2K[1G[2m$ rimraf dist[22m
-[2K[1G[2m$ nest build[22m
+yarn run v1.22.19
+warning package.json: "dependencies" has dependency "eslint" with range "^8.48.0" that collides with a dependency in "devDependencies" of the same name with version "^8.49.0"
+$ rimraf dist
+$ nest build
+Done in 19.52s.

@@ -6,7 +6,6 @@ import {
   OrganizationRepository,
   QUEUE_NAME_IMAGE,
   RequestImageGenerateDto,
-  TosService,
   CreditBalanceRepository,
   ProjectRepository,
   MasterModelTypeDto,
@@ -16,7 +15,6 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import { tosConfigs } from 'src/configs';
 import {
   BaseGenerateService,
   CreditQuotaResult,
@@ -32,7 +30,6 @@ export class GenerateImageService extends BaseGenerateService {
     masterModelTypeRepo: MasterdataModelTypeRepository,
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_IMAGE) private readonly imageQueue: Queue,
-    private readonly tosService: TosService,
     private readonly projectRepo: ProjectRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     organizationRepository: OrganizationRepository,
@@ -243,7 +240,14 @@ export class GenerateImageService extends BaseGenerateService {
     _apiRes: any,
   ): object {
     return {
-      ...super.buildRedisTaskMetadata(taskId, jobId, clientId, userId, body, _apiRes),
+      ...super.buildRedisTaskMetadata(
+        taskId,
+        jobId,
+        clientId,
+        userId,
+        body,
+        _apiRes,
+      ),
       totalImages: null,
     };
   }
@@ -255,14 +259,12 @@ export class GenerateImageService extends BaseGenerateService {
     _apiRes: any,
     _creditResult: CreditQuotaResult,
   ): Promise<object> {
-    let referenceImages: string[] = [];
-    if (body.image && body.image.length > 0) {
-      referenceImages = await Promise.all(
-        body.image.map((img) =>
-          this.tosService.getPreSignedUrl(tosConfigs().tosBucket, img),
-        ),
+    // response ส่ง URL เสมอ — frontend เอาไปใส่ <img src> ตรง ๆ
+    // (toDisplayUrl มี guard ให้ค่าที่เป็น URL อยู่แล้ว เช่น reference จาก workflow ผ่านไปตรง ๆ)
+    const referenceImages =
+      await this.generateHelperService.toReferenceDisplayUrls(
+        this.generateHelperService.collectReferenceKeys(body),
       );
-    }
 
     return {
       taskId,

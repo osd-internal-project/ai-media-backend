@@ -8,7 +8,9 @@ import {
   QUEUE_NAME_DREAMACTOR,
   RefImageRepository,
   RequestDreamactorGenerateDto,
+  StorageUrlService,
   TosService,
+  buildOutputKey,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
@@ -79,6 +81,7 @@ export class DreamactorProcessor extends WorkerHost {
     private readonly logrepo: LogRepository,
     private readonly refImageRepository: RefImageRepository,
     private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
     private readonly generateHelperService: GenerateHelperService,
   ) {
     super();
@@ -135,6 +138,12 @@ export class DreamactorProcessor extends WorkerHost {
       if (sendApi) {
         const modelDetail = { modelType: reqKey };
         const builder = this.payloadBuilders[sendConfig?.type ?? 'dreamactor'];
+        if (!builder) {
+          // ไม่มี builder = config ใน master_model_type ผิด retry ไปก็ไม่หาย
+          throw new UnrecoverableError(
+            `Unsupported dreamactor sendConfig.type: "${sendConfig?.type}"`,
+          );
+        }
         const submitPayload = await builder(body, modelDetail);
         // Auth/content-type/cookie and the full action-versioned URL all come from
         // the model's DB config now (LLM gateway), so no request signing here and
@@ -291,13 +300,17 @@ export class DreamactorProcessor extends WorkerHost {
             'worker:dreamactor-upload-success',
             {
               taskId,
-              videoUrl: await this.tosService.getPreSignedUrl(
-                tosConfigs().tosBucket,
-                `organize/${body.organizationId}/${body.projectId}/dreamactor-generate/${result.file}`,
+              videoUrl: await this.storageUrl.resolveOutputUrl(
+                body.organizationId,
+                body.projectId,
+                'dreamactor',
+                result.file,
               ),
-              thumbnailUrl: await this.tosService.getPreSignedUrl(
-                tosConfigs().tosBucket,
-                `organize/${body.organizationId}/${body.projectId}/dreamactor-generate/${result.thumbnail}`,
+              thumbnailUrl: await this.storageUrl.resolveOutputUrl(
+                body.organizationId,
+                body.projectId,
+                'dreamactor',
+                result.thumbnail,
               ),
               timestamp: new Date().toISOString(),
               type: 'dreamactor',
@@ -564,7 +577,7 @@ export class DreamactorProcessor extends WorkerHost {
 
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizationId}/${projectId}/dreamactor-generate/${objectName}`,
+        buildOutputKey(organizationId, projectId, 'dreamactor', objectName),
         file.buffer,
       );
 
@@ -573,7 +586,12 @@ export class DreamactorProcessor extends WorkerHost {
       const thumbBuffer = fs.readFileSync(tempThumbPath);
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizationId}/${projectId}/dreamactor-generate/${thumbnailObjectName}`,
+        buildOutputKey(
+          organizationId,
+          projectId,
+          'dreamactor',
+          thumbnailObjectName,
+        ),
         thumbBuffer,
       );
 
@@ -644,15 +662,10 @@ export class DreamactorProcessor extends WorkerHost {
   ) {
     return {
       req_key: modelDetail.modelType || 'dreamactor_m20_gen_video_cvtob',
-      image_urls: await Promise.all(
-        [body.image[0]].map((url) =>
-          this.tosService.getPreSignedUrl(tosConfigs().tosBucket, url),
-        ),
-      ),
-      video_url: await this.tosService.getPreSignedUrl(
-        tosConfigs().tosBucket,
-        body.image[1],
-      ),
+      // toProviderUrl มี guard ในตัว: reference ที่เป็น URL อยู่แล้ว (จาก workflow)
+      // ส่งต่อตรง ๆ ไม่ presign ซ้ำ — เดิม presign ทุกค่าจนได้ URL ที่ใช้ไม่ได้
+      image_urls: await this.storageUrl.toProviderUrls([body.image[0]]),
+      video_url: await this.storageUrl.toProviderUrl(body.image[1]),
     };
   }
 

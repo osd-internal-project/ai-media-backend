@@ -7,17 +7,17 @@ import {
 } from '@nestjs/common';
 import {
   GalleryRepository,
-  TosService,
+  StorageUrlService,
+  buildOutputKey,
   resolveGalleryResultUrls,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
-import { tosConfigs } from 'src/configs';
 
 @Injectable()
 export class GalleryService {
   constructor(
     private readonly galleryRepo: GalleryRepository,
-    private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
   ) {}
 
   create(createGalleryDto: Prisma.GalleryCreateInput) {
@@ -46,24 +46,30 @@ export class GalleryService {
       where: { projectId: projectId, ...(query?.status && { status: true }) },
     });
 
-    const bucket = tosConfigs().tosBucket;
     const processedData = await Promise.all(
       data.map(async (item) => {
-        const basePath = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         // ใช้ resultUrl[] เป็นหลัก, fallback ไป imageUrl เดี่ยวสำหรับ data เก่า
         const objectNames = resolveGalleryResultUrls(item);
+        const resolve = (name: string | null) =>
+          this.storageUrl
+            .resolveOutputUrl(
+              organizationId,
+              item.projectId,
+              item.typeGenerate,
+              name,
+            )
+            .then((url) => url ?? '');
         const [resultUrl, thumbnailUrl] = await Promise.all([
-          Promise.all(
-            objectNames.map((name) =>
-              this.tosService.getPreSignedUrl(bucket, `${basePath}/${name}`),
-            ),
-          ),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${basePath}/${item.thumbnailUrl}`)
-            : Promise.resolve(''),
+          Promise.all(objectNames.map(resolve)),
+          resolve(item.thumbnailUrl),
         ]);
         // คง imageUrl เป็น presigned ของรูปแรกไว้ เพื่อไม่ให้ consumer เดิมพัง
-        return { ...item, resultUrl, imageUrl: resultUrl[0] ?? '', thumbnailUrl };
+        return {
+          ...item,
+          resultUrl,
+          imageUrl: resultUrl[0] ?? '',
+          thumbnailUrl,
+        };
       }),
     );
     return { data: processedData, total };
@@ -123,21 +129,20 @@ export class GalleryService {
 
     const type = found.typeGenerate === 'video' ? 'video/mp4' : 'image/jpeg';
     const downloadName = query.filename || objectName;
-    const key = `organize/${organizationId || ''}/${found.projectId}/${
-      `${found.typeGenerate}-generate`
-    }/${objectName}`;
+    const key = buildOutputKey(
+      organizationId || '',
+      found.projectId,
+      found.typeGenerate,
+      objectName,
+    );
 
     // Presign a direct-download URL so the file streams from TOS to the client
     // instead of being buffered through this pod (avoids the egress spike and
     // the OOM-driven 500s of proxying whole media files).
-    const url = await this.tosService.getPreSignedUrl(
-      tosConfigs().tosBucket,
-      key,
-      {
-        contentType: type,
-        contentDisposition: `attachment; filename="${downloadName}"`,
-      },
-    );
+    const url = await this.storageUrl.toDownloadUrl(key, {
+      contentType: type,
+      contentDisposition: `attachment; filename="${downloadName}"`,
+    });
     if (!url) {
       throw new InternalServerErrorException('Failed to presign download URL');
     }

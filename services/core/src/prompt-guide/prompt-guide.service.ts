@@ -2,17 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   PromptGuideImageRepository,
   PromptGuideRepository,
-  TosService,
+  StorageUrlService,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
-import { tosConfigs } from '../configs';
 
 @Injectable()
 export class PromptGuideService {
   constructor(
     private readonly promptguideRepo: PromptGuideRepository,
     private readonly promptGuideImageRepo: PromptGuideImageRepository,
-    private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
   ) {}
   create(createPromptGuideDto: Prisma.PromptGuideCreateInput) {
     const data = {
@@ -69,8 +68,6 @@ export class PromptGuideService {
   }
 
   async findByOrganization(organizationId: string, query?: { model?: string }) {
-    const bucketname = tosConfigs().tosBucket;
-
     const promptGuides = await this.promptguideRepo.findMany({
       where: {
         organizationId,
@@ -97,10 +94,7 @@ export class PromptGuideService {
               },
             });
             if (image) {
-              const url = await this.tosService.getPreSignedUrl(
-                bucketname,
-                image?.imagePath || '',
-              );
+              const url = await this.storageUrl.toDisplayUrl(image.imagePath);
               images.push({
                 uid: image?.uid,
                 name: image?.imageName,
@@ -121,8 +115,6 @@ export class PromptGuideService {
     return templates;
   }
   async findWithImageByTypes(promptGuideTypeId: number) {
-    const bucketname = tosConfigs().tosBucket;
-
     const promptGuides = await this.promptguideRepo.findMany({
       where: {
         promptGuideTypeId,
@@ -147,10 +139,7 @@ export class PromptGuideService {
               },
             });
             if (image) {
-              const url = await this.tosService.getPreSignedUrl(
-                bucketname,
-                image?.imagePath || '',
-              );
+              const url = await this.storageUrl.toDisplayUrl(image.imagePath);
               images.push({
                 uid: image?.uid,
                 name: image?.imageName,
@@ -196,10 +185,7 @@ export class PromptGuideService {
 
     const imagesWithUrls = await Promise.all(
       images.map(async (image) => {
-        const url = await this.tosService.getPreSignedUrl(
-          tosConfigs().tosBucket,
-          image.imagePath,
-        );
+        const url = await this.storageUrl.toDisplayUrl(image.imagePath);
         return {
           uid: image.uid,
           name: image.imageName,

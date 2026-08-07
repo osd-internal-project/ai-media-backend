@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule, TosModule } from '@ai-media/share';
+import { PrismaModule, TosModule, StorageModule } from '@ai-media/share';
 import { GenerateModule } from '../generate/generate.module';
 import { WebsocketModule } from '../websocket/websocket.module';
 import { WorkflowConversationsController } from './workflow-conversations.controller';
@@ -18,7 +18,13 @@ import { WorkflowMediaService } from './workflow-media.service';
  *   เชื่อมต่อ) เพื่อ broadcast `workflow.block.updated` ได้จริง — ไม่ใช้ gateway แยก
  */
 @Module({
-  imports: [PrismaModule, TosModule, GenerateModule, WebsocketModule],
+  imports: [
+    PrismaModule,
+    TosModule,
+    StorageModule,
+    GenerateModule,
+    WebsocketModule,
+  ],
   controllers: [WorkflowConversationsController, WorkflowBlocksController],
   providers: [
     WorkflowConversationsService,

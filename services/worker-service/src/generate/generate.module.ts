@@ -9,6 +9,7 @@ import {
   QUEUE_NAME_OMNIHUMEN,
   QUEUE_NAME_VDO,
   TosModule,
+  StorageModule,
 } from '@ai-media/share';
 import { PrismaModule } from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
@@ -20,6 +21,7 @@ import { GenerateHelperService } from './generate-helper.service';
   imports: [
     PrismaModule,
     TosModule,
+    StorageModule,
     RedisModule.forRoot({
       type: 'single',
       url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,

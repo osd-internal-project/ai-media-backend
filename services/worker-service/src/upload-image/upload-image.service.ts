@@ -4,7 +4,10 @@ import { appConfigs, tosConfigs } from '../configs';
 import {
   PromptGuideImageRepository,
   RefImageRepository,
+  StorageUrlService,
   TosService,
+  buildPromptGuideKey,
+  buildUploadKey,
 } from '@ai-media/share';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
@@ -14,7 +17,8 @@ export class UploadImageService {
     private readonly refImageRepository: RefImageRepository,
     private readonly promptGuideImageRepository: PromptGuideImageRepository,
     private readonly tosService: TosService,
-  ) { }
+    private readonly storageUrl: StorageUrlService,
+  ) {}
 
   async uploadImage(
     userId: string,
@@ -27,7 +31,7 @@ export class UploadImageService {
   ) {
     const bucketname = tosConfigs().tosBucket;
     const ext = path.extname(file.originalname);
-    const imagePath = `organize/${organizationId}/${projectId}/upload/${uid}${ext}`;
+    const imagePath = buildUploadKey(organizationId, projectId, uid, ext);
     await this.tosService.putObject(bucketname, imagePath, file.buffer);
     await this.refImageRepository.create({
       data: {
@@ -46,7 +50,7 @@ export class UploadImageService {
     return {
       uid: uid,
       name: file.originalname,
-      url: await this.tosService.getPreSignedUrl(bucketname, imagePath),
+      url: await this.storageUrl.toDisplayUrl(imagePath),
       imagePath: imagePath,
       status: 'waiting', //waiting,processing,done
     };
@@ -85,7 +89,7 @@ export class UploadImageService {
     if (image) {
       const ext = path.extname(image.imageName);
       const oldImagePath = `${image.imagePath}`;
-      const newImagePath = `organize/${organizationId}/${projectId}/upload/${uid}${ext}`;
+      const newImagePath = buildUploadKey(organizationId, projectId, uid, ext);
       console.log(bucketname);
       console.log(oldImagePath);
       console.log(newImagePath);
@@ -114,7 +118,7 @@ export class UploadImageService {
         return {
           uid: uid,
           name: image.imageName,
-          url: await this.tosService.getPreSignedUrl(bucketname, newImagePath),
+          url: await this.storageUrl.toDisplayUrl(newImagePath),
           imagePath: newImagePath,
           status: 'waiting', //waiting,processing,done
         };
@@ -134,7 +138,7 @@ export class UploadImageService {
   ) {
     const bucketname = tosConfigs().tosBucket;
     const ext = path.extname(file.originalname);
-    const imagePath = `organize/${organizationId}/prompt-guide/${uid}${ext}`;
+    const imagePath = buildPromptGuideKey(organizationId, uid, ext);
     await this.tosService.putObject(bucketname, imagePath, file.buffer);
     const uploadedImage = await this.promptGuideImageRepository.create({
       data: {
@@ -154,7 +158,8 @@ export class UploadImageService {
     return {
       uid: uid,
       name: file.originalname,
-      url: await this.tosService.getPreSignedUrl(bucketname, imagePath),
+      url: await this.storageUrl.toDisplayUrl(imagePath),
+      imagePath: imagePath,
       status: 'waiting', //waiting,processing,done
     };
   }

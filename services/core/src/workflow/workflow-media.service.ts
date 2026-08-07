@@ -1,37 +1,47 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ProjectRepository, TosService } from '@ai-media/share';
-import { tosConfigs } from 'src/configs';
+import {
+  ProjectRepository,
+  REF_IMAGE_PLACEHOLDER,
+  StorageUrlService,
+  buildOutputKey,
+} from '@ai-media/share';
 
 /**
- * ตัวช่วย presign object ของ output บล็อก ให้เป็น URL ที่แสดงผลได้
- * ใช้ convention เดียวกับ gallery.service.findMany เพื่อให้รูป/วิดีโอแสดงได้ทั้งตอนสด
- * (websocket) และตอนโหลดแคนวาสใหม่ (read)
+ * ตัวช่วย resolve object ของ output บล็อก ให้เป็น key/URL ที่ใช้งานได้
+ * ใช้ convention เดียวกับ gallery.service.findMany (ผ่าน buildOutputKey ตัวเดียวกัน)
+ * เพื่อให้รูป/วิดีโอแสดงได้ทั้งตอนสด (websocket) และตอนโหลดแคนวาสใหม่ (read)
  */
 @Injectable()
 export class WorkflowMediaService {
   private readonly logger = new Logger(WorkflowMediaService.name);
 
   constructor(
-    private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
     private readonly projectRepo: ProjectRepository,
   ) {}
 
   /**
-   * แปลง object name (ที่ worker อัปโหลดไว้) เป็น presigned URL สำหรับแสดงผล
-   * path: organize/${org}/${projectId}/${type}-generate/${objectName} (ตรงกับ gallery)
+   * หา organizationId ของโปรเจกต์ เพื่อใช้ประกอบ object key
+   *
    * @param projectId รหัสโปรเจกต์
-   * @param type ชนิดบล็อก ("image" | "video") ใช้ประกอบ path เหมือน typeGenerate
-   * @param objectName ชื่อไฟล์ที่เก็บใน object storage
-   * @returns presigned URL หรือ null ถ้าไม่มี objectName (fallback: คืน objectName ดิบเมื่อ presign ไม่ได้)
+   * @returns organizationId หรือ null เมื่อหาไม่เจอ
    */
+  private async findOrganizationId(projectId: string): Promise<string | null> {
+    const project = await this.projectRepo.findOne({
+      where: { id: projectId },
+    });
+    return project?.organizationId ?? null;
+  }
+
   /**
    * สร้าง canonical object key ของ output บล็อก (ไม่ presign) เพื่อส่งเป็น reference key
    * ให้ pipeline เดิม — worker จะ presign key เองตอนยิง provider และบันทึกลง reference_images
    * เป็น key ถาวร แทน presigned URL ที่หมดอายุ
+   *
    * @param projectId รหัสโปรเจกต์
    * @param type ชนิดบล็อก ("image" | "video") ใช้ประกอบ path เหมือน typeGenerate
    * @param objectName ชื่อไฟล์ที่เก็บใน object storage
-   * @returns organize/${org}/${projectId}/${type}-generate/${objectName} หรือ objectName ดิบเมื่อไม่มี org, null เมื่อไม่มี objectName
+   * @returns object key, objectName เดิมเมื่อเป็น URL อยู่แล้ว, หรือ null เมื่อไม่มี objectName/org
    */
   async buildObjectKey(
     projectId: string,
@@ -39,15 +49,26 @@ export class WorkflowMediaService {
     objectName: string | null | undefined,
   ): Promise<string | null> {
     if (!objectName) return null;
-    const project = await this.projectRepo.findOne({
-      where: { id: projectId },
-    });
-    const org = project?.organizationId;
-    // คง behavior fallback เดิมของ presignObject เมื่อหา org ไม่เจอ
-    if (!org) return objectName;
-    return `organize/${org}/${projectId}/${type}-generate/${objectName}`;
+    const org = await this.findOrganizationId(projectId);
+    if (!org) {
+      // เดิมคืน objectName ดิบ ซึ่งกลายเป็น key ที่ presign แล้วชี้ไปไฟล์ที่ไม่มีจริง
+      // คืน null แทนเพื่อให้ caller filter ทิ้ง และ log ไว้ให้เห็นว่าเกิดขึ้น
+      this.logger.warn(
+        `buildObjectKey: project ${projectId} has no organizationId — dropping reference "${objectName}"`,
+      );
+      return null;
+    }
+    return buildOutputKey(org, projectId, type, objectName);
   }
 
+  /**
+   * แปลง object name ของ output บล็อก เป็น URL สำหรับแสดงผลบนแคนวาส
+   *
+   * @param projectId รหัสโปรเจกต์
+   * @param type ชนิดบล็อก ("image" | "video")
+   * @param objectName ชื่อไฟล์ที่เก็บใน object storage
+   * @returns URL สำหรับแสดงผล, placeholder เมื่อ resolve ไม่ได้, null เมื่อไม่มี objectName
+   */
   async presignObject(
     projectId: string,
     type: string,
@@ -55,21 +76,23 @@ export class WorkflowMediaService {
   ): Promise<string | null> {
     if (!objectName) return null;
     try {
-      const project = await this.projectRepo.findOne({
-        where: { id: projectId },
-      });
-      const org = project?.organizationId;
-      if (!org) return objectName;
-      const bucket = tosConfigs().tosBucket;
-      const path = `organize/${org}/${projectId}/${type}-generate/${objectName}`;
-      return await this.tosService.getPreSignedUrl(bucket, path);
+      const org = await this.findOrganizationId(projectId);
+      if (!org) return REF_IMAGE_PLACEHOLDER;
+      const url = await this.storageUrl.resolveOutputUrl(
+        org,
+        projectId,
+        type,
+        objectName,
+      );
+      return url ?? REF_IMAGE_PLACEHOLDER;
     } catch (error) {
       this.logger.warn(
         `presignObject failed for ${objectName}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      return objectName;
+      // ห้ามคืน objectName ดิบ — client จะเอาไปใส่ <img src> แล้วได้ broken image
+      return REF_IMAGE_PLACEHOLDER;
     }
   }
 }

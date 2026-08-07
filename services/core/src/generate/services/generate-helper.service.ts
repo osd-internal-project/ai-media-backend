@@ -6,6 +6,7 @@ import {
   MasterdataModelTypeRepository,
   ProjectMemberRepository,
   ProjectRepository,
+  StorageUrlService,
   UsersRepository,
 } from '@ai-media/share';
 import {
@@ -42,7 +43,48 @@ export class GenerateHelperService {
     private readonly auditLogRepo: AuditLogRepository,
     private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
+    private readonly storageUrl: StorageUrlService,
   ) {}
+
+  /**
+   * รวบรวม reference image ทั้งหมดของ request เป็น "object key" ชุดเดียว
+   *
+   * รองรับทั้งสอง shape ที่ frontend ส่งมา:
+   *  - `image[]` — first/last frame (seedance1, image, omnihuman, dreamactor)
+   *  - `files[]` — multi-reference (seedance2) ซึ่งเดิมถูกมองข้ามจนรูปอ้างอิงหายตอนรีโหลด
+   *
+   * ค่าที่คืนเป็น key เสมอ (หรือ URL เดิมถ้า caller ส่ง URL มา) เหมาะกับการเก็บลง DB
+   * ห้ามเอาไปแสดงผลตรง ๆ — ใช้ toReferenceDisplayUrls ก่อน
+   *
+   * @param body request body ที่อาจมี image และ/หรือ files
+   * @returns list ของ reference key ที่ไม่ว่าง (ไม่ซ้ำ)
+   */
+  public collectReferenceKeys(body: {
+    image?: (string | null)[];
+    files?: { type: string; url: string }[];
+  }): string[] {
+    const fromImage = body.image ?? [];
+    const fromFiles = (body.files ?? [])
+      .filter((file) => file.type === 'image')
+      .map((file) => file.url);
+    const keys = [...fromImage, ...fromFiles].filter((key): key is string =>
+      Boolean(key),
+    );
+    return [...new Set(keys)];
+  }
+
+  /**
+   * แปลง reference key เป็น URL สำหรับส่งกลับใน API response
+   *
+   * response ต้องเป็น URL เสมอ เพราะ frontend เอาไปใส่ <img src> ตรง ๆ
+   * (component *-smart-reference) — ถ้าส่ง key ออกไปจะได้รูปเสีย
+   *
+   * @param keys list ของ reference key (หรือ URL ที่ presign มาแล้ว)
+   * @returns list ของ URL สำหรับแสดงผล
+   */
+  public toReferenceDisplayUrls(keys: readonly string[]): Promise<string[]> {
+    return this.storageUrl.toDisplayUrls(keys);
+  }
 
   async validateUserAndProject(userId: string, projectId: string) {
     const user = await this.userRepo.findOne({

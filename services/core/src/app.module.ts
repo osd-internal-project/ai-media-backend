@@ -36,7 +36,7 @@ import { WorkflowModule } from './workflow/workflow.module';
     }),
     ScheduleModule.forRoot(),
     WebsocketModule,
-    PrismaModule, 
+    PrismaModule,
     HttpModule,
     ProjectModule,
     LogsModule,

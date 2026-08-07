@@ -5,22 +5,12 @@ import {
   UsersRepository,
   ErrorLogRepository,
   AuditLogRepository,
-  TosService,
   ProjectMemberRepository,
   resolveGalleryResultUrls,
+  StorageUrlService,
 } from '@ai-media/share';
 import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
-import { tosConfigs } from 'src/configs';
 import * as dayjs from 'dayjs';
-
-const REF_IMAGE_PLACEHOLDER =
-  'data:image/svg+xml;base64,' +
-  Buffer.from(
-    `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-    <rect width="32" height="32" fill="#333"/>
-    <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-  </svg>`,
-  ).toString('base64');
 
 @Injectable()
 export class LogsService {
@@ -30,9 +20,49 @@ export class LogsService {
     private readonly userRepo: UsersRepository,
     private readonly auditLogRepo: AuditLogRepository,
     private readonly errorLogRepo: ErrorLogRepository,
-    private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
     private readonly projectMemberRepository: ProjectMemberRepository,
   ) {}
+
+  /**
+   * แปลงชื่อไฟล์ผลลัพธ์ของ gallery row เป็น URL สำหรับแสดงผล
+   *
+   * @param organizationId รหัสองค์กรของผู้เรียก
+   * @param item gallery row ที่มี projectId และ typeGenerate
+   * @param objectName ชื่อไฟล์ใน bucket (ว่างได้)
+   * @returns URL สำหรับแสดงผล หรือ '' เมื่อไม่มีไฟล์ (คง shape เดิมที่ client คาดหวัง)
+   */
+  private async resolveOutputUrl(
+    organizationId: string,
+    item: { projectId: string; typeGenerate: string },
+    objectName: string | null | undefined,
+  ): Promise<string> {
+    const url = await this.storageUrl.resolveOutputUrl(
+      organizationId,
+      item.projectId,
+      item.typeGenerate,
+      objectName,
+    );
+    return url ?? '';
+  }
+
+  /**
+   * แปลง reference image ที่เก็บไว้เป็น object key ให้เป็น URL สำหรับแสดงผล
+   *
+   * ค่าใน referenceImages เป็น key เต็ม (organize/.../upload/xxx.png) อยู่แล้ว
+   * จึงส่งเข้า resolver ตรง ๆ ห้ามเติม prefix ทับ
+   *
+   * @param referenceImagesMap map จาก taskId → list ของ reference key
+   * @param taskId taskId ของ gallery row
+   * @returns list ของ URL (ไฟล์ที่หาไม่เจอกลายเป็น placeholder)
+   */
+  private resolveReferenceImageUrls(
+    referenceImagesMap: Map<string, string[]>,
+    taskId: string,
+  ): Promise<string[]> {
+    const filenames: string[] = referenceImagesMap.get(taskId) ?? [];
+    return this.storageUrl.toVerifiedDisplayUrls(filenames);
+  }
 
   async findProjectImageByPage(
     projectId: string,
@@ -103,26 +133,17 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    const bucket = tosConfigs().tosBucket;
-    const PLACEHOLDER = REF_IMAGE_PLACEHOLDER;
-
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         // ใช้ resultUrl[] เป็นหลัก, fallback imageUrl เดี่ยวสำหรับ data เก่า
         const objectNames = resolveGalleryResultUrls(item);
         const [urls, thumbnailUrl] = await Promise.all([
           Promise.all(
             objectNames.map((name) =>
-              this.tosService.getPreSignedUrl(bucket, `${base}/${name}`),
+              this.resolveOutputUrl(organizationId, item, name),
             ),
           ),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.thumbnailUrl}`,
-              )
-            : Promise.resolve(''),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
         // 1 entry ต่อ 1 รูปใน resultUrl[] (data เก่า = 1 entry จาก imageUrl)
         const entries = urls.map((imageUrl, i) => ({
@@ -132,14 +153,9 @@ export class LogsService {
           status: item.status,
           fileName: objectNames[i],
         }));
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const ok = await this.tosService.headObject(bucket, filename);
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, filename)
-              : PLACEHOLDER;
-          }),
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
         return { item, entries, referenceImageUrls };
       }),
@@ -250,26 +266,17 @@ export class LogsService {
       }
     });
 
-    const bucket = tosConfigs().tosBucket;
-    const PLACEHOLDER = REF_IMAGE_PLACEHOLDER;
-
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         // ใช้ resultUrl[] เป็นหลัก, fallback imageUrl เดี่ยวสำหรับ data เก่า
         const objectNames = resolveGalleryResultUrls(item);
         const [urls, thumbnailUrl] = await Promise.all([
           Promise.all(
             objectNames.map((name) =>
-              this.tosService.getPreSignedUrl(bucket, `${base}/${name}`),
+              this.resolveOutputUrl(organizationId, item, name),
             ),
           ),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.thumbnailUrl}`,
-              )
-            : Promise.resolve(''),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
         // 1 entry ต่อ 1 ไฟล์ใน resultUrl[] (data เก่า = 1 entry จาก imageUrl)
         const entries = urls.map((imageUrl, i) => ({
@@ -279,16 +286,9 @@ export class LogsService {
           status: item.status,
           fileName: objectNames[i],
         }));
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const refBase = `organize/${organizationId}/${item.projectId}/uploads`;
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const path = `${refBase}/${filename}`;
-            const ok = await this.tosService.headObject(bucket, path);
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, path)
-              : PLACEHOLDER;
-          }),
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
         return { item, entries, referenceImageUrls };
       }),
@@ -397,32 +397,15 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    const bucket = tosConfigs().tosBucket;
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.imageUrl}`,
-              )
-            : Promise.resolve(''),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.thumbnailUrl}`,
-              )
-            : Promise.resolve(''),
+          this.resolveOutputUrl(organizationId, item, item.imageUrl),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const ok = await this.tosService.headObject(bucket, filename || '');
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, filename)
-              : REF_IMAGE_PLACEHOLDER;
-          }),
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
         return { item, url, thumbnailUrl, referenceImageUrls };
       }),
@@ -547,32 +530,15 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    const bucket = tosConfigs().tosBucket;
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.imageUrl}`,
-              )
-            : Promise.resolve(''),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.thumbnailUrl}`,
-              )
-            : Promise.resolve(''),
+          this.resolveOutputUrl(organizationId, item, item.imageUrl),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const ok = await this.tosService.headObject(bucket, filename || '');
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, filename)
-              : REF_IMAGE_PLACEHOLDER;
-          }),
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
         return { item, url, thumbnailUrl, referenceImageUrls };
       }),
@@ -694,34 +660,15 @@ export class LogsService {
       }
     });
 
-    const bucket = tosConfigs().tosBucket;
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.imageUrl}`,
-              )
-            : Promise.resolve(''),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(
-                bucket,
-                `${base}/${item.thumbnailUrl}`,
-              )
-            : Promise.resolve(''),
+          this.resolveOutputUrl(organizationId, item, item.imageUrl),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const refBase = `organize/${organizationId}/${item.projectId}/uploads`;
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const path = `${refBase}/${filename}`;
-            const ok = await this.tosService.headObject(bucket, path);
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, path)
-              : REF_IMAGE_PLACEHOLDER;
-          }),
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
         return { item, url, thumbnailUrl, referenceImageUrls };
       }),

@@ -10,6 +10,7 @@ import {
   QUEUE_NAME_OMNIHUMEN,
   QUEUE_NAME_DREAMACTOR,
   TosModule,
+  StorageModule,
 } from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { LogsService } from 'src/logs/logs.service';
@@ -18,6 +19,7 @@ import { LogsService } from 'src/logs/logs.service';
   imports: [
     PrismaModule,
     TosModule,
+    StorageModule,
     GenerateModule,
     RedisModule.forRoot({
       type: 'single',
@@ -44,15 +46,7 @@ import { LogsService } from 'src/logs/logs.service';
       name: 'tasks',
     }),
   ],
-  providers: [
-    WebsocketGatewayService,
-    WebsocketService,
-    LogsService,
-  ],
-  exports: [
-    WebsocketGatewayService,
-    WebsocketService,
-    LogsService,
-  ],
+  providers: [WebsocketGatewayService, WebsocketService, LogsService],
+  exports: [WebsocketGatewayService, WebsocketService, LogsService],
 })
 export class WebsocketModule {}

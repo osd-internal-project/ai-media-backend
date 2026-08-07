@@ -110,10 +110,8 @@ export class GenerateDreamactorService extends BaseGenerateService {
       usedImage: 1,
       ImageUsed: 1,
       generateAudio: body.generateAudio,
-      referenceImages:
-        body.image.length > 0
-          ? body.image.filter((item: any) => item !== null)
-          : [],
+      // เก็บเป็น object key เสมอ (presigned URL หมดอายุ)
+      referenceImages: this.generateHelperService.collectReferenceKeys(body),
       resolution: body.resolution,
       generateConfig: this.generateHelperService.buildGenerateConfig({
         ratio: '',
@@ -147,10 +145,8 @@ export class GenerateDreamactorService extends BaseGenerateService {
       usedImage: 1,
       ImageUsed: 1,
       generateAudio: body.generateAudio,
-      referenceImages:
-        body.image.length > 0
-          ? body.image.filter((item: any) => item !== null)
-          : [],
+      // เก็บเป็น object key เสมอ (presigned URL หมดอายุ)
+      referenceImages: this.generateHelperService.collectReferenceKeys(body),
       resolution: body.resolution,
       generateConfig: this.generateHelperService.buildGenerateConfig({
         ratio: '',
@@ -175,7 +171,14 @@ export class GenerateDreamactorService extends BaseGenerateService {
     apiRes: any,
   ): object {
     return {
-      ...super.buildRedisTaskMetadata(taskId, jobId, clientId, userId, body, apiRes),
+      ...super.buildRedisTaskMetadata(
+        taskId,
+        jobId,
+        clientId,
+        userId,
+        body,
+        apiRes,
+      ),
       dreamactorTaskId: taskId,
     };
   }
@@ -211,10 +214,10 @@ export class GenerateDreamactorService extends BaseGenerateService {
         userId: user.userId,
         username: user.username,
       },
-      referenceImages: [
-        ...(body.image[0] ? [body.image[0]] : []),
-        ...(body.image[1] ? [body.image[1]] : []),
-      ],
+      // response ส่ง URL เสมอ — frontend เอาไปใส่ <img src> ตรง ๆ
+      referenceImages: await this.generateHelperService.toReferenceDisplayUrls(
+        this.generateHelperService.collectReferenceKeys(body),
+      ),
       resolution: body.resolution,
       ratio: body.ratio,
       imageUrls: [],

@@ -8,7 +8,9 @@ import {
   QUEUE_NAME_OMNIHUMEN,
   RefImageRepository,
   RequestOmnihumenGenerateDto,
+  StorageUrlService,
   TosService,
+  buildOutputKey,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
@@ -93,6 +95,7 @@ export class OmnihumenProcessor extends WorkerHost {
     private readonly logrepo: LogRepository,
     private readonly refImageRepository: RefImageRepository,
     private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
     private readonly generateHelperService: GenerateHelperService,
   ) {
     super();
@@ -149,12 +152,20 @@ export class OmnihumenProcessor extends WorkerHost {
         .omnihumenTaskId;
       if (sendApi) {
         const modelDetail = {
-          modelYype: reqKey,
+          // เดิมสะกดผิดเป็น modelYype ทั้งที่นี่และตอนอ่านใน buildOmnihumanPayload
+          // ทำให้ req_key ตกไปใช้ค่า fallback เสมอ ไม่เคยใช้ reqKey จาก DB เลย
+          modelType: reqKey,
           resolution: modelOptions?.resolution,
           seed: modelOptions?.seed,
           fastMode: modelOptions?.fastMode,
         };
         const builder = this.payloadBuilders[sendConfig?.type ?? 'omnihuman'];
+        if (!builder) {
+          // ไม่มี builder = config ใน master_model_type ผิด retry ไปก็ไม่หาย
+          throw new UnrecoverableError(
+            `Unsupported omnihuman sendConfig.type: "${sendConfig?.type}"`,
+          );
+        }
         const submitPayload = await builder(body, modelDetail);
         // Auth/content-type/cookie and the full action-versioned URL all come from
         // the model's DB config now (LLM gateway), so no request signing here and
@@ -320,13 +331,17 @@ export class OmnihumenProcessor extends WorkerHost {
             'worker:omnihumen-upload-success',
             {
               taskId,
-              videoUrl: await this.tosService.getPreSignedUrl(
-                tosConfigs().tosBucket,
-                `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${result.file}`,
+              videoUrl: await this.storageUrl.resolveOutputUrl(
+                body.organizationId,
+                body.projectId,
+                'omnihumen',
+                result.file,
               ),
-              thumbnailUrl: await this.tosService.getPreSignedUrl(
-                tosConfigs().tosBucket,
-                `organize/${body.organizationId}/${body.projectId}/omnihumen-generate/${result.thumbnail}`,
+              thumbnailUrl: await this.storageUrl.resolveOutputUrl(
+                body.organizationId,
+                body.projectId,
+                'omnihumen',
+                result.thumbnail,
               ),
               timestamp: new Date().toISOString(),
               type: 'omnihumen',
@@ -614,7 +629,7 @@ export class OmnihumenProcessor extends WorkerHost {
 
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizationId}/${projectId}/omnihumen-generate/${objectName}`,
+        buildOutputKey(organizationId, projectId, 'omnihumen', objectName),
         file.buffer,
       );
 
@@ -623,7 +638,12 @@ export class OmnihumenProcessor extends WorkerHost {
       const thumbBuffer = fs.readFileSync(tempThumbPath);
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizationId}/${projectId}/omnihumen-generate/${thumbnailObjectName}`,
+        buildOutputKey(
+          organizationId,
+          projectId,
+          'omnihumen',
+          thumbnailObjectName,
+        ),
         thumbBuffer,
       );
 
@@ -693,15 +713,11 @@ export class OmnihumenProcessor extends WorkerHost {
     modelDetail: any,
   ) {
     return {
-      req_key: modelDetail.modelYype || 'realman_avatar_picture_omni15_cv',
-      image_url: await this.tosService.getPreSignedUrl(
-        tosConfigs().tosBucket,
-        body.image[0],
-      ),
-      audio_url: await this.tosService.getPreSignedUrl(
-        tosConfigs().tosBucket,
-        body.image[1],
-      ),
+      req_key: modelDetail.modelType || 'realman_avatar_picture_omni15_cv',
+      // toProviderUrl มี guard ในตัว: reference ที่เป็น URL อยู่แล้ว (จาก workflow)
+      // ส่งต่อตรง ๆ ไม่ presign ซ้ำ — เดิม presign ทุกค่าจนได้ URL ที่ใช้ไม่ได้
+      image_url: await this.storageUrl.toProviderUrl(body.image[0]),
+      audio_url: await this.storageUrl.toProviderUrl(body.image[1]),
       output_resolution: modelDetail.resolution,
       prompt: body.prompt,
       seed: modelDetail.seed,

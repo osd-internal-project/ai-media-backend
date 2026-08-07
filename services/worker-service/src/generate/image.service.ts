@@ -19,7 +19,10 @@ import {
   QUEUE_NAME_IMAGE,
   MAX_CONCURRENT_TASKS_PER_TYPE,
   RefImageRepository,
+  StorageUrlService,
   TosService,
+  buildOutputKey,
+  isAbsoluteUrl,
   ProjectRepository,
   ProjectMemberRepository,
   CreditBalanceRepository,
@@ -69,6 +72,7 @@ export class ImageProcessor extends WorkerHost {
     private readonly logrepo: LogRepository,
     private readonly refImageRepository: RefImageRepository,
     private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
@@ -258,7 +262,12 @@ export class ImageProcessor extends WorkerHost {
 
         // Upload to Object Storage
         const bucketname = tosConfigs().tosBucket;
-        const imagePath = `organize/${body.organizationId}/${body.projectId}/image-generate/${objectName}`;
+        const imagePath = buildOutputKey(
+          body.organizationId,
+          body.projectId,
+          'image',
+          objectName,
+        );
         await this.tosService.putObject(bucketname, imagePath, buffer);
 
         uploadedImages.push(objectName);
@@ -412,7 +421,7 @@ export class ImageProcessor extends WorkerHost {
           body.image
             // ข้าม reference ที่เป็น URL (เช่น output ของ workflow ที่ presign ตั้งแต่ submit)
             // เพราะไม่มี refImage record และจะทำให้ update พังด้วย "Record not found"
-            .filter((image) => !/^https?:\/\//i.test(image))
+            .filter((image) => !isAbsoluteUrl(image))
             .map((image) => {
               const imageName = path.parse(image).name;
               // ใช้ updateMany เพื่อไม่ throw ถ้าไม่พบ record (กัน worker crash)
@@ -636,7 +645,13 @@ export class ImageProcessor extends WorkerHost {
 
   // map ชื่อ model (prefix) → payload builder function
   private async buildPayload(body: RequestImageGenerateDto, sendConfig: any) {
-    const builder = this.payloadBuilders[sendConfig.type];
+    const builder = this.payloadBuilders[sendConfig?.type];
+    if (!builder) {
+      // ไม่มี builder = config ใน master_model_type ผิด retry ไปก็ไม่หาย
+      throw new UnrecoverableError(
+        `Unsupported image sendConfig.type: "${sendConfig?.type}"`,
+      );
+    }
     return builder(body, sendConfig);
   }
   private readonly payloadBuilders: Record<
@@ -650,20 +665,16 @@ export class ImageProcessor extends WorkerHost {
     body: RequestImageGenerateDto,
     modelDetail: any,
   ) {
-    Logger.debug(`Building payload for seedream1 with body: ${JSON.stringify(body)}`);
-    const images = (await body?.image)
-      ? await Promise.all(
-          body.image.map(async (img) =>
-            // ค่าที่เป็น URL อยู่แล้ว (เช่น reference จาก workflow ที่ presign ตั้งแต่ submit)
-            // ส่งต่อตรง ๆ ไม่ presign ซ้ำ — ส่วน key ปกติยัง presign เหมือนเดิม
-            /^https?:\/\//i.test(img)
-              ? img
-              : await this.tosService.getPreSignedUrl(
-                  tosConfigs().tosBucket,
-                  img,
-                ),
-          ),
-        )
+    Logger.debug(
+      `Building payload for seedream1 with body: ${JSON.stringify(body)}`,
+    );
+    // toProviderUrl มี guard ในตัว: ค่าที่เป็น URL อยู่แล้ว (reference จาก workflow)
+    // ส่งต่อตรง ๆ ส่วน object key จึงค่อย presign — และ throw ถ้า presign ไม่ผ่าน
+    const refKeys = (body.image ?? []).filter((ref): ref is string =>
+      Boolean(ref),
+    );
+    const images = refKeys.length
+      ? await this.storageUrl.toProviderUrls(refKeys)
       : null;
     return {
       model: body.model,

@@ -1,2 +1,4 @@
-[2K[1G[2m$ rimraf dist[22m
-[2K[1G[2m$ nest build[22m
+yarn run v1.22.19
+$ rimraf dist
+$ nest build
+Done in 48.69s.

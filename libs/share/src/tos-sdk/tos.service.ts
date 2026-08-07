@@ -219,7 +219,11 @@ export class TosService {
       // console.log('PreSignedUrl:', url);
       return url;
     } catch (error) {
+      // ต่างจาก method อื่นในคลาสนี้: log แล้ว rethrow เพราะการกลืน error ทำให้ได้
+      // `url: undefined` หลุดไปถึง provider payload โดยไม่มีใครรู้
+      // ผู้ตัดสินใจว่าจะ soft/hard fail คือ StorageUrlService ไม่ใช่ที่นี่
       handleError(error);
+      throw error;
     }
   }
 

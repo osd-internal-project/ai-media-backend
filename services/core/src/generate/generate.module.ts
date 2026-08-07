@@ -5,6 +5,7 @@ import {
   QUEUE_NAME_VDO,
   PrismaModule,
   TosModule,
+  StorageModule,
   QUEUE_NAME_OMNIHUMEN,
   QUEUE_NAME_DREAMACTOR,
   LlmGatewayModule,
@@ -21,6 +22,7 @@ import { GenerateDreamactorService } from './services/generate-dreamactor.servic
   imports: [
     PrismaModule,
     TosModule,
+    StorageModule,
     LlmGatewayModule,
     BullModule.registerQueue({
       name: QUEUE_NAME_IMAGE,

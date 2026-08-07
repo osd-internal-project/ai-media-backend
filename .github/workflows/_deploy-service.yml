@@ -114,6 +114,7 @@ jobs:
             --set secretEnv.KEYCLOAK_CLIENT_SECRET=${{ secrets.KEYCLOAK_CLIENT_SECRET }} \
             --set secretEnv.OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
             --set secretEnv.OMISE_SECRET_KEY=${{ secrets.OMISE_SECRET_KEY }} \
+            --set secretEnv.LLM_ADMIN_TOKEN=${{ secrets.LLM_ADMIN_TOKEN }} \
             --namespace ${{ inputs.namespace }}-${DEPLOY_ENV} \
             --wait \
             --timeout 5m \

@@ -9,7 +9,9 @@ import {
   QUEUE_NAME_VDO,
   RefImageRepository,
   RequestVideoGenerateDto,
+  StorageUrlService,
   TosService,
+  buildOutputKey,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
@@ -99,6 +101,7 @@ export class VideoProcessor extends WorkerHost {
     private readonly logrepo: LogRepository,
     private readonly refImageRepository: RefImageRepository,
     private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
     private readonly generateHelperService: GenerateHelperService,
     private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
   ) {
@@ -289,7 +292,7 @@ export class VideoProcessor extends WorkerHost {
           });
           const uuidName = uuidv4();
           //before
-           const videoRes = await axios.get(content.video_url, {
+          const videoRes = await axios.get(content.video_url, {
             responseType: 'arraybuffer',
             httpsAgent: this.agent,
           });
@@ -315,9 +318,7 @@ export class VideoProcessor extends WorkerHost {
             mockFile,
             taskId,
           );
-          
-           
-         
+
           // const videoFile = `${uuidName}.mp4`;
           // const thumbFile = `thumb-${uuidName}.jpg`;
           // const videoKey = `organize/${body.organizationId}/${body.projectId}/video-generate/${videoFile}`;
@@ -344,13 +345,17 @@ export class VideoProcessor extends WorkerHost {
 
           await this.publishToCore(clientId, 'worker:video-upload-success', {
             taskId,
-            videoUrl: await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              `organize/${body.organizationId}/${body.projectId}/video-generate/${result.file}`,
+            videoUrl: await this.storageUrl.resolveOutputUrl(
+              body.organizationId,
+              body.projectId,
+              'video',
+              result.file,
             ),
-            thumbnailUrl: await this.tosService.getPreSignedUrl(
-              tosConfigs().tosBucket,
-              `organize/${body.organizationId}/${body.projectId}/video-generate/${result.thumbnail}`,
+            thumbnailUrl: await this.storageUrl.resolveOutputUrl(
+              body.organizationId,
+              body.projectId,
+              'video',
+              result.thumbnail,
             ),
             timestamp: new Date().toISOString(),
             type: 'video',
@@ -654,7 +659,7 @@ export class VideoProcessor extends WorkerHost {
 
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizationId}/${projectId}/video-generate/${objectName}`,
+        buildOutputKey(organizationId, projectId, 'video', objectName),
         file.buffer,
       );
 
@@ -663,7 +668,7 @@ export class VideoProcessor extends WorkerHost {
       const thumbBuffer = fs.readFileSync(tempThumbPath);
       await this.tosService.putObject(
         tosConfigs().tosBucket,
-        `organize/${organizationId}/${projectId}/video-generate/${thumbnailObjectName}`,
+        buildOutputKey(organizationId, projectId, 'video', thumbnailObjectName),
         thumbBuffer,
       );
 
@@ -701,18 +706,26 @@ export class VideoProcessor extends WorkerHost {
   };
 
   private async buildPayload(body: RequestVideoGenerateDto, sendConfig: any) {
-    const builder = this.payloadBuilders[sendConfig.type];
+    const builder = this.payloadBuilders[sendConfig?.type];
+    if (!builder) {
+      // ไม่มี builder = config ใน master_model_type ผิด retry ไปก็ไม่หาย
+      throw new UnrecoverableError(
+        `Unsupported video sendConfig.type: "${sendConfig?.type}"`,
+      );
+    }
     return builder(body, sendConfig);
   }
 
   /**
    * presign เฉพาะค่าที่เป็น object key — ถ้าเป็น URL อยู่แล้ว (เช่น reference จาก workflow
    * ที่ presign ตั้งแต่ submit) ส่งต่อตรง ๆ ไม่ presign ซ้ำ
+   *
+   * @param value object key หรือ URL
+   * @returns URL ที่ provider ดาวน์โหลดได้
+   * @throws เมื่อ presign ไม่สำเร็จ — ยอมให้ job fail ดีกว่ายิง url ว่างไปหา provider
    */
   private async presignRef(value: string): Promise<string> {
-    return /^https?:\/\//i.test(value)
-      ? value
-      : this.tosService.getPreSignedUrl(tosConfigs().tosBucket, value);
+    return this.storageUrl.toProviderUrl(value);
   }
 
   private async buildSeedance1Payload(
