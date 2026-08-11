@@ -1,7 +1,7 @@
 {
   "name": "@ai-media/prisma",
   "description": "prisma",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "dependencies": {
     "@nestjs/jwt": "nestjs/jwt",
     "@prisma/client": "^4.4.0"
