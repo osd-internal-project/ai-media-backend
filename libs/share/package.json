@@ -4,7 +4,7 @@
   "version": "0.0.2",
   "author": "",
   "dependencies": {
-    "@ai-media/prisma": "1.0.0",
+    "@ai-media/prisma": "1.0.1",
     "@nestjs/common": "^9.1.2",
     "@nestjs/config": "^2.1.0",
     "@nestjs/core": "^9.1.2",

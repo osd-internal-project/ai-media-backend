@@ -4,7 +4,7 @@
   "version": "1.0.06",
   "author": "",
   "dependencies": {
-    "@ai-media/share": "0.0.1",
+    "@ai-media/share": "0.0.2",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^9.1.6",
     "@nestjs/config": "^2.1.0",
