@@ -46,6 +46,13 @@ import {
   WhtRequestStatusLogRepository,
   DocumentCounterRepository,
   PendingPurchaseRepository,
+  SocialAccountRepository,
+  ActivityShareRepository,
+  ActivityShareTargetRepository,
+  ActivityShareLogRepository,
+  CommunityPostRepository,
+  CommunityPostLogRepository,
+  CommunityPostReactionRepository,
 } from 'src/repositories';
 
 const services = [
@@ -95,6 +102,13 @@ const services = [
   WhtRequestStatusLogRepository,
   DocumentCounterRepository,
   PendingPurchaseRepository,
+  SocialAccountRepository,
+  ActivityShareRepository,
+  ActivityShareTargetRepository,
+  ActivityShareLogRepository,
+  CommunityPostRepository,
+  CommunityPostLogRepository,
+  CommunityPostReactionRepository,
 ];
 
 @Module({

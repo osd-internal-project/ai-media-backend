@@ -13,3 +13,5 @@ export * from './llm-gateway';
 export * from './types';
 export * from './tos-sdk';
 export * from './storage';
+export * from './social';
+export * from './community';

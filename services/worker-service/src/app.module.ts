@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { GenerateModule } from './generate/generate.module';
 import { UploadImageModule } from './upload-image/upload-image.module';
+import { SocialPublishModule } from './social-publish/social-publish.module';
 import { RequestLoggerMiddleware } from './middleware/request-logger.middleware';
 import { TosModule, StorageModule } from '@ai-media/share';
 
@@ -20,6 +21,7 @@ import { TosModule, StorageModule } from '@ai-media/share';
     }),
     GenerateModule,
     UploadImageModule,
+    SocialPublishModule,
     TosModule,
     StorageModule,
   ],

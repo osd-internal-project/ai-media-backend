@@ -1,4 +1,2 @@
-yarn run v1.22.19
 $ rimraf dist
 $ nest build
-Done in 48.92s.

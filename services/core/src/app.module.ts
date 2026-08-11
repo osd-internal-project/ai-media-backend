@@ -9,6 +9,9 @@ import { HttpModule } from '@nestjs/axios';
 import { ProjectModule } from './project/project.module';
 import { LogsModule } from './logs/logs.module';
 import { GalleryModule } from './gallery/gallery.module';
+import { ActivityShareModule } from './activity-share/activity-share.module';
+import { CommunityPostModule } from './community-post/community-post.module';
+import { PublicCommunityModule } from './public-community/public-community.module';
 import { ProjectMemberModule } from './project-member/project-member.module';
 import { MasteradataConfigApiModule } from './masteradata-config-api/masteradata-config-api.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -16,7 +19,12 @@ import { PromptGuideModule } from './prompt-guide/prompt-guide.module';
 import { PromptGuideTypeModule } from './prompt-guide-type/prompt-guide-type.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AiModelModule } from './ai-model/ai-model.module';
-import { appConfigs, byteplusConfigs, redisConfigs } from './configs';
+import {
+  appConfigs,
+  byteplusConfigs,
+  communityConfigs,
+  redisConfigs,
+} from './configs';
 import { PlanModule } from './plan/plan.module';
 import { GenerateModule } from './generate/generate.module';
 import { BullModule } from '@nestjs/bullmq';
@@ -32,7 +40,7 @@ import { WorkflowModule } from './workflow/workflow.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfigs, byteplusConfigs],
+      load: [appConfigs, byteplusConfigs, communityConfigs],
     }),
     ScheduleModule.forRoot(),
     WebsocketModule,
@@ -41,6 +49,9 @@ import { WorkflowModule } from './workflow/workflow.module';
     ProjectModule,
     LogsModule,
     GalleryModule,
+    ActivityShareModule,
+    CommunityPostModule,
+    PublicCommunityModule,
     ProjectMemberModule,
     MasteradataConfigApiModule,
     MasterModelTypeModule,

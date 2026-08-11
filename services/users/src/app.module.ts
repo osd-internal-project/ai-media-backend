@@ -27,6 +27,7 @@ import { WhtRequestModule } from './wht-request/wht-request.module';
 import { CustomerModule } from './customer/customer.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { PaymentMethodModule } from './payment-method/payment-method.module';
+import { SocialAccountModule } from './social-account/social-account.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { PaymentMethodModule } from './payment-method/payment-method.module';
     CustomerModule,
     PurchaseModule,
     PaymentMethodModule,
+    SocialAccountModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

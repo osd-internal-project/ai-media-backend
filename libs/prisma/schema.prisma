@@ -64,6 +64,8 @@ model Project {
   logs                  Log[]
   // ความสัมพันธ์กับ Workflow (เพิ่มใหม่ แบบ additive ไม่กระทบของเดิม)
   workflowConversations WorkflowConversation[]
+  activityShares        ActivityShare[]
+  communityPosts        CommunityPost[]
   organizationId        String?                @map("organization_id") @db.VarChar(50)
   // ยอดจำกัด ของ Project
   limitImageAllowance   Int                    @default(0) @map("limit_image_allowance")
@@ -437,6 +439,7 @@ model Organization {
   creditBalance       CreditBalance?
   packageTransactions PackageTransaction[]
   brandKits           BrandKit[]
+  socialAccounts      SocialAccount[]
   llmApiKey           String?                   @map("llm_api_key") @db.VarChar(100)
   llmOragnizeId       String?                   @map("llm_organization_id") @db.VarChar(100)
   // Omise customer id — holds the org's saved cards (created on first saved-card payment)
@@ -1146,4 +1149,259 @@ model PendingPurchase {
   @@index([status])
   @@index([omiseChargeId])
   @@map("pending_purchase")
+}
+
+// ============================================================================
+// Public Social — งาน share ผลงานจาก gallery ออกสู่ social platform
+// ============================================================================
+
+/// บัญชี social ที่ org เชื่อมต่อไว้ผ่าน OAuth (1 row = 1 page/channel/account)
+/// token เก็บแบบเข้ารหัส AES-256-GCM เสมอ (ดู libs/share/src/utils/crypto.util.ts)
+model SocialAccount {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.VarChar(50)
+  organization   Organization @relation(fields: [organizationId], references: [organizationId])
+
+  platform    String  @map("platform") @db.VarChar(20) // FACEBOOK | INSTAGRAM | TIKTOK | YOUTUBE
+  /// id ฝั่ง provider — FB Page id / IG user id / TikTok open_id / YouTube channel id
+  externalId  String  @map("external_id") @db.VarChar(100)
+  displayName String  @map("display_name") @db.VarChar(200)
+  avatarUrl   String? @map("avatar_url") @db.VarChar(500)
+
+  /// ciphertext เสมอ ห้ามเก็บ plaintext
+  accessToken    String    @map("access_token") @db.Text
+  refreshToken   String?   @map("refresh_token") @db.Text
+  tokenExpiresAt DateTime? @map("token_expires_at") @db.Timestamptz(6)
+  scopes         String[]  @default([]) @map("scopes")
+
+  status            String @default("ACTIVE") @map("status") @db.VarChar(20) // ACTIVE | EXPIRED | REVOKED
+  connectedByUserId String @map("connected_by_user_id") @db.VarChar(50)
+  /// OAUTH = ได้มาจาก consent flow, MANUAL = แอดมินวาง token เอง
+  /// MANUAL ต่างที่ตอนถอดบัญชีจะไม่ยิง revoke ไปหา provider เพราะ token อาจถูกใช้ที่อื่นอยู่
+  connectionType    String @default("OAUTH") @map("connection_type") @db.VarChar(20)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  targets ActivityShareTarget[]
+
+  @@unique([organizationId, platform, externalId])
+  @@index([organizationId])
+  @@index([status])
+  @@map("social_account")
+}
+
+/// งาน share 1 งาน = สื่อที่เลือก + caption + platform ปลายทาง + สถานะอนุมัติ
+model ActivityShare {
+  id             String @id @default(uuid()) @db.Uuid
+  organizationId String @map("organization_id") @db.VarChar(50)
+  /// project.id เป็น text (ไม่ใช่ uuid type) — ชนิดต้องตรงกันไม่งั้น FK สร้างไม่ได้
+  projectId      String @map("project_id")
+
+  project         Project @relation(fields: [projectId], references: [id])
+  createdByUserId String  @map("created_by_user_id") @db.VarChar(50)
+
+  caption  String   @default("") @map("caption") @db.Text
+  hashtags String[] @default([]) @map("hashtags")
+  linkUrl  String?  @map("link_url") @db.VarChar(500)
+
+  /// snapshot ของ gallery item ที่เลือก ณ ตอนสร้างงาน — ไม่ join เพราะ gallery ถูกลบได้
+  /// [{ galleryId, resultKey, thumbnailKey, typeGenerate, order }]
+  mediaItems Json @default("[]") @map("media_items") @db.JsonB
+
+  status String @default("NEW") @map("status") @db.VarChar(20) // NEW | APPROVED | REJECTED | PENDING | PUBLISHING | SUCCESS | FAILED
+
+  reviewedByUserId String?   @map("reviewed_by_user_id") @db.VarChar(50)
+  reviewedAt       DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNote       String?   @map("review_note") @db.Text
+
+  /// เผื่อ scheduled post ในอนาคต — ยังไม่ใช้ตอนนี้
+  scheduledAt DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  sentAt      DateTime? @map("sent_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  targets ActivityShareTarget[]
+  logs    ActivityShareLog[]
+
+  @@index([organizationId, status])
+  @@index([projectId])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("activity_share")
+}
+
+/// ปลายทาง 1 platform ของงาน share — สำเร็จ/ล้มเหลวแยกกันได้
+model ActivityShareTarget {
+  id              String @id @default(uuid()) @db.Uuid
+  activityShareId String @map("activity_share_id") @db.Uuid
+  socialAccountId String @map("social_account_id") @db.Uuid
+
+  activityShare ActivityShare @relation(fields: [activityShareId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id])
+
+  /// denormalize ไว้เพื่อให้ row ยังอ่านออกแม้ social account ถูกถอดออกภายหลัง
+  platform String @map("platform") @db.VarChar(20)
+  status   String @default("PENDING") @map("status") @db.VarChar(20) // PENDING | PUBLISHING | SUCCESS | FAILED
+
+  remotePostId String? @map("remote_post_id") @db.VarChar(200)
+  remoteUrl    String? @map("remote_url") @db.VarChar(500)
+  errorCode    String? @map("error_code") @db.VarChar(50)
+  errorMessage String? @map("error_message") @db.Text
+  attemptCount Int     @default(0) @map("attempt_count")
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  logs ActivityShareLog[]
+
+  @@unique([activityShareId, socialAccountId])
+  @@index([activityShareId])
+  @@index([status])
+  @@map("activity_share_target")
+}
+
+/// log การเปลี่ยนสถานะ/แก้ไขงาน share พร้อมผู้กระทำ + timestamp — append-only ห้าม update/delete
+model ActivityShareLog {
+  id                    String  @id @default(uuid()) @db.Uuid
+  activityShareId       String  @map("activity_share_id") @db.Uuid
+  /// ใส่เมื่อ event เกิดกับ platform ใด platform หนึ่งโดยเฉพาะ
+  activityShareTargetId String? @map("activity_share_target_id") @db.Uuid
+
+  activityShare       ActivityShare        @relation(fields: [activityShareId], references: [id], onDelete: Cascade)
+  activityShareTarget ActivityShareTarget? @relation(fields: [activityShareTargetId], references: [id], onDelete: Cascade)
+
+  action     String  @map("action") @db.VarChar(30) // CREATE | UPDATE | SUBMIT | APPROVE | REJECT | SEND | PUBLISH_START | PUBLISH_SUCCESS | PUBLISH_FAIL | RETRY | CANCEL
+  fromStatus String? @map("from_status") @db.VarChar(20)
+  toStatus   String  @map("to_status") @db.VarChar(20)
+
+  /// null เมื่อผู้กระทำคือ worker
+  actionUserId String? @map("action_user_id") @db.VarChar(50)
+  actorType    String  @default("USER") @map("actor_type") @db.VarChar(20) // USER | SYSTEM
+
+  note     String? @map("note") @db.Text
+  /// field diff ตอน UPDATE หรือ error payload จาก provider
+  metadata Json?   @map("metadata") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([activityShareId, createdAt])
+  @@index([action])
+  @@map("activity_share_log")
+}
+
+// ============================================================================
+// Communication — เผยแพร่ผลงานจาก gallery ขึ้นหน้า community สาธารณะของ AI CAVE
+// ต่างจาก Public Social ตรงที่ปลายทางคือเว็บของเราเอง ไม่ใช่ platform ภายนอก
+// ============================================================================
+
+/// โพสต์ 1 ใบบนหน้า community — เห็นได้โดยไม่ต้อง login เมื่อสถานะเป็น PUBLISHED
+model CommunityPost {
+  id String @id @default(uuid()) @db.Uuid
+  /// key ของ URL สาธารณะ /community/[slug] — kebab ของ title + nanoid 8 ตัว
+  /// nanoid ท้าย slug กัน 2 อย่างพร้อมกัน: ชื่อชนกัน และการเดา URL ไล่ทีละใบ
+  slug String @unique @map("slug") @db.VarChar(180)
+
+  organizationId String @map("organization_id") @db.VarChar(50)
+  /// project.id เป็น text (ไม่ใช่ uuid type) — ชนิดต้องตรงกันไม่งั้น FK สร้างไม่ได้
+  projectId      String @map("project_id")
+
+  project         Project @relation(fields: [projectId], references: [id])
+  createdByUserId String  @map("created_by_user_id") @db.VarChar(50)
+
+  title    String   @default("") @map("title") @db.VarChar(200)
+  caption  String   @default("") @map("caption") @db.Text
+  hashtags String[] @default([]) @map("hashtags")
+  linkUrl  String?  @map("link_url") @db.VarChar(500)
+
+  /// snapshot ของ gallery item ที่เลือก ณ ตอนสร้างโพสต์ — รูปแบบเดียวกับ activity_share
+  /// [{ galleryId, resultKey, thumbnailKey, typeGenerate, order }]
+  /// เก็บ object key ไม่ใช่ URL และไม่ join gallery เพราะ gallery ถูกลบได้
+  mediaItems Json @default("[]") @map("media_items") @db.JsonB
+
+  /// prompt คือทรัพย์สินทางปัญญาของผู้ใช้ — เก็บและเปิดเผยเฉพาะเมื่อเจ้าของเลือกเอง
+  showPrompt     Boolean @default(false) @map("show_prompt")
+  promptSnapshot String? @map("prompt_snapshot") @db.Text
+
+  /// denormalize ชื่อผู้เขียน/องค์กร ไว้ให้หน้า public ไม่ต้อง join users หรือ organization
+  /// (และไม่เปลี่ยนตามหลัง เมื่อผู้ใช้เปลี่ยนชื่อหรือออกจาก org)
+  authorDisplayName       String @default("") @map("author_display_name") @db.VarChar(200)
+  organizationDisplayName String @default("") @map("organization_display_name") @db.VarChar(200)
+
+  status String @default("NEW") @map("status") @db.VarChar(20) // NEW | APPROVED | REJECTED | SCHEDULED | PUBLISHED | UNPUBLISHED
+
+  reviewedByUserId String?   @map("reviewed_by_user_id") @db.VarChar(50)
+  reviewedAt       DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNote       String?   @map("review_note") @db.Text
+
+  scheduledAt   DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  unpublishedAt DateTime? @map("unpublished_at") @db.Timestamptz(6)
+
+  /// counter แบบ denormalize — หน้า feed เรียงตามนี้ได้โดยไม่ต้อง aggregate
+  viewCount Int @default(0) @map("view_count")
+  likeCount Int @default(0) @map("like_count")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  logs      CommunityPostLog[]
+  reactions CommunityPostReaction[]
+
+  /// query เดียวของหน้า feed สาธารณะ: status=PUBLISHED เรียงตาม publishedAt
+  @@index([status, publishedAt])
+  @@index([organizationId, status])
+  @@index([projectId])
+  @@index([createdByUserId])
+  /// cron หยิบโพสต์ที่ถึงกำหนดเผยแพร่
+  @@index([status, scheduledAt])
+  @@map("community_post")
+}
+
+/// log การเปลี่ยนสถานะ/แก้ไขโพสต์ พร้อมผู้กระทำ + timestamp — append-only ห้าม update/delete
+model CommunityPostLog {
+  id     String @id @default(uuid()) @db.Uuid
+  postId String @map("post_id") @db.Uuid
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  action     String  @map("action") @db.VarChar(30) // CREATE | UPDATE | APPROVE | REJECT | SCHEDULE | UNSCHEDULE | PUBLISH | UNPUBLISH | REPUBLISH | DELETE
+  fromStatus String? @map("from_status") @db.VarChar(20)
+  toStatus   String  @map("to_status") @db.VarChar(20)
+
+  /// null เมื่อผู้กระทำคือ cron ที่เผยแพร่ตามเวลาที่ตั้งไว้
+  actionUserId String? @map("action_user_id") @db.VarChar(50)
+  actorType    String  @default("USER") @map("actor_type") @db.VarChar(20) // USER | SYSTEM
+
+  note     String? @map("note") @db.Text
+  /// field diff ตอน UPDATE
+  metadata Json?   @map("metadata") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([postId, createdAt])
+  @@index([action])
+  @@map("community_post_log")
+}
+
+/// การกดถูกใจจากผู้เยี่ยมชมที่ไม่ได้ login
+///
+/// มีไว้ทำให้การกดไลก์เป็น idempotent อย่างเดียว (unique constraint กันกดซ้ำ)
+/// ส่วน path ที่ใช้อ่านจริงคือ community_post.like_count
+model CommunityPostReaction {
+  id     String @id @default(uuid()) @db.Uuid
+  postId String @map("post_id") @db.Uuid
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 ของ visitor id ใน cookie — ไม่เก็บค่าดิบและไม่เก็บ IP
+  visitorHash String @map("visitor_hash") @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([postId, visitorHash])
+  @@index([postId])
+  @@map("community_post_reaction")
 }

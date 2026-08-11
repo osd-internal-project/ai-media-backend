@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { Request } from 'express';
 
+export * from './crypto.util';
+
 const { Decimal } = Prisma;
 
 const createReadableId = (len: number) => {
