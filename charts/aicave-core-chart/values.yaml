@@ -49,7 +49,7 @@ env:
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
   redisHost: "my-redis-master"
   redisPort: "6379"
-  llmGatewayUrl: "https://llm-gateway.aicave.ai"
+  llmGatewayUrl: "https://llmgateway.osd.co.th"
   llmProjectId: "team-mrcx7er7"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:

@@ -44,9 +44,7 @@ export const communityConfigs = registerAs('community', () => ({
   publicApiBaseUrl: process.env.COMMUNITY_PUBLIC_API_BASE_URL ?? '',
 }));
 
-export const llmConfigs = registerAs('llm', () => ({
-  llmGatewayUrl: process.env.LLM_GATEWAY_URL || 'https://llmgateway.osd.co.th',
-  llmProjectId: process.env.LLM_PROJECT_ID || 'team-mrcx7er7', //AI Cave Lab
-  llmProjectName: process.env.LLM_PROJECT_NAME || 'AI Cave Lab',
-  llmAdminToken: process.env.LLM_ADMIN_TOKEN,
-}));
+// llmConfigs ถูกลบออก — ไม่เคยถูก register ใน ConfigModule และไม่มีที่ไหนอ่านเลย
+// การมีอยู่ทำให้เข้าใจผิดว่าค่า gateway ตั้งที่นี่ ทั้งที่ค่าที่ใช้จริงอ่าน env ตรง ๆ
+// ใน libs/share/src/llm-gateway (LlmGatewayService.config และ LlmChatService.config)
+// ซึ่งเป็นที่เดียวที่คุยกับ gateway

@@ -441,6 +441,11 @@ model Organization {
   brandKits           BrandKit[]
   socialAccounts      SocialAccount[]
   llmApiKey           String?                   @map("llm_api_key") @db.VarChar(100)
+  /// host ของ gateway ที่ออก llmApiKey ใบนี้ให้
+  ///
+  /// key ใช้ได้เฉพาะกับ host ที่ออกให้ — เก็บไว้เทียบกับ LLM_GATEWAY_URL ปัจจุบัน
+  /// เพื่อให้ระบบ mint ใหม่เองเมื่อย้าย gateway แทนที่จะส่ง key ที่ตายแล้วออกไป
+  llmGatewayHost      String?                   @map("llm_gateway_host") @db.VarChar(200)
   llmOragnizeId       String?                   @map("llm_organization_id") @db.VarChar(100)
   // Omise customer id — holds the org's saved cards (created on first saved-card payment)
   omiseCustomerId     String?                   @map("omise_customer_id") @db.VarChar(100)
@@ -861,6 +866,41 @@ model ChatTool {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("chat_tool")
+}
+
+/// โมเดลที่เลือกได้ในแชท AI Assistant
+///
+/// แยกจาก MasterModelType โดยตั้งใจ — ตารางนั้นถือ sendApi / requestBodyMap /
+/// taskPollApi / taskResponseMap ไว้สำหรับงาน generate แบบ async ซึ่งไม่มีความหมาย
+/// กับแชทเลย และ GET /ai-models ยังคืน sendConfig ทั้งก้อน (รวม token) ให้ frontend อยู่
+///
+/// modelId ต้องอยู่ใน allowlist ของ key ที่ mint ให้ org ด้วย — ดู
+/// LlmGatewayService.mintApiKey ที่รวม modelId ของตารางนี้เข้าไป
+model ChatModelConfig {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// ค่าที่ส่งเป็น field `model` ไปยัง gateway เช่น "llama3.3-70b"
+  modelId     String  @unique @map("model_id") @db.VarChar(120)
+  displayName String  @map("display_name") @db.VarChar(150)
+  description String? @map("description") @db.Text
+
+  /// พารามิเตอร์ sampling ที่ส่งไปกับทุกคำขอของโมเดลนี้
+  /// (โค้ดเดิมไม่ส่ง temperature/max_tokens เลยบน path ของแชท)
+  temperature Decimal @default(0.7) @map("temperature") @db.Decimal(3, 2)
+  maxTokens   Int     @default(1000) @map("max_tokens")
+
+  /// รองรับ input ที่เป็นรูปหรือไม่ — ใช้ gate ฟีเจอร์ image → prompt
+  supportsVision Boolean @default(false) @map("supports_vision")
+
+  isDefault Boolean @default(false) @map("is_default")
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([isActive, sortOrder])
+  @@map("chat_model_config")
 }
 
 model ContactSaleLog {

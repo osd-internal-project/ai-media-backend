@@ -29,7 +29,7 @@ env:
   redisPort: "6379"
   emailApiUrl: "http://aicave-email-api-service.aicave-prod.svc.cluster.local:8974"
   receiveEmail: "aicavesupport@osd.co.th"
-  llmGatewayUrl: "https://llm-gateway.aicave.ai"
+  llmGatewayUrl: "https://llmgateway.osd.co.th"
   llmProjectId: "team-mqt1b3qx"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:

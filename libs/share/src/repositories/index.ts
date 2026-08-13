@@ -50,3 +50,4 @@ export * from './activityShareLog.repository';
 export * from './communityPost.repository';
 export * from './communityPostLog.repository';
 export * from './communityPostReaction.repository';
+export * from './chatModelConfig.repository';

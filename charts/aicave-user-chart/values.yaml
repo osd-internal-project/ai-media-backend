@@ -48,7 +48,7 @@ env:
   keycloakClientId: "ai-cave-prod"
   keycloakRedirectUri: "https://www.aicave.ai/callback"
   keycloakIdpMicrosoftAlias: "microsoft"
-  llmGatewayUrl: "https://llm-gateway.aicave.ai"
+  llmGatewayUrl: "https://llmgateway.osd.co.th"
   llmProjectId: "team-mrcx7er7"
   omiseApiUrl: "https://api.omise.co"
   omiseApiVersion: "2019-05-29"

@@ -29,7 +29,7 @@ env:
   redisPort: "6379"
   emailApiUrl: "http://aicave-email-api-service.aicave-uat.svc.cluster.local:8974"
   receiveEmail: "taksapongk@osd.co.th"
-  llmGatewayUrl: "https://llm-gateway.aicave.ai"
+  llmGatewayUrl: "https://llmgateway.osd.co.th"
   llmProjectId: "team-mrcx7er7"
 
 

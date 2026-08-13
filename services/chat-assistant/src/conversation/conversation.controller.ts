@@ -56,38 +56,49 @@ export class ConversationController {
   }
 
   /**
-   * GET /api/chat-assistant/conversations/:id
+   * GET /api/conversations/:id?userId=xxx
+   *
+   * ทุก route ที่แตะบทสนทนาใบเดียวต้องส่ง userId มาด้วย และ service จะตรวจว่าเป็น
+   * เจ้าของก่อนเสมอ
    */
   @Get(':id')
   @ApiOperation({ summary: 'Get a conversation by ID' })
-  findOne(@Param('id') id: string) {
-    return this.conversationService.findOne(id);
+  @ApiQuery({ name: 'userId', required: true })
+  findOne(@Param('id') id: string, @Query('userId') userId: string) {
+    return this.conversationService.findOne(id, userId);
   }
 
   /**
-   * GET /api/chat-assistant/conversations/:id/messages
+   * GET /api/conversations/:id/messages?userId=xxx
    */
   @Get(':id/messages')
   @ApiOperation({ summary: 'Get messages in a conversation' })
+  @ApiQuery({ name: 'userId', required: true })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  findMessages(@Param('id') id: string, @Query('limit') limit?: string) {
+  findMessages(
+    @Param('id') id: string,
+    @Query('userId') userId: string,
+    @Query('limit') limit?: string,
+  ) {
     return this.conversationService.findMessages(
       id,
+      userId,
       limit ? parseInt(limit, 10) : 50,
     );
   }
 
   /**
-   * GET /api/chat-assistant/conversations/:id/token-usage
+   * GET /api/conversations/:id/token-usage?userId=xxx
    */
   @Get(':id/token-usage')
   @ApiOperation({ summary: 'Get token usage summary for a conversation' })
-  getTokenUsage(@Param('id') id: string) {
-    return this.conversationService.getTokenUsageSummary(id);
+  @ApiQuery({ name: 'userId', required: true })
+  getTokenUsage(@Param('id') id: string, @Query('userId') userId: string) {
+    return this.conversationService.getTokenUsageSummary(id, userId);
   }
 
   /**
-   * PATCH /api/chat-assistant/conversations/:id
+   * PATCH /api/conversations/:id
    */
   @Patch(':id')
   @UsePipes(new ValidationPipe({ whitelist: true }))
@@ -97,11 +108,12 @@ export class ConversationController {
   }
 
   /**
-   * DELETE /api/chat-assistant/conversations/:id
+   * DELETE /api/conversations/:id?userId=xxx
    */
   @Delete(':id')
   @ApiOperation({ summary: 'Soft-delete a conversation' })
-  remove(@Param('id') id: string) {
-    return this.conversationService.remove(id);
+  @ApiQuery({ name: 'userId', required: true })
+  remove(@Param('id') id: string, @Query('userId') userId: string) {
+    return this.conversationService.remove(id, userId);
   }
 }

@@ -1,7 +1,7 @@
 import {
+  BadRequestException,
   Body,
   Controller,
-  Get,
   Post,
   Query,
   Sse,
@@ -52,6 +52,7 @@ export class ChatController {
       message: query.message,
       conversationId: query.conversationId,
       organizationId: query.organizationId,
+      generateType: query.generateType,
       model: query.model,
     });
   }
@@ -108,8 +109,9 @@ export class ChatController {
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: ImagePromptRequestDto,
   ) {
+    // 400 ไม่ใช่ 500 — ไฟล์ที่หายไปคือคำขอที่ผิด ไม่ใช่ระบบพัง
     if (!file) {
-      throw new Error('No image file provided');
+      throw new BadRequestException('No image file provided');
     }
     return this.visionService.generatePromptFromImage(file, dto);
   }

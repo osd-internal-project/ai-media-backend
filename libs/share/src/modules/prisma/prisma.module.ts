@@ -53,6 +53,7 @@ import {
   CommunityPostRepository,
   CommunityPostLogRepository,
   CommunityPostReactionRepository,
+  ChatModelConfigRepository,
 } from 'src/repositories';
 
 const services = [
@@ -109,6 +110,7 @@ const services = [
   CommunityPostRepository,
   CommunityPostLogRepository,
   CommunityPostReactionRepository,
+  ChatModelConfigRepository,
 ];
 
 @Module({

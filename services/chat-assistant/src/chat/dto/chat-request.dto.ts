@@ -1,6 +1,6 @@
 import {
   IsArray,
-  IsBoolean,
+  IsIn,
   IsObject,
   IsOptional,
   IsString,
@@ -8,6 +8,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CHAT_GENERATE_TYPES } from '@ai-media/share';
 
 export class ToolDefinitionDto {
   @ApiProperty({ description: 'Tool name', example: 'get_weather' })
@@ -44,25 +45,35 @@ export class ChatRequestDto {
   @IsOptional()
   conversationId?: string;
 
-  @ApiPropertyOptional({ description: 'Organization ID for context' })
+  @ApiProperty({
+    description:
+      'Organization ID. Required — it selects the LLM gateway key the request is billed against.',
+  })
   @IsString()
+  @MinLength(1)
+  organizationId: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Active generator tab. Selects the assistant role (image / video / omnihumen / dreamactor).',
+    enum: CHAT_GENERATE_TYPES,
+  })
+  @IsIn(CHAT_GENERATE_TYPES as unknown as string[])
   @IsOptional()
-  organizationId?: string;
+  generateType?: string;
 
   @ApiPropertyOptional({ description: 'Override system prompt for this request' })
   @IsString()
   @IsOptional()
   systemPrompt?: string;
 
-  @ApiPropertyOptional({ description: 'Override model for this request', example: 'gpt-4o' })
+  @ApiPropertyOptional({
+    description: 'Model id from GET /chat-models. Falls back to the default model.',
+    example: 'llama3.3-70b',
+  })
   @IsString()
   @IsOptional()
   model?: string;
-
-  @ApiPropertyOptional({ description: 'Whether to return a streaming response', default: false })
-  @IsBoolean()
-  @IsOptional()
-  stream?: boolean;
 
   @ApiPropertyOptional({
     description: 'Array of tool definitions to make available in this call',
@@ -92,12 +103,23 @@ export class StreamChatQueryDto {
   @IsOptional()
   conversationId?: string;
 
-  @ApiPropertyOptional({ description: 'Organization ID' })
+  @ApiProperty({
+    description:
+      'Organization ID. Required — it selects the LLM gateway key the request is billed against.',
+  })
   @IsString()
-  @IsOptional()
-  organizationId?: string;
+  @MinLength(1)
+  organizationId: string;
 
-  @ApiPropertyOptional({ description: 'Override model' })
+  @ApiPropertyOptional({
+    description: 'Active generator tab. Selects the assistant role.',
+    enum: CHAT_GENERATE_TYPES,
+  })
+  @IsIn(CHAT_GENERATE_TYPES as unknown as string[])
+  @IsOptional()
+  generateType?: string;
+
+  @ApiPropertyOptional({ description: 'Model id from GET /chat-models' })
   @IsString()
   @IsOptional()
   model?: string;

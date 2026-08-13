@@ -1,10 +1,24 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '@ai-media/share';
 import {
   CreateConversationDto,
   UpdateConversationDto,
 } from './dto/conversation.dto';
 
+/**
+ * ทุกเมธอดที่แตะบทสนทนาใบใดใบหนึ่งรับ `userId` ของผู้เรียกมาด้วยเสมอ และตรวจว่า
+ * เป็นเจ้าของก่อนคืนหรือแก้ข้อมูล — เดิมค้นด้วย id อย่างเดียว ใครที่รู้ id ของคนอื่น
+ * จึงอ่าน แก้ชื่อ หรือลบบทสนทนาของคนนั้นได้ทั้งหมด
+ *
+ * ข้อจำกัดที่ต้องรู้: `userId` มาจาก query/body ตรง ๆ ตาม convention ของโปรเจกต์นี้
+ * (ยังไม่มี guard กลางในระบบเลย) การตรวจนี้จึงปิดช่องอ้างอิงข้ามผู้ใช้ แต่ไม่ใช่
+ * การพิสูจน์ตัวตน
+ */
 @Injectable()
 export class ConversationService {
   private readonly logger = new Logger(ConversationService.name);
@@ -26,24 +40,30 @@ export class ConversationService {
     );
     return conversation;
   }
+
+  /**
+   * หาบทสนทนาของ project นี้ หรือสร้างใหม่ถ้ายังไม่มี
+   *
+   * ค้นด้วย projectId + userId อยู่แล้ว จึงคืนได้เฉพาะของผู้เรียกเองโดยธรรมชาติ
+   */
   async set(dto: CreateConversationDto) {
     const conversation = await this.prisma.chatConversation.findFirst({
       where: { projectId: dto.projectId, userId: dto.userId },
     });
-    if (!conversation) {
-      return await this.prisma.chatConversation.create({
-        data: {
-          userId: dto.userId,
-          organizationId: dto.organizationId,
-          projectId: dto.projectId,
-          title: `${dto.projectId}-${dto.userId}`,
-          systemPrompt: dto.systemPrompt,
-          model: dto.model,
-        },
-      });
-    }
-    return conversation;
+    if (conversation) return conversation;
+
+    return this.prisma.chatConversation.create({
+      data: {
+        userId: dto.userId,
+        organizationId: dto.organizationId,
+        projectId: dto.projectId,
+        title: `${dto.projectId}-${dto.userId}`,
+        systemPrompt: dto.systemPrompt,
+        model: dto.model,
+      },
+    });
   }
+
   async findAll(userId: string, organizationId?: string) {
     return this.prisma.chatConversation.findMany({
       where: {
@@ -64,34 +84,35 @@ export class ConversationService {
     });
   }
 
-  async findOne(id: string) {
-    const conversation = await this.prisma.chatConversation.findUnique({
+  async findOne(id: string, userId: string) {
+    await this.assertOwned(id, userId);
+    return this.prisma.chatConversation.findUnique({
       where: { id },
       include: {
         _count: { select: { messages: true, tokenUsage: true } },
       },
     });
-    if (!conversation)
-      throw new NotFoundException(`Conversation ${id} not found`);
-    return conversation;
   }
 
-  async findMessages(id: string, limit: number = 50) {
-    const conversation = await this.prisma.chatConversation.findUnique({
-      where: { id },
-    });
-    if (!conversation)
-      throw new NotFoundException(`Conversation ${id} not found`);
+  /**
+   * ข้อความล่าสุดของบทสนทนา
+   *
+   * ดึงจากท้ายแล้วกลับลำดับ — เดิมใช้ `asc` + `take` ซึ่งได้ N ข้อความแรก ทำให้
+   * หน้าจอที่เปิดบทสนทนายาว ๆ เห็นแต่ตอนต้นและไม่เห็นสิ่งที่เพิ่งคุยกัน
+   */
+  async findMessages(id: string, userId: string, limit = 50) {
+    await this.assertOwned(id, userId);
 
-    return this.prisma.chatMessage.findMany({
+    const messages = await this.prisma.chatMessage.findMany({
       where: { conversationId: id },
-      orderBy: { sequence: 'asc' },
+      orderBy: { sequence: 'desc' },
       take: limit,
     });
+    return messages.reverse();
   }
 
   async update(id: string, dto: UpdateConversationDto) {
-    await this.assertExists(id);
+    await this.assertOwned(id, dto.userId);
     return this.prisma.chatConversation.update({
       where: { id },
       data: {
@@ -104,16 +125,18 @@ export class ConversationService {
     });
   }
 
-  async remove(id: string) {
-    await this.assertExists(id);
-    // Soft-delete by setting status to 'deleted'
+  async remove(id: string, userId: string) {
+    await this.assertOwned(id, userId);
+    // soft delete — ประวัติการใช้ token ยังต้องอ่านย้อนหลังได้
     return this.prisma.chatConversation.update({
       where: { id },
       data: { status: 'deleted' },
     });
   }
 
-  async getTokenUsageSummary(conversationId: string) {
+  async getTokenUsageSummary(conversationId: string, userId: string) {
+    await this.assertOwned(conversationId, userId);
+
     const usage = await this.prisma.chatTokenUsage.aggregate({
       where: { conversationId },
       _sum: {
@@ -133,11 +156,24 @@ export class ConversationService {
     };
   }
 
-  private async assertExists(id: string) {
-    const exists = await this.prisma.chatConversation.findUnique({
+  /**
+   * ตรวจว่าบทสนทนามีอยู่จริงและเป็นของผู้เรียก
+   *
+   * @param id id ของบทสนทนา
+   * @param userId ผู้เรียก
+   * @throws NotFoundException เมื่อไม่พบ
+   * @throws ForbiddenException เมื่อเป็นของผู้ใช้คนอื่น
+   */
+  private async assertOwned(id: string, userId: string): Promise<void> {
+    const conversation = await this.prisma.chatConversation.findUnique({
       where: { id },
-      select: { id: true },
+      select: { userId: true },
     });
-    if (!exists) throw new NotFoundException(`Conversation ${id} not found`);
+    if (!conversation) {
+      throw new NotFoundException(`Conversation ${id} not found`);
+    }
+    if (conversation.userId !== userId) {
+      throw new ForbiddenException('This conversation belongs to another user');
+    }
   }
 }

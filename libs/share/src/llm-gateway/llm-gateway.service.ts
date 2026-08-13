@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as https from 'https';
 import {
+  ChatModelConfigRepository,
   MasterdataModelTypeRepository,
   OrganizationRepository,
 } from '../repositories';
@@ -45,6 +46,7 @@ export class LlmGatewayService {
   constructor(
     private readonly organizationRepository: OrganizationRepository,
     private readonly masterdataModelTypeRepository: MasterdataModelTypeRepository,
+    private readonly chatModelConfigRepository: ChatModelConfigRepository,
   ) {}
 
   /**
@@ -56,7 +58,7 @@ export class LlmGatewayService {
   private get config() {
     const env = process.env.NODE_ENV ?? 'local';
     return {
-      gatewayUrl: process.env.LLM_GATEWAY_URL || 'https://llm-gateway.aicave.ai',
+      gatewayUrl: process.env.LLM_GATEWAY_URL || 'https://llmgateway.osd.co.th',
       adminToken: process.env.LLM_ADMIN_TOKEN,
       projectId: process.env.LLM_PROJECT_ID || 'team-mrcx7er7',
       // Self-signed certificates are tolerated outside deployed environments only.
@@ -65,7 +67,15 @@ export class LlmGatewayService {
   }
 
   /**
-   * Returns the organization's gateway API key, minting and persisting one if absent.
+   * Returns the organization's gateway API key, minting and persisting one if absent
+   * or if the stored key was issued by a different gateway host.
+   *
+   * A key is only valid at the host that issued it, so `llmGatewayHost` is stored
+   * alongside it. When `LLM_GATEWAY_URL` moves, the stored key silently stops working —
+   * and because image/video generation sends this same key, that would break generation,
+   * not just chat. Comparing hosts makes the move self-healing: the first caller after a
+   * repoint mints against the new host and every later caller reuses it. Pointing the env
+   * back re-mints the other way, so nothing is destroyed either direction.
    *
    * @param organizationId Organization UUID (`Organization.organizationId`).
    * @returns The API key, or null if the organization is unknown or provisioning failed.
@@ -86,21 +96,33 @@ export class LlmGatewayService {
       this.logger.warn(`Organization ${organizationId} not found`);
       return null;
     }
-    if (organization.llmApiKey) {
+
+    const { gatewayUrl } = this.config;
+    if (organization.llmApiKey && organization.llmGatewayHost === gatewayUrl) {
       return organization.llmApiKey;
+    }
+
+    if (organization.llmApiKey) {
+      this.logger.log(
+        `Organization ${organizationId} has a key from ${
+          organization.llmGatewayHost ?? 'an unrecorded host'
+        }; re-minting against ${gatewayUrl}`,
+      );
     }
 
     if (!this.config.adminToken) {
       this.logger.error(
         'LLM_ADMIN_TOKEN is not set — cannot provision a gateway API key',
       );
-      return null;
+      // A stale key is still better than nothing when we cannot mint a fresh one:
+      // it works if the host never actually moved and only the tag is missing.
+      return organization.llmApiKey ?? null;
     }
 
     const apiKey = await this.mintApiKey(organization.name);
-    if (!apiKey) return null;
+    if (!apiKey) return organization.llmApiKey ?? null;
 
-    return this.persistApiKey(organizationId, apiKey);
+    return this.persistApiKey(organizationId, apiKey, gatewayUrl);
   }
 
   /**
@@ -113,16 +135,34 @@ export class LlmGatewayService {
     const { gatewayUrl, adminToken, projectId, rejectUnauthorized } =
       this.config;
 
-    const activeModels = await this.masterdataModelTypeRepository
-      .findMany({ where: { isActive: true } })
-      .catch((error) => {
-        this.logger.error(`Failed to load active models: ${error?.message}`);
-        return [];
-      });
+    // The key's allowlist has to cover BOTH generation models and chat models —
+    // a key minted without the chat model ids is rejected by the gateway the first
+    // time the assistant tries to use one.
+    const [activeModels, activeChatModels] = await Promise.all([
+      this.masterdataModelTypeRepository
+        .findMany({ where: { isActive: true } })
+        .catch((error) => {
+          this.logger.error(`Failed to load active models: ${error?.message}`);
+          return [];
+        }),
+      this.chatModelConfigRepository
+        .findMany({ where: { isActive: true } })
+        .catch((error) => {
+          this.logger.error(
+            `Failed to load active chat models: ${error?.message}`,
+          );
+          return [];
+        }),
+    ]);
 
-    const models = activeModels
-      .map((model) => model.modelType)
-      .filter((modelType): modelType is string => Boolean(modelType));
+    const models = [
+      ...new Set(
+        [
+          ...activeModels.map((model) => model.modelType),
+          ...activeChatModels.map((model) => model.modelId),
+        ].filter((modelId): modelId is string => Boolean(modelId)),
+      ),
+    ];
 
     try {
       const response = await axios.post<LlmApiKeyResponse>(
@@ -159,26 +199,41 @@ export class LlmGatewayService {
   }
 
   /**
-   * Persists a freshly minted key.
+   * Persists a freshly minted key together with the host that issued it.
    *
-   * The write is conditional on `llmApiKey` still being null so two concurrent callers
-   * cannot overwrite each other; the loser re-reads and returns the winner's key. Kept
-   * separate from {@link mintApiKey} so a persist failure is distinguishable from a gateway
-   * failure — sharing one try/catch meant a failed write silently orphaned the minted key
-   * and every retry minted another.
+   * The write is conditional on the row not already carrying a key for this host, so two
+   * concurrent callers cannot overwrite each other; the loser re-reads and returns the
+   * winner's key. The condition is on the *host* rather than on `llmApiKey IS NULL`
+   * (the original guard) because re-minting after a gateway move has to overwrite a
+   * non-null key — a null-only guard would leave the dead key in place forever.
+   *
+   * Kept separate from {@link mintApiKey} so a persist failure is distinguishable from a
+   * gateway failure — sharing one try/catch meant a failed write silently orphaned the
+   * minted key and every retry minted another.
    *
    * @param organizationId Organization UUID.
    * @param apiKey The key returned by the gateway.
+   * @param gatewayHost The gateway that issued the key.
    * @returns The key now stored for the organization, or null if the write failed.
    */
   private async persistApiKey(
     organizationId: string,
     apiKey: string,
+    gatewayHost: string,
   ): Promise<string | null> {
     try {
       const result = await this.organizationRepository.updatemany({
-        where: { organizationId, llmApiKey: null },
-        data: { llmApiKey: apiKey },
+        where: {
+          organizationId,
+          // Spelled out rather than using `not` so the NULL cases are unambiguous:
+          // SQL `host <> 'x'` is NULL (not true) when host is NULL.
+          OR: [
+            { llmApiKey: null },
+            { llmGatewayHost: null },
+            { llmGatewayHost: { not: gatewayHost } },
+          ],
+        },
+        data: { llmApiKey: apiKey, llmGatewayHost: gatewayHost },
       });
 
       if (result.count > 0) return apiKey;

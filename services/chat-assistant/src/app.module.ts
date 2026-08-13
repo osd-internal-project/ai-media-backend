@@ -3,13 +3,15 @@ import { ChatAssistantController } from './app.controller';
 import { ChatAssistantService } from './app.service';
 import { PrismaModule } from '@ai-media/share';
 import { HttpModule } from '@nestjs/axios';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from '@nestjs/config';
 import { RequestLoggerMiddleware } from './middleware/request-logger.middleware';
 import { ChatModule } from './chat/chat.module';
+import { ChatModelModule } from './chat-model/chat-model.module';
 import { ConversationModule } from './conversation/conversation.module';
 import appConfig from './configs';
 
+// ScheduleModule ถูกถอดออก — service นี้ไม่มี @Cron อยู่เลย การลงทะเบียนไว้เฉย ๆ
+// ทำให้อ่านโค้ดแล้วเข้าใจผิดว่ามีงานตามเวลาทำงานอยู่
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -18,8 +20,8 @@ import appConfig from './configs';
     }),
     PrismaModule,
     HttpModule,
-    ScheduleModule.forRoot(),
     ChatModule,
+    ChatModelModule,
     ConversationModule,
   ],
   controllers: [ChatAssistantController],

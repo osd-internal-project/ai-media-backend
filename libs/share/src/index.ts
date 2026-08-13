@@ -15,3 +15,4 @@ export * from './tos-sdk';
 export * from './storage';
 export * from './social';
 export * from './community';
+export * from './chat';

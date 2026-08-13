@@ -36,29 +36,27 @@ spec:
             secretKeyRef:
               name: {{ .Values.appName }}-secret
               key: DATABASE_URL
-        # OpenAI / LLM — API key loaded from Secret
-        - name: OPENAI_API_KEY
+        # LLM gateway. The per-request credential is the organization's own key,
+        # minted on demand via LLM_ADMIN_TOKEN — there is no shared model API key
+        # in this service any more.
+        - name: LLM_GATEWAY_URL
+          value: {{ .Values.env.llmGatewayUrl | quote }}
+        - name: LLM_PROJECT_ID
+          value: {{ .Values.env.llmProjectId | quote }}
+        - name: LLM_ADMIN_TOKEN
           valueFrom:
             secretKeyRef:
               name: {{ .Values.appName }}-secret
-              key: OPENAI_API_KEY
-        - name: OPENAI_BASE_URL
-          value: {{ .Values.env.openaiBaseUrl | quote }}
-        - name: OPENAI_MODEL
-          value: {{ .Values.env.openaiModel | quote }}
-        - name: OPENAI_FALLBACK_MODEL
-          value: {{ .Values.env.openaiFullbackModel | quote }}
-        - name: OPENAI_MAX_RETRIES
-          value: {{ .Values.env.openaiMaxRetries | quote }}
-        - name: OPENAI_TIMEOUT_MS
-          value: {{ .Values.env.openaiTimeoutMs | quote }}
-        # Moderation & Memory
-        - name: MODERATION_ENABLED
-          value: {{ .Values.env.moderationEnabled | quote }}
+              key: LLM_ADMIN_TOKEN
+        - name: LLM_CHAT_TIMEOUT_MS
+          value: {{ .Values.env.llmChatTimeoutMs | quote }}
+        # Memory window
         - name: MEMORY_MAX_MESSAGES
           value: {{ .Values.env.memoryMaxMessages | quote }}
         - name: MEMORY_MAX_TOKEN_BUDGET
           value: {{ .Values.env.memoryMaxTokenBudget | quote }}
+        - name: CORS_ALLOWED_ORIGINS
+          value: {{ .Values.env.corsAllowedOrigins | quote }}
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

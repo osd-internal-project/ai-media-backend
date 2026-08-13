@@ -1,229 +1,224 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { PrismaService } from '@ai-media/share';
+import { Observable, Subject } from 'rxjs';
+import {
+  LlmChatService,
+  LlmGatewayService,
+  LlmMessage,
+  LlmUsage,
+  OrganizationMemberRepository,
+  PrismaService,
+} from '@ai-media/share';
 import config from '../configs';
 import { ChatRequestDto } from './dto/chat-request.dto';
-import { ChatResponseDto, StreamChunkDto, TokenUsageDto } from './dto/chat-response.dto';
+import {
+  ChatResponseDto,
+  StreamChunkDto,
+  TokenUsageDto,
+} from './dto/chat-response.dto';
 import { PromptEngineeringService } from './services/prompt-engineering.service';
 import { MemoryService } from './services/memory.service';
 import { ToolCallingService, ToolDefinition } from './services/tool-calling.service';
-import { RetryService } from './services/retry.service';
-import { ModerationService } from './services/moderation.service';
-import { Observable, Subject } from 'rxjs';
-import { firstValueFrom } from 'rxjs';
-import { AxiosRequestConfig } from 'axios';
+import { ChatModelService, ResolvedChatModel } from './services/chat-model.service';
+
+/** พารามิเตอร์ที่ทั้ง path ปกติและ path stream ใช้ร่วมกัน */
+interface ChatTurnInput {
+  userId: string;
+  organizationId: string;
+  message: string;
+  conversationId?: string;
+  generateType?: string;
+  systemPrompt?: string;
+  model?: string;
+  projectId?: string;
+}
 
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
-  private readonly cfg = config().openai;
   private readonly memoryCfg = config().memory;
-  private readonly moderationCfg = config().moderation;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly httpService: HttpService,
     private readonly promptEngineeringService: PromptEngineeringService,
     private readonly memoryService: MemoryService,
     private readonly toolCallingService: ToolCallingService,
-    private readonly retryService: RetryService,
-    private readonly moderationService: ModerationService,
+    private readonly chatModelService: ChatModelService,
+    private readonly llmChat: LlmChatService,
+    private readonly llmGateway: LlmGatewayService,
+    private readonly orgMemberRepo: OrganizationMemberRepository,
   ) {}
 
-  // ─── Public: Standard (non-streaming) chat ────────────────────────────────
+  // ==========================================================================
+  // แชทแบบรอจนจบ
+  // ==========================================================================
 
+  /**
+   * ตอบข้อความ 1 รอบ
+   *
+   * ไม่มีการหักเครดิตที่ใดในเส้นทางนี้โดยตั้งใจ — ผู้ช่วยแชทเป็นเครื่องมือช่วยร่าง
+   * prompt ไม่ใช่การ generate ที่คิดเงิน ค่าใช้จ่ายไปผูกกับ key ของ org ที่ฝั่ง
+   * gateway แทน (chat_token_usage เก็บไว้ดูปริมาณเท่านั้น)
+   *
+   * @param dto คำขอจาก frontend
+   * @returns คำตอบของผู้ช่วย พร้อม token ที่ใช้จริง
+   */
   async chat(dto: ChatRequestDto): Promise<ChatResponseDto> {
-    // 1. Moderation on input
-    await this.moderationService.checkAndThrow(
-      dto.message,
-      this.cfg.apiKey,
-      this.cfg.baseUrl,
-      this.moderationCfg.enabled,
-    );
-
-    // 2. Resolve / create conversation
-    const conversation = await this.resolveConversation(dto);
-
-    // 3. Build system prompt + messages
-    const systemPrompt = this.promptEngineeringService.buildSystemPrompt({
-      customSystemPrompt: dto.systemPrompt ?? conversation.systemPrompt ?? undefined,
-      organizationId: dto.organizationId,
+    const input: ChatTurnInput = {
       userId: dto.userId,
-    });
+      organizationId: dto.organizationId,
+      message: dto.message,
+      conversationId: dto.conversationId,
+      generateType: dto.generateType,
+      systemPrompt: dto.systemPrompt,
+      model: dto.model,
+    };
 
-    const history = await this.memoryService.loadHistory(
-      conversation.id,
-      this.memoryCfg.maxMessages,
-      this.memoryCfg.maxTokenBudget,
-    );
+    const { conversation, messages, model, apiKey } =
+      await this.prepareTurn(input);
 
-    const messages = this.promptEngineeringService.buildMessages(
-      systemPrompt,
-      history,
-      dto.message,
-    );
-
-    // 4. Load tools
     const dbTools = await this.toolCallingService.loadToolDefinitions();
     const requestTools: ToolDefinition[] = [
       ...dbTools,
-      ...(dto.tools ?? []).map((t) => ({
+      ...(dto.tools ?? []).map((tool) => ({
         type: 'function' as const,
         function: {
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters,
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
         },
       })),
     ];
 
-    // 5. Save user message to DB
-    const userSeq = await this.memoryService.nextSequence(conversation.id);
-    const userMsg = await this.prisma.chatMessage.create({
-      data: {
-        conversationId: conversation.id,
-        role: 'user',
-        content: dto.message,
-        sequence: userSeq,
-        metadata: dto.metadata as any,
-      },
+    const userMessage = await this.persistMessage(conversation.id, {
+      role: 'user',
+      content: dto.message,
+      metadata: dto.metadata,
     });
 
-    // 6. LLM call with retry
-    const model = dto.model ?? this.cfg.model;
-    const payload: Record<string, any> = {
-      messages,
-      ...(requestTools.length > 0 ? { tools: requestTools, tool_choice: 'auto' } : {}),
-    };
-
-    let llmResponse: any;
-    let usedModel = model;
-
+    let result: Awaited<ReturnType<LlmChatService['complete']>>;
     try {
-      const result = await this.retryService.callWithRetry({
-        baseUrl: this.cfg.baseUrl,
-        apiKey: this.cfg.apiKey,
-        model,
-        fallbackModel: this.cfg.fallbackModel,
-        maxRetries: this.cfg.maxRetries,
-        timeoutMs: this.cfg.timeoutMs,
-        payload,
-      });
-      llmResponse = result.data;
-      usedModel = result.usedModel;
-    } catch (err: any) {
-      this.logger.error(`LLM call failed: ${err.message}`);
-      throw new BadRequestException(`AI service unavailable: ${err.message}`);
-    }
-
-    const choice = llmResponse.choices?.[0];
-    const assistantMsg = choice?.message;
-    const finishReason: string = choice?.finish_reason ?? 'stop';
-
-    // 7. Handle tool calls (recursive single-turn)
-    if (finishReason === 'tool_calls' && assistantMsg?.tool_calls) {
-      return await this.handleToolCalls(
-        conversation.id,
+      result = await this.llmChat.complete({
+        apiKey,
+        model: model.modelId,
         messages,
-        assistantMsg,
-        llmResponse.usage,
-        usedModel,
-        userMsg.id,
+        temperature: model.temperature,
+        maxTokens: model.maxTokens,
+        tools: requestTools.length > 0 ? requestTools : undefined,
+      });
+    } catch (error) {
+      this.logger.error(
+        `LLM call failed for conversation ${conversation.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'AI service unavailable',
       );
     }
 
-    // 8. Save assistant message + token usage
-    const assistantSeq = await this.memoryService.nextSequence(conversation.id);
-    const savedAssistant = await this.prisma.chatMessage.create({
-      data: {
+    if (result.finishReason === 'tool_calls' && result.toolCalls) {
+      return this.handleToolCalls({
         conversationId: conversation.id,
-        role: 'assistant',
-        content: assistantMsg?.content ?? '',
-        sequence: assistantSeq,
-      },
+        previousMessages: messages,
+        toolCalls: result.toolCalls,
+        assistantContent: result.content,
+        firstUsage: result.usage,
+        model,
+        apiKey,
+      });
+    }
+
+    const assistantMessage = await this.persistMessage(conversation.id, {
+      role: 'assistant',
+      content: result.content,
     });
 
     const tokenUsage = await this.saveTokenUsage(
       conversation.id,
-      savedAssistant.id,
-      usedModel,
-      llmResponse.usage,
+      assistantMessage.id,
+      result.model,
+      result.usage,
     );
 
-    // 9. Moderation on output (non-blocking)
-    await this.moderationService.checkAndThrow(
-      assistantMsg?.content ?? '',
-      this.cfg.apiKey,
-      this.cfg.baseUrl,
-      this.moderationCfg.enabled,
-    ).catch(() => {});
+    await this.rememberModel(conversation.id, model.modelId, userMessage.id);
 
     return {
       conversationId: conversation.id,
-      messageId: savedAssistant.id,
-      content: assistantMsg?.content ?? '',
+      messageId: assistantMessage.id,
+      content: result.content,
       role: 'assistant',
       tokenUsage,
-      finishReason,
-      createdAt: savedAssistant.createdAt,
+      finishReason: result.finishReason ?? 'stop',
+      createdAt: assistantMessage.createdAt,
     };
   }
 
-  // ─── Public: SSE Streaming chat ───────────────────────────────────────────
+  // ==========================================================================
+  // แชทแบบ stream (SSE)
+  // ==========================================================================
 
-  streamChat(query: {
-    userId: string;
-    message: string;
-    conversationId?: string;
-    organizationId?: string;
-    model?: string;
-  }): Observable<MessageEvent> {
+  /**
+   * ตอบข้อความแบบทยอยส่งทีละชิ้น
+   *
+   * @param query พารามิเตอร์จาก query string ของ EventSource
+   * @returns Observable ของ SSE event
+   */
+  streamChat(query: ChatTurnInput): Observable<MessageEvent> {
     const subject = new Subject<MessageEvent>();
 
-    this.runStreamFlow(query, subject).catch((err) => {
-      const chunk: StreamChunkDto = { type: 'error', error: err.message };
-      subject.next({ data: JSON.stringify(chunk) } as MessageEvent);
-      subject.complete();
-    });
+    this.runStreamFlow(query, subject)
+      .catch((error) => {
+        // ต้องส่ง error chunk ก่อน complete เสมอ — โค้ดเดิมมี finally ที่ complete
+        // ไปแล้วตั้งแต่ก่อน catch นี้ทำงาน ทำให้ subject.next() กลายเป็น no-op
+        // และฝั่ง client เห็นแค่ stream เงียบไปเฉย ๆ โดยไม่รู้ว่าพัง
+        const chunk: StreamChunkDto = {
+          type: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        };
+        subject.next({ data: JSON.stringify(chunk) } as MessageEvent);
+      })
+      .finally(() => subject.complete());
 
     return subject.asObservable();
   }
 
-  // ─── Private helpers ──────────────────────────────────────────────────────
+  // ==========================================================================
+  // Internals
+  // ==========================================================================
 
-  private async runStreamFlow(
-    query: {
-      userId: string;
-      message: string;
-      conversationId?: string;
-      organizationId?: string;
-      model?: string;
-    },
-    subject: Subject<MessageEvent>,
-  ): Promise<void> {
-    // Moderation
-    await this.moderationService.checkAndThrow(
-      query.message,
-      this.cfg.apiKey,
-      this.cfg.baseUrl,
-      this.moderationCfg.enabled,
+  /**
+   * งานเตรียมที่เหมือนกันทั้งสอง path: ตรวจสิทธิ์ หา key หาโมเดล ประกอบข้อความ
+   *
+   * @param input พารามิเตอร์ของรอบสนทนานี้
+   * @returns บทสนทนา ข้อความที่จะส่ง โมเดล และ key ที่จะใช้
+   */
+  private async prepareTurn(input: ChatTurnInput) {
+    await this.assertOrgMember(input.organizationId, input.userId);
+
+    const conversation = await this.resolveConversation(input);
+    const model = await this.chatModelService.resolve(
+      input.model ?? conversation.model,
     );
 
-    const conversation = await this.resolveConversation({
-      userId: query.userId,
-      message: query.message,
-      conversationId: query.conversationId,
-      organizationId: query.organizationId,
-    });
+    // key ของ org เอง ไม่ใช่ key กลางใบเดียวเหมือนเดิม — mint ให้อัตโนมัติถ้ายังไม่มี
+    const apiKey = await this.llmGateway.getOrCreateApiKey(
+      input.organizationId,
+    );
+    if (!apiKey) {
+      throw new BadRequestException(
+        'No LLM gateway key is available for this organization',
+      );
+    }
 
     const systemPrompt = this.promptEngineeringService.buildSystemPrompt({
-      organizationId: query.organizationId,
-      userId: query.userId,
+      customSystemPrompt: input.systemPrompt ?? conversation.systemPrompt,
+      generateType: input.generateType,
     });
 
     const history = await this.memoryService.loadHistory(
@@ -235,256 +230,330 @@ export class ChatService {
     const messages = this.promptEngineeringService.buildMessages(
       systemPrompt,
       history,
-      query.message,
+      input.message,
     );
 
-    // Save user message
-    const userSeq = await this.memoryService.nextSequence(conversation.id);
-    await this.prisma.chatMessage.create({
-      data: {
-        conversationId: conversation.id,
-        role: 'user',
-        content: query.message,
-        sequence: userSeq,
-      },
-    });
-
-    const model = query.model ?? this.cfg.model;
-
-    // HTTP streaming request
-    const axiosConfig: AxiosRequestConfig = {
-      headers: {
-        Authorization: `Bearer ${this.cfg.apiKey}`,
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-      },
-      timeout: this.cfg.timeoutMs,
-      responseType: 'stream',
-    };
-
-    let fullContent = '';
-    let promptTokens = 0;
-    let completionTokens = 0;
-
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.cfg.baseUrl}/chat/completions`,
-          { model, messages, stream: true },
-          axiosConfig,
-        ),
-      );
-
-      const stream = response.data;
-
-      await new Promise<void>((resolve, reject) => {
-        let buffer = '';
-
-        stream.on('data', (chunk: Buffer) => {
-          buffer += chunk.toString();
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed === 'data: [DONE]') {
-              if (trimmed === 'data: [DONE]') resolve();
-              continue;
-            }
-            if (!trimmed.startsWith('data: ')) continue;
-
-            try {
-              const json = JSON.parse(trimmed.slice(6));
-              const delta = json.choices?.[0]?.delta?.content;
-              if (delta) {
-                fullContent += delta;
-                completionTokens += 1; // rough count
-                const eventData: StreamChunkDto = { type: 'content', delta };
-                subject.next({ data: JSON.stringify(eventData) } as MessageEvent);
-              }
-            } catch {
-              // Malformed SSE chunk — ignore
-            }
-          }
-        });
-
-        stream.on('error', reject);
-        stream.on('end', resolve);
-      });
-
-      // Estimate prompt tokens
-      promptTokens = this.promptEngineeringService.estimateMessagesTokens(messages as any);
-      const totalTokens = promptTokens + completionTokens;
-
-      // Save assistant message
-      const assistantSeq = await this.memoryService.nextSequence(conversation.id);
-      const savedMsg = await this.prisma.chatMessage.create({
-        data: {
-          conversationId: conversation.id,
-          role: 'assistant',
-          content: fullContent,
-          sequence: assistantSeq,
-        },
-      });
-
-      await this.saveTokenUsage(conversation.id, savedMsg.id, model, {
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        total_tokens: totalTokens,
-      });
-
-      const doneChunk: StreamChunkDto = {
-        type: 'done',
-        tokenUsage: { promptTokens, completionTokens, totalTokens, model },
-        conversationId: conversation.id,
-        messageId: savedMsg.id,
-        finishReason: 'stop',
-      };
-      subject.next({ data: JSON.stringify(doneChunk) } as MessageEvent);
-    } catch (err: any) {
-      throw new Error(`Streaming LLM call failed: ${err.message}`);
-    } finally {
-      subject.complete();
-    }
+    return { conversation, messages, model, apiKey };
   }
 
-  private async handleToolCalls(
-    conversationId: string,
-    previousMessages: any[],
-    assistantMessage: any,
-    usage: any,
-    usedModel: string,
-    _userMessageId: string,
-  ): Promise<ChatResponseDto> {
-    // Save assistant's tool_calls message
-    const assistantSeq = await this.memoryService.nextSequence(conversationId);
-    await this.prisma.chatMessage.create({
-      data: {
-        conversationId,
-        role: 'assistant',
-        content: assistantMessage.content ?? null,
-        toolCalls: assistantMessage.tool_calls,
-        sequence: assistantSeq,
-      },
+  /**
+   * เดินงาน stream ทั้งรอบ
+   *
+   * @param query พารามิเตอร์ของรอบสนทนานี้
+   * @param subject ช่องทางส่ง SSE event กลับ
+   */
+  private async runStreamFlow(
+    query: ChatTurnInput,
+    subject: Subject<MessageEvent>,
+  ): Promise<void> {
+    const { conversation, messages, model, apiKey } =
+      await this.prepareTurn(query);
+
+    await this.persistMessage(conversation.id, {
+      role: 'user',
+      content: query.message,
     });
 
-    // Execute tool calls
-    const toolMessages = await this.toolCallingService.executeToolCalls(
-      assistantMessage.tool_calls,
-    );
+    let fullContent = '';
+    let usage: LlmUsage | null = null;
+    let usedModel = model.modelId;
 
-    // Save tool result messages
-    let seq = assistantSeq + 1;
-    for (const tm of toolMessages) {
-      await this.prisma.chatMessage.create({
-        data: {
-          conversationId,
-          role: 'tool',
-          content: tm.content,
-          name: tm.name,
-          toolCallId: tm.tool_call_id,
-          sequence: seq++,
-        },
-      });
+    for await (const event of this.llmChat.stream({
+      apiKey,
+      model: model.modelId,
+      messages,
+      temperature: model.temperature,
+      maxTokens: model.maxTokens,
+    })) {
+      if (event.type === 'delta') {
+        fullContent += event.content;
+        const chunk: StreamChunkDto = { type: 'content', delta: event.content };
+        subject.next({ data: JSON.stringify(chunk) } as MessageEvent);
+        continue;
+      }
+      // usage มาเป็นก้อนสุดท้ายจาก gateway — ใช้ค่านี้แทนการนับ chunk เอง
+      usage = event.usage;
+      usedModel = event.model;
     }
 
-    // Second LLM call with tool results appended
-    const followUpMessages = [
-      ...previousMessages,
-      assistantMessage,
-      ...toolMessages,
-    ];
-
-    const followUp = await this.retryService.callWithRetry({
-      baseUrl: this.cfg.baseUrl,
-      apiKey: this.cfg.apiKey,
-      model: usedModel,
-      fallbackModel: this.cfg.fallbackModel,
-      maxRetries: this.cfg.maxRetries,
-      timeoutMs: this.cfg.timeoutMs,
-      payload: { messages: followUpMessages },
-    });
-
-    const finalChoice = followUp.data.choices?.[0];
-    const finalContent = finalChoice?.message?.content ?? '';
-    const finalSeq = await this.memoryService.nextSequence(conversationId);
-
-    const savedFinal = await this.prisma.chatMessage.create({
-      data: {
-        conversationId,
-        role: 'assistant',
-        content: finalContent,
-        sequence: finalSeq,
-      },
+    const assistantMessage = await this.persistMessage(conversation.id, {
+      role: 'assistant',
+      content: fullContent,
     });
 
     const tokenUsage = await this.saveTokenUsage(
-      conversationId,
-      savedFinal.id,
-      followUp.usedModel,
-      followUp.data.usage,
+      conversation.id,
+      assistantMessage.id,
+      usedModel,
+      usage ??
+        // gateway ไม่ส่ง usage มา (เช่นตัดกลางคัน) — บันทึกค่าประมาณไว้ ดีกว่าไม่บันทึก
+        {
+          promptTokens: this.promptEngineeringService.estimateMessagesTokens(
+            messages,
+          ),
+          completionTokens:
+            this.promptEngineeringService.estimateTokens(fullContent),
+          totalTokens: 0,
+        },
+    );
+
+    await this.rememberModel(conversation.id, model.modelId);
+
+    const doneChunk: StreamChunkDto = {
+      type: 'done',
+      tokenUsage,
+      conversationId: conversation.id,
+      messageId: assistantMessage.id,
+      finishReason: 'stop',
+    };
+    subject.next({ data: JSON.stringify(doneChunk) } as MessageEvent);
+  }
+
+  /**
+   * รอบที่สองหลังโมเดลขอเรียก tool
+   *
+   * @param input บริบทของรอบแรก
+   * @returns คำตอบสุดท้ายหลังได้ผลลัพธ์ tool แล้ว
+   */
+  private async handleToolCalls(input: {
+    conversationId: string;
+    previousMessages: LlmMessage[];
+    toolCalls: unknown[];
+    assistantContent: string;
+    firstUsage: LlmUsage;
+    model: ResolvedChatModel;
+    apiKey: string;
+  }): Promise<ChatResponseDto> {
+    const assistantMessage = {
+      role: 'assistant' as const,
+      content: input.assistantContent || null,
+      tool_calls: input.toolCalls,
+    };
+
+    await this.persistMessage(input.conversationId, {
+      role: 'assistant',
+      content: input.assistantContent || null,
+      toolCalls: input.toolCalls,
+    });
+
+    const toolMessages = await this.toolCallingService.executeToolCalls(
+      input.toolCalls as any,
+    );
+
+    for (const toolMessage of toolMessages) {
+      await this.persistMessage(input.conversationId, {
+        role: 'tool',
+        content: toolMessage.content,
+        name: toolMessage.name,
+        toolCallId: toolMessage.tool_call_id,
+      });
+    }
+
+    const followUp = await this.llmChat.complete({
+      apiKey: input.apiKey,
+      model: input.model.modelId,
+      messages: [
+        ...input.previousMessages,
+        assistantMessage as LlmMessage,
+        ...(toolMessages as unknown as LlmMessage[]),
+      ],
+      temperature: input.model.temperature,
+      maxTokens: input.model.maxTokens,
+    });
+
+    const finalMessage = await this.persistMessage(input.conversationId, {
+      role: 'assistant',
+      content: followUp.content,
+    });
+
+    // รวม usage ของทั้งสองรอบ — โค้ดเดิมทิ้ง usage ของรอบแรกไปทั้งก้อน
+    // ทำให้ทุกครั้งที่มีการเรียก tool รายงาน token ต่ำกว่าความจริงหนึ่งคำขอเต็ม ๆ
+    const combinedUsage: LlmUsage = {
+      promptTokens: input.firstUsage.promptTokens + followUp.usage.promptTokens,
+      completionTokens:
+        input.firstUsage.completionTokens + followUp.usage.completionTokens,
+      totalTokens: input.firstUsage.totalTokens + followUp.usage.totalTokens,
+    };
+
+    const tokenUsage = await this.saveTokenUsage(
+      input.conversationId,
+      finalMessage.id,
+      followUp.model,
+      combinedUsage,
     );
 
     return {
-      conversationId,
-      messageId: savedFinal.id,
-      content: finalContent,
+      conversationId: input.conversationId,
+      messageId: finalMessage.id,
+      content: followUp.content,
       role: 'assistant',
       tokenUsage,
-      toolCalls: assistantMessage.tool_calls,
-      finishReason: finalChoice?.finish_reason ?? 'stop',
-      createdAt: savedFinal.createdAt,
+      toolCalls: input.toolCalls as any,
+      finishReason: followUp.finishReason ?? 'stop',
+      createdAt: finalMessage.createdAt,
     };
   }
 
-  private async resolveConversation(dto: {
-    userId: string;
-    message?: string;
-    conversationId?: string;
-    organizationId?: string;
-    systemPrompt?: string | null;
-  }) {
-    if (dto.conversationId) {
-      const conv = await this.prisma.chatConversation.findUnique({
-        where: { id: dto.conversationId },
+  /**
+   * หาบทสนทนาเดิม หรือสร้างใหม่
+   *
+   * ตรวจความเป็นเจ้าของด้วยเสมอ — เดิมค้นด้วย id อย่างเดียวโดยไม่เทียบ userId
+   * ใครก็ตามที่เดา/รู้ id ของคนอื่นจึงอ่านและต่อบทสนทนาของคนนั้นได้
+   *
+   * @param input พารามิเตอร์ของรอบสนทนานี้
+   * @returns แถว chat_conversation
+   * @throws NotFoundException เมื่อไม่พบบทสนทนา
+   * @throws ForbiddenException เมื่อไม่ใช่เจ้าของ
+   */
+  private async resolveConversation(input: ChatTurnInput) {
+    if (input.conversationId) {
+      const conversation = await this.prisma.chatConversation.findUnique({
+        where: { id: input.conversationId },
       });
-      if (!conv) throw new NotFoundException(`Conversation ${dto.conversationId} not found`);
-      return conv;
+      if (!conversation) {
+        throw new NotFoundException(
+          `Conversation ${input.conversationId} not found`,
+        );
+      }
+      if (conversation.userId !== input.userId) {
+        throw new ForbiddenException('This conversation belongs to another user');
+      }
+      return conversation;
     }
 
     return this.prisma.chatConversation.create({
       data: {
-        userId: dto.userId,
-        organizationId: dto.organizationId,
-        title: dto.message
-          ? dto.message.substring(0, 80)
+        userId: input.userId,
+        organizationId: input.organizationId,
+        projectId: input.projectId,
+        title: input.message
+          ? input.message.substring(0, 80)
           : 'New conversation',
-        systemPrompt: dto.systemPrompt,
       },
     });
   }
 
+  /**
+   * บันทึกข้อความ 1 แถว พร้อมหาเลขลำดับให้
+   *
+   * @param conversationId บทสนทนาที่สังกัด
+   * @param message เนื้อหาที่จะบันทึก
+   * @returns แถวที่บันทึกแล้ว
+   */
+  private async persistMessage(
+    conversationId: string,
+    message: {
+      role: 'user' | 'assistant' | 'tool';
+      content: string | null;
+      name?: string;
+      toolCallId?: string;
+      toolCalls?: unknown;
+      metadata?: Record<string, unknown>;
+    },
+  ) {
+    const sequence = await this.memoryService.nextSequence(conversationId);
+    return this.prisma.chatMessage.create({
+      data: {
+        conversationId,
+        role: message.role,
+        content: message.content,
+        sequence,
+        ...(message.name && { name: message.name }),
+        ...(message.toolCallId && { toolCallId: message.toolCallId }),
+        ...(message.toolCalls !== undefined && {
+          toolCalls: message.toolCalls as any,
+        }),
+        ...(message.metadata !== undefined && {
+          metadata: message.metadata as any,
+        }),
+      },
+    });
+  }
+
+  /**
+   * จำโมเดลที่ใช้ไว้กับบทสนทนา เพื่อให้รอบถัดไปใช้ตัวเดิมโดยไม่ต้องส่งมาซ้ำ
+   *
+   * `ChatConversation.model` มีมาแต่แรกแต่ไม่เคยถูกอ่านเลย — การเขียนแล้วอ่านจริง
+   * ทำให้ผู้ใช้ที่เลือกโมเดลไว้ไม่ถูกสลับกลับไปโมเดล default เงียบ ๆ ในรอบถัดไป
+   *
+   * @param conversationId บทสนทนาที่สังกัด
+   * @param modelId โมเดลที่เพิ่งใช้
+   * @param _userMessageId เผื่ออ้างอิงในอนาคต
+   */
+  private async rememberModel(
+    conversationId: string,
+    modelId: string,
+    _userMessageId?: string,
+  ): Promise<void> {
+    await this.prisma.chatConversation
+      .update({
+        where: { id: conversationId },
+        data: { model: modelId },
+      })
+      .catch((error) => {
+        // ไม่ใช่สาระสำคัญของคำขอ — คำตอบส่งไปแล้ว ไม่ควรกลายเป็น error
+        this.logger.warn(
+          `Failed to remember model for conversation ${conversationId}: ${error?.message}`,
+        );
+      });
+  }
+
+  /**
+   * บันทึกจำนวน token ที่ใช้ (เพื่อดูปริมาณเท่านั้น ไม่หักเครดิต)
+   *
+   * @param conversationId บทสนทนาที่สังกัด
+   * @param messageId ข้อความที่ผูกกับการใช้งานนี้
+   * @param model โมเดลที่ gateway ใช้จริง
+   * @param usage จำนวน token
+   * @returns ค่าที่บันทึกไว้
+   */
   private async saveTokenUsage(
     conversationId: string,
     messageId: string,
     model: string,
-    usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } = {},
+    usage: LlmUsage,
   ): Promise<TokenUsageDto> {
-    const promptTokens = usage.prompt_tokens ?? 0;
-    const completionTokens = usage.completion_tokens ?? 0;
-    const totalTokens = usage.total_tokens ?? promptTokens + completionTokens;
+    const totalTokens =
+      usage.totalTokens || usage.promptTokens + usage.completionTokens;
 
     await this.prisma.chatTokenUsage.create({
       data: {
         conversationId,
         messageId,
         model,
-        promptTokens,
-        completionTokens,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
         totalTokens,
       },
     });
 
-    return { promptTokens, completionTokens, totalTokens, model };
+    return {
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens,
+      model,
+    };
+  }
+
+  /**
+   * ตรวจว่าเป็นสมาชิกขององค์กรที่อ้างถึง
+   *
+   * ป้องกันไม่ให้คนนอกใช้ key ของ org อื่นยิงโมเดล — เดิมไม่มีการตรวจใด ๆ เลย
+   * และ key ที่ใช้ก็เป็นใบกลางใบเดียว ทำให้ใครก็ได้ใช้งบของทั้งระบบ
+   *
+   * @param organizationId องค์กรที่อ้างถึง
+   * @param userId ผู้เรียก
+   * @throws ForbiddenException เมื่อไม่ใช่สมาชิก
+   */
+  private async assertOrgMember(
+    organizationId: string,
+    userId: string,
+  ): Promise<void> {
+    const member = await this.orgMemberRepo.findOne({
+      where: { organizationId, userId },
+    });
+    if (!member) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
   }
 }
