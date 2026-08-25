@@ -5,6 +5,7 @@ import {
   LlmChatError,
   LlmChatRequest,
   LlmChatResult,
+  LlmEndpoint,
   LlmStreamEvent,
   LlmUsage,
 } from './llm-chat.types';
@@ -69,7 +70,7 @@ export class LlmChatService {
    */
   async complete(request: LlmChatRequest): Promise<LlmChatResult> {
     const body = this.buildBody(request, false);
-    const data = await this.postWithRetry(body, request.apiKey);
+    const data = await this.postWithRetry(body, request.apiKey, request);
 
     const choice = data?.choices?.[0];
     return {
@@ -102,7 +103,7 @@ export class LlmChatService {
       stream_options: { include_usage: true },
     };
 
-    const response = await this.post(body, request.apiKey, {
+    const response = await this.post(body, request.apiKey, request, {
       responseType: 'stream',
       headers: { Accept: 'text/event-stream' },
       signal,
@@ -146,12 +147,31 @@ export class LlmChatService {
     }
   }
 
+  /**
+   * ปลายทางจริงที่จะถูกยิงสำหรับโมเดลนี้
+   *
+   * public เพราะหน้าตรวจสถานะต้องรายงานให้ผู้ดูแลเห็นว่าคำขอกำลังจะไปที่ไหน
+   * โดยไม่ต้องยิงจริง
+   *
+   * @param endpoint ปลายทางและ option ของโมเดลที่เลือกไว้
+   * @returns URL เต็ม — ค่าจาก send_api ถ้ามี ไม่งั้นประกอบจาก env
+   */
+  resolveUrl(endpoint: LlmEndpoint): string {
+    const sendApi = endpoint.sendApi?.trim();
+    if (sendApi) return sendApi;
+    return `${this.config.chatBaseUrl}/chat/completions`;
+  }
+
   // ==========================================================================
   // Internals
   // ==========================================================================
 
   /**
    * ประกอบ body ตามสัญญาของ OpenAI-compatible API
+   *
+   * `extraBody` จาก sendConfig ถูก spread ไว้บนสุด — field ที่โค้ดประกอบเอง
+   * (model, messages, tools, stream) จึงชนะเสมอ ค่าใน DB ที่ตั้งผิดทำให้เพี้ยนได้
+   * แค่พารามิเตอร์เสริม ไม่ใช่โครงของคำขอ
    *
    * @param request พารามิเตอร์ของคำขอ
    * @param stream ขอแบบ stream หรือไม่
@@ -162,6 +182,7 @@ export class LlmChatService {
     stream: boolean,
   ): Record<string, unknown> {
     return {
+      ...request.sendConfig?.extraBody,
       model: request.model,
       messages: request.messages,
       // ส่งเสมอเมื่อมีค่า — โค้ดเดิมไม่ส่ง sampling parameter ใด ๆ บน path ของแชท
@@ -183,18 +204,20 @@ export class LlmChatService {
    *
    * @param body body ที่จะส่ง
    * @param apiKey key ของ org
+   * @param endpoint ปลายทางและ option ของโมเดลที่เลือกไว้
    * @returns response body ของ gateway
    * @throws LlmChatError เมื่อยังไม่สำเร็จหลังลองครบ
    */
   private async postWithRetry(
     body: Record<string, unknown>,
     apiKey: string,
+    endpoint: LlmEndpoint,
   ): Promise<any> {
     let lastError: LlmChatError | null = null;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
-        const response = await this.post(body, apiKey);
+        const response = await this.post(body, apiKey, endpoint);
         return response.data;
       } catch (error) {
         lastError =
@@ -218,8 +241,13 @@ export class LlmChatService {
   /**
    * ยิงคำขอ 1 ครั้งและแปลง error ของ axios เป็น LlmChatError
    *
+   * credential เรียงแบบเดียวกับ generate image: key ของ org มาก่อน ตกไปใช้
+   * `sendConfig.authorization` เมื่อ org ยังไม่มี key ส่วน `sendConfig.headers`
+   * ถูก spread ก่อน Authorization เสมอ จึงเขียนทับ credential ไม่ได้
+   *
    * @param body body ที่จะส่ง
    * @param apiKey key ของ org
+   * @param endpoint ปลายทางและ option ของโมเดลที่เลือกไว้
    * @param overrides ค่า axios เพิ่มเติม (ใช้ตอน stream)
    * @returns response ของ axios
    * @throws LlmChatError เสมอเมื่อไม่สำเร็จ
@@ -227,27 +255,26 @@ export class LlmChatService {
   private async post(
     body: Record<string, unknown>,
     apiKey: string,
+    endpoint: LlmEndpoint,
     overrides: AxiosRequestConfig = {},
   ) {
-    const { chatBaseUrl, timeoutMs, rejectUnauthorized } = this.config;
+    const { timeoutMs, rejectUnauthorized } = this.config;
+    const { sendConfig } = endpoint;
 
     const axiosConfig: AxiosRequestConfig = {
-      timeout: timeoutMs,
+      timeout: sendConfig?.timeoutMs ?? timeoutMs,
       httpsAgent: new https.Agent({ rejectUnauthorized }),
       ...overrides,
       headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
+        ...sendConfig?.headers,
+        Authorization: `Bearer ${apiKey || sendConfig?.authorization || ''}`,
+        'Content-Type': sendConfig?.configType ?? 'application/json',
         ...overrides.headers,
       },
     };
 
     try {
-      return await axios.post(
-        `${chatBaseUrl}/chat/completions`,
-        body,
-        axiosConfig,
-      );
+      return await axios.post(this.resolveUrl(endpoint), body, axiosConfig);
     } catch (error) {
       const status: number | null = error?.response?.status ?? null;
       const retryable = status === null || status === 429 || status >= 500;

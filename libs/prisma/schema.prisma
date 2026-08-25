@@ -870,9 +870,11 @@ model ChatTool {
 
 /// โมเดลที่เลือกได้ในแชท AI Assistant
 ///
-/// แยกจาก MasterModelType โดยตั้งใจ — ตารางนั้นถือ sendApi / requestBodyMap /
-/// taskPollApi / taskResponseMap ไว้สำหรับงาน generate แบบ async ซึ่งไม่มีความหมาย
-/// กับแชทเลย และ GET /ai-models ยังคืน sendConfig ทั้งก้อน (รวม token) ให้ frontend อยู่
+/// แยกจาก MasterModelType โดยตั้งใจ แม้จะถือ sendApi / sendConfig เหมือนกันแล้วก็ตาม —
+/// ตารางนั้นเป็นงาน generate แบบ async (requestBodyMap / taskPollApi / taskResponseMap)
+/// และถือ credential ของ provider ไว้ใน sendConfig.authorization โดย GET /ai-models
+/// ยังคืน sendConfig ทั้งก้อนให้ frontend อยู่ ส่วนตารางนี้ไม่มี secret เลย: key มาจาก
+/// Organization.llmApiKey เสมอ (ดู LlmGatewayService.getOrCreateApiKey)
 ///
 /// modelId ต้องอยู่ใน allowlist ของ key ที่ mint ให้ org ด้วย — ดู
 /// LlmGatewayService.mintApiKey ที่รวม modelId ของตารางนี้เข้าไป
@@ -891,6 +893,15 @@ model ChatModelConfig {
 
   /// รองรับ input ที่เป็นรูปหรือไม่ — ใช้ gate ฟีเจอร์ image → prompt
   supportsVision Boolean @default(false) @map("supports_vision")
+
+  /// ปลายทางเต็มของโมเดลนี้ เช่น "https://llmgateway.osd.co.th/api/v1/chat/completions"
+  /// ว่าง = ใช้ค่าจาก env (LLM_CHAT_BASE_URL / LLM_GATEWAY_URL) เหมือนเดิม
+  /// ต้องเป็น host เดียวกับ Organization.llmGatewayHost มิฉะนั้น key ของ org จะถูกปฏิเสธ
+  sendApi String @default("") @map("send_api") @db.Text
+
+  /// option ต่อโมเดล — ดู ChatSendConfig ใน libs/share/src/llm-gateway/llm-chat.types.ts
+  /// ไม่มี field authorization โดยตั้งใจ: key มาจาก org เสมอ
+  sendConfig Json? @map("send_config")
 
   isDefault Boolean @default(false) @map("is_default")
   isActive  Boolean @default(true) @map("is_active")

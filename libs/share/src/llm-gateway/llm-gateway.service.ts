@@ -26,6 +26,22 @@ export interface LlmApiKeyResponse {
   message: string;
 }
 
+/** Read-only view of the key an organization currently holds. */
+export interface LlmKeyStatus {
+  readonly organizationId: string;
+  /** Always `organization` — chat never falls back to a shared key. */
+  readonly source: 'organization';
+  readonly hasKey: boolean;
+  /** Host that issued the stored key (`Organization.llmGatewayHost`). */
+  readonly keyHost: string | null;
+  /** Host `LLM_GATEWAY_URL` points at right now. */
+  readonly gatewayHost: string;
+  /** False means the stored key is stale; the next chat call re-mints it. */
+  readonly hostMatches: boolean;
+  /** Last 6 characters only — never return the key itself. */
+  readonly keySuffix: string | null;
+}
+
 /**
  * Mints and caches the per-organization LLM gateway API key stored on
  * `Organization.llmApiKey`.
@@ -59,6 +75,9 @@ export class LlmGatewayService {
     const env = process.env.NODE_ENV ?? 'local';
     return {
       gatewayUrl: process.env.LLM_GATEWAY_URL || 'https://llmgateway.osd.co.th',
+      // Admin credential for POST {gateway}/admin/api-keys, which mints an
+      // organization's own key. Never sent to /api/v1/chat/completions — that call
+      // carries Organization.llmApiKey instead.
       adminToken: process.env.LLM_ADMIN_TOKEN,
       projectId: process.env.LLM_PROJECT_ID || 'team-mrcx7er7',
       // Self-signed certificates are tolerated outside deployed environments only.
@@ -126,6 +145,66 @@ export class LlmGatewayService {
   }
 
   /**
+   * Reports the key an organization holds without minting or writing anything.
+   *
+   * {@link getOrCreateApiKey} cannot be used to answer "does this org have a working
+   * key?" — it provisions one as a side effect, so asking the question would change
+   * the answer. This method only reads.
+   *
+   * @param organizationId Organization UUID (`Organization.organizationId`).
+   * @returns The status, with `hasKey: false` when the organization is unknown.
+   */
+  async getKeyStatus(organizationId: string): Promise<LlmKeyStatus> {
+    const { gatewayUrl } = this.config;
+    const organization = await this.readOrganization(organizationId);
+
+    const apiKey = organization?.llmApiKey ?? null;
+    const keyHost = organization?.llmGatewayHost ?? null;
+
+    return {
+      organizationId,
+      source: 'organization',
+      gatewayHost: gatewayUrl,
+      hasKey: Boolean(apiKey),
+      keyHost,
+      hostMatches: Boolean(apiKey) && keyHost === gatewayUrl,
+      keySuffix: apiKey ? apiKey.slice(-6) : null,
+    };
+  }
+
+  /**
+   * Returns the key already stored for an organization, without minting one.
+   *
+   * The read-only counterpart to {@link getOrCreateApiKey}, for callers that want to
+   * exercise an existing key (a health probe) rather than guarantee one exists.
+   *
+   * @param organizationId Organization UUID.
+   * @returns The stored key, or null when the organization has none.
+   */
+  async getExistingApiKey(organizationId: string): Promise<string | null> {
+    const organization = await this.readOrganization(organizationId);
+    return organization?.llmApiKey ?? null;
+  }
+
+  /**
+   * Loads an organization, turning any failure into null.
+   *
+   * @param organizationId Organization UUID.
+   * @returns The row, or null when missing or unreadable.
+   */
+  private async readOrganization(organizationId: string) {
+    if (!organizationId) return null;
+    return this.organizationRepository
+      .findOne({ where: { organizationId } })
+      .catch((error) => {
+        this.logger.error(
+          `Failed to load organization ${organizationId}: ${error?.message}`,
+        );
+        return null;
+      });
+  }
+
+  /**
    * Requests a new API key from the gateway.
    *
    * @param organizationName Used as the key's display name at the gateway.
@@ -165,6 +244,20 @@ export class LlmGatewayService {
     ];
 
     try {
+      // console.log(
+      //   `${gatewayUrl}/admin/api-keys`,
+      //   {
+      //     name: organizationName || 'Default Org Name',
+      //     models,
+      //     keyType: 'llm_api',
+      //     ownedBy: 'you',
+      //     teamId: projectId,
+      //   },
+      //   {
+      //     headers: { Authorization: `Bearer ${adminToken}` },
+      //     httpsAgent: new https.Agent({ rejectUnauthorized }),
+      //   },
+      // );
       const response = await axios.post<LlmApiKeyResponse>(
         `${gatewayUrl}/admin/api-keys`,
         {
@@ -188,7 +281,7 @@ export class LlmGatewayService {
         return null;
       }
       return apiKey;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Failed to mint LLM gateway key: ${error?.response?.status ?? ''} ${
           error?.message

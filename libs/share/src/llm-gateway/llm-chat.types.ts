@@ -17,8 +17,42 @@ export interface LlmUsage {
   readonly totalTokens: number;
 }
 
+/**
+ * option ต่อโมเดลที่เก็บใน `chat_model_config.send_config`
+ *
+ * รูปเดียวกับ `master_model_type.send_config` ที่ generate image/video ใช้ เพื่อให้
+ * สองตารางอ่านด้วยตรรกะเดียวกัน
+ */
+export interface ChatSendConfig {
+  /** Content-Type ของคำขอ (default `application/json`) */
+  readonly configType?: string;
+  /** `false` = ปลายทางนี้ไม่รองรับ stream ผู้เรียกต้องตกไปใช้แบบรอจนจบ */
+  readonly stream?: boolean;
+  /** ทับ LLM_CHAT_TIMEOUT_MS เฉพาะโมเดลนี้ */
+  readonly timeoutMs?: number;
+  /** header เพิ่มเติม — ทับ Authorization ไม่ได้ */
+  readonly headers?: Record<string, string>;
+  /** field เพิ่มเติมใน body เช่น top_p, reasoning_effort */
+  readonly extraBody?: Record<string, unknown>;
+  /**
+   * token สำรองของโมเดลนี้ ใช้เมื่อ org ยังไม่มี key ของตัวเอง
+   *
+   * ลำดับเดียวกับ generate image (`generate-image.service.ts` buildQueueJobData):
+   * key ของ org มาก่อนเสมอ ค่านี้เป็นตัวสำรอง — ค่าใช้จ่ายที่วิ่งผ่าน token นี้
+   * จะไม่ถูกผูกกับ org ใดที่ฝั่ง gateway
+   */
+  readonly authorization?: string;
+}
+
+/** ปลายทางและ option ของโมเดลหนึ่งตัว ตามที่เก็บใน chat_model_config */
+export interface LlmEndpoint {
+  /** ปลายทางเต็มจาก chat_model_config.send_api — ไม่ระบุ = ใช้ค่าจาก env */
+  readonly sendApi?: string;
+  readonly sendConfig?: ChatSendConfig;
+}
+
 /** พารามิเตอร์ของคำขอ 1 ครั้ง */
-export interface LlmChatRequest {
+export interface LlmChatRequest extends LlmEndpoint {
   /** key ของ org ที่เรียก — gateway ใช้ผูกค่าใช้จ่ายกับ org นี้ */
   readonly apiKey: string;
   readonly model: string;
