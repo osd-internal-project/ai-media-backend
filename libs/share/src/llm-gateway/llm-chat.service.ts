@@ -275,7 +275,7 @@ export class LlmChatService {
 
     try {
       return await axios.post(this.resolveUrl(endpoint), body, axiosConfig);
-    } catch (error) {
+    } catch (error:any) {
       const status: number | null = error?.response?.status ?? null;
       const retryable = status === null || status === 429 || status >= 500;
       const detail =
