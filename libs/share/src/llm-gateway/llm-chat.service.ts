@@ -20,6 +20,16 @@ const MAX_BACKOFF_MS = 8_000;
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 /** usage ที่ยังไม่รู้ค่า — ใช้เมื่อ gateway ไม่ส่ง usage กลับมา */
+/**
+ * config ของ axios ที่เผื่อ `signal` ไว้เอง
+ *
+ * libs/share ไม่ได้ประกาศ axios เป็น dependency ของตัวเอง เวลา build ใน image
+ * จึงมีโอกาสไปคว้า axios 0.21 ที่ hoist มาจาก @volcengine/tos-sdk ซึ่ง type
+ * ยังไม่มี `signal` (เพิ่มเข้ามาใน 0.22) — ประกาศทับไว้ตรงนี้ให้ compile ผ่าน
+ * ทั้งสองเวอร์ชัน
+ */
+type LlmRequestConfig = AxiosRequestConfig & { signal?: AbortSignal };
+
 const EMPTY_USAGE: LlmUsage = {
   promptTokens: 0,
   completionTokens: 0,
@@ -256,12 +266,12 @@ export class LlmChatService {
     body: Record<string, unknown>,
     apiKey: string,
     endpoint: LlmEndpoint,
-    overrides: AxiosRequestConfig = {},
+    overrides: LlmRequestConfig = {},
   ) {
     const { timeoutMs, rejectUnauthorized } = this.config;
     const { sendConfig } = endpoint;
 
-    const axiosConfig: AxiosRequestConfig = {
+    const axiosConfig: LlmRequestConfig = {
       timeout: sendConfig?.timeoutMs ?? timeoutMs,
       httpsAgent: new https.Agent({ rejectUnauthorized }),
       ...overrides,
