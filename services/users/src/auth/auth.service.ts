@@ -60,13 +60,10 @@ export class AuthService {
   }
 
   /**
-   * Local user record backing a Keycloak SSO sign-in.
-   *
-   * The SSO flow has no other source for these fields — without them the NextAuth
-   * session carries no role or organization and every role gate fails closed.
+   * Local user backing a Keycloak SSO sign-in — the session's only source of
+   * role and organization.
    *
    * @param email Email claim from the Keycloak id_token.
-   * @returns The user, or null when the email has no local account.
    */
   async checkUser(email: string) {
     return this.usersRepo.findOne({

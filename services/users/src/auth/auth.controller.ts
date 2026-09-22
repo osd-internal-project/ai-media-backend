@@ -63,10 +63,8 @@ export class AuthController {
   }
 
   /**
-   * Gate for Keycloak SSO sign-in: confirms a local account exists and returns the
-   * fields the session needs (role, userId, recentOrganizationId).
-   *
-   * `exists` stays in the response for frontends deployed before this change.
+   * SSO gate: confirms a local account and returns the fields the session needs.
+   * `exists` is kept for frontends deployed before this change.
    */
   @Post('check')
   async check(@Body() body: { email: string }) {
