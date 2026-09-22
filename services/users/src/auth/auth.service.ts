@@ -59,11 +59,27 @@ export class AuthService {
     return await this.keycloakService.idpCallback(code);
   }
 
-  async checkUserExists(email: string) {
-    const user = await this.usersRepo.findOne({
+  /**
+   * Local user record backing a Keycloak SSO sign-in.
+   *
+   * The SSO flow has no other source for these fields — without them the NextAuth
+   * session carries no role or organization and every role gate fails closed.
+   *
+   * @param email Email claim from the Keycloak id_token.
+   * @returns The user, or null when the email has no local account.
+   */
+  async checkUser(email: string) {
+    return this.usersRepo.findOne({
       where: { email },
+      select: {
+        userId: true,
+        username: true,
+        email: true,
+        role: true,
+        status: true,
+        recentOrganizationId: true,
+      },
     });
-    return !!user;
   }
 
   async validateToken(token: string) {

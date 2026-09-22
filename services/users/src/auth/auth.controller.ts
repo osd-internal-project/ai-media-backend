@@ -62,10 +62,16 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  /**
+   * Gate for Keycloak SSO sign-in: confirms a local account exists and returns the
+   * fields the session needs (role, userId, recentOrganizationId).
+   *
+   * `exists` stays in the response for frontends deployed before this change.
+   */
   @Post('check')
   async check(@Body() body: { email: string }) {
-    const exists = await this.authService.checkUserExists(body.email);
-    return { exists };
+    const user = await this.authService.checkUser(body.email);
+    return { exists: !!user, ...user };
   }
 
   @Post('validate')
