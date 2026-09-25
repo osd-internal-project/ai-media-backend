@@ -66,6 +66,8 @@ model Project {
   workflowConversations WorkflowConversation[]
   activityShares        ActivityShare[]
   communityPosts        CommunityPost[]
+  photoEventTemplates   PhotoEventTemplate[]
+  photoEventPhotos      PhotoEventPhoto[]
   organizationId        String?                @map("organization_id") @db.VarChar(50)
   // ยอดจำกัด ของ Project
   limitImageAllowance   Int                    @default(0) @map("limit_image_allowance")
@@ -218,6 +220,67 @@ model WorkflowBlock {
   @@map("workflow_block")
 }
 
+/// template (PromptGuide) ที่ project เลือกไว้แสดงบนจอ kiosk ของ Photo Event
+model PhotoEventTemplate {
+  id            String   @id @default(uuid())
+  projectId     String   @map("project_id")
+  promptGuideId Int      @map("prompt_guide_id")
+  sortOrder     Int      @default(0) @map("sort_order")
+  // ต่อท้าย textPrompt ตอน generate จาก event — null = ใช้ค่า default ใน code
+  promptTail    String?  @map("prompt_tail") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  project     Project     @relation(fields: [projectId], references: [id])
+  promptGuide PromptGuide @relation(fields: [promptGuideId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, promptGuideId])
+  @@map("photo_event_template")
+}
+
+/// รูปที่ staff นำเข้าให้แขกเลือกบนจอ kiosk
+model PhotoEventPhoto {
+  id             String   @id @default(uuid())
+  projectId      String   @map("project_id")
+  organizationId String   @map("organization_id") @db.VarChar(50)
+  userId         String   @map("user_id")
+  imagePath      String   @map("image_path")
+  imageName      String   @map("image_name")
+  imageType      String   @map("image_type") @db.VarChar(50)
+  imageSize      Int      @default(0) @map("image_size")
+  status         String   @default("active") @db.VarChar(20) // active|deleted
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  project     Project                @relation(fields: [projectId], references: [id])
+  generations PhotoEventGeneration[]
+
+  @@index([projectId, status])
+  @@map("photo_event_photo")
+}
+
+/// หนึ่งครั้งที่กด generate บน kiosk — id ใช้เป็นลิงก์ share ใน QR code
+model PhotoEventGeneration {
+  id            String   @id @default(uuid())
+  projectId     String   @map("project_id")
+  photoId       String   @map("photo_id")
+  promptGuideId Int      @map("prompt_guide_id")
+  userId        String   @map("user_id")
+  taskId        String   @unique @map("task_id")
+  status        String   @default("pending") @db.VarChar(20) // pending|processing|success|failed
+  progress      Int?
+  // storage key เต็มของรูปผลลัพธ์ (presign ใหม่ทุกครั้งที่อ่าน)
+  outputKey     String?  @map("output_key")
+  galleryId     String?  @map("gallery_id")
+  errorMessage  String?  @map("error_message")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  photo PhotoEventPhoto @relation(fields: [photoId], references: [id])
+
+  @@index([projectId])
+  @@index([photoId])
+  @@map("photo_event_generation")
+}
+
 model groups {
   id          Int      @id @default(autoincrement())
   groupId     String   @unique @default(uuid()) @map("group_id") @db.VarChar(50)
@@ -343,19 +406,20 @@ model MasterDataConfigApi {
 }
 
 model PromptGuide {
-  id                Int              @unique @default(autoincrement()) @map("id")
-  title             String?          @map("title") @db.VarChar(150)
-  textPrompt        String?          @map("text_prompt") @db.Text
-  description       String?          @map("description") @db.Text
-  model             String?          @map("model") @db.VarChar(100)
-  status            Boolean          @map("status") @db.Boolean
-  createdAt         DateTime         @default(now()) @map("created_at")
-  updatedAt         DateTime         @default(now()) @map("updated_at")
-  promptGuideType   PromptGuideType? @relation(fields: [promptGuideTypeId], references: [id])
-  promptGuideTypeId Int?             @map("prompt_guide_type_id")
-  organizationId    String?          @map("organization_id") @db.VarChar(50)
-  generateType      String           @default("image") @map("generate_type") @db.VarChar(10) // image/video
-  promptGuideImages String[]         @default([]) @map("prompt_guide_images")
+  id                  Int                  @unique @default(autoincrement()) @map("id")
+  title               String?              @map("title") @db.VarChar(150)
+  textPrompt          String?              @map("text_prompt") @db.Text
+  description         String?              @map("description") @db.Text
+  model               String?              @map("model") @db.VarChar(100)
+  status              Boolean              @map("status") @db.Boolean
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @default(now()) @map("updated_at")
+  promptGuideType     PromptGuideType?     @relation(fields: [promptGuideTypeId], references: [id])
+  promptGuideTypeId   Int?                 @map("prompt_guide_type_id")
+  organizationId      String?              @map("organization_id") @db.VarChar(50)
+  generateType        String               @default("image") @map("generate_type") @db.VarChar(10) // image/video
+  promptGuideImages   String[]             @default([]) @map("prompt_guide_images")
+  photoEventTemplates PhotoEventTemplate[]
 
   @@map("prompt_guide")
 }
@@ -1350,7 +1414,7 @@ model ActivityShareLog {
 
 /// โพสต์ 1 ใบบนหน้า community — เห็นได้โดยไม่ต้อง login เมื่อสถานะเป็น PUBLISHED
 model CommunityPost {
-  id String @id @default(uuid()) @db.Uuid
+  id   String @id @default(uuid()) @db.Uuid
   /// key ของ URL สาธารณะ /community/[slug] — kebab ของ title + nanoid 8 ตัว
   /// nanoid ท้าย slug กัน 2 อย่างพร้อมกัน: ชื่อชนกัน และการเดา URL ไล่ทีละใบ
   slug String @unique @map("slug") @db.VarChar(180)

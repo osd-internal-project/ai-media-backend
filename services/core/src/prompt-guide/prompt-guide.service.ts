@@ -36,28 +36,24 @@ export class PromptGuideService {
     const data = {
       ...updatePromptGuideDto,
       organizationId: updatePromptGuideDto.organizationId || null,
+      // คอลัมน์ updated_at ไม่มี @updatedAt ใน schema
+      updatedAt: new Date(),
     };
 
-    // this.promptGuideImageRepo.update({ where: {d: id } });
     const updated = await this.promptguideRepo.update({
       where: {
         id,
       },
       data,
     });
-    if (updated) {
-      const images = updatePromptGuideDto.promptGuideImages
-        ? (updatePromptGuideDto.promptGuideImages as string[])
-        : [];
-      images?.map(async (image: string) => {
-        await this.promptGuideImageRepo.update({
-          where: {
-            uid: image,
-          },
-          data: {
-            status: 'completed',
-          },
-        });
+    const images = Array.isArray(updatePromptGuideDto.promptGuideImages)
+      ? updatePromptGuideDto.promptGuideImages
+      : [];
+    // ต้องเสร็จก่อนตอบกลับ — หน้าเว็บ fetch ใหม่ทันทีและแสดงเฉพาะรูปที่ completed
+    if (images.length > 0) {
+      await this.promptGuideImageRepo.updateMany({
+        where: { uid: { in: images } },
+        data: { status: 'completed' },
       });
     }
     return updated;

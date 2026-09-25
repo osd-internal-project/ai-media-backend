@@ -51,3 +51,6 @@ export * from './communityPost.repository';
 export * from './communityPostLog.repository';
 export * from './communityPostReaction.repository';
 export * from './chatModelConfig.repository';
+export * from './photoEventTemplate.repository';
+export * from './photoEventPhoto.repository';
+export * from './photoEventGeneration.repository';

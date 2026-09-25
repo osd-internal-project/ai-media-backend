@@ -48,6 +48,13 @@ export class PromptGuideImageRepository {
     const prisma = option?.prisma ?? this.prisma;
     return prisma.promptGuideImage.update(data);
   }
+  async updateMany(
+    data: Prisma.PromptGuideImageUpdateManyArgs,
+    option?: { prisma?: TQueryClient },
+  ) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.promptGuideImage.updateMany(data);
+  }
   async delete(
     condition: Prisma.PromptGuideImageDeleteArgs,
     option?: { prisma?: TQueryClient },
