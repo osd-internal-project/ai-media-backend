@@ -8,6 +8,7 @@ import { RequestLoggerMiddleware } from './middleware/request-logger.middleware'
 import { ChatModule } from './chat/chat.module';
 import { ChatModelModule } from './chat-model/chat-model.module';
 import { ConversationModule } from './conversation/conversation.module';
+import { LlmStatusModule } from './llm-status/llm-status.module';
 import appConfig from './configs';
 
 // ScheduleModule ถูกถอดออก — service นี้ไม่มี @Cron อยู่เลย การลงทะเบียนไว้เฉย ๆ
@@ -23,6 +24,7 @@ import appConfig from './configs';
     ChatModule,
     ChatModelModule,
     ConversationModule,
+    LlmStatusModule,
   ],
   controllers: [ChatAssistantController],
   providers: [ChatAssistantService],

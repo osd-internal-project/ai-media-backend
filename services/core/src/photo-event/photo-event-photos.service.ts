@@ -4,13 +4,13 @@ import {
   TosService,
   buildUploadKey,
 } from '@ai-media/share';
-import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { tosConfigs } from '../configs';
 import { WebsocketGatewayService } from '../websocket/websocket.gateway';
 import { PhotoEventPhotoView } from './dto/photo-event-view.dto';
 import { UploadPhotosDto } from './dto/upload-photos.dto';
 import { PhotoEventAccessService } from './photo-event-access.service';
+import { preparePhoto } from './photo-event-image';
 import {
   PHOTO_EVENT_EVENTS,
   PHOTO_EVENT_ROOM_TYPE,
@@ -51,16 +51,22 @@ export class PhotoEventPhotosService {
     const created: PhotoEventPhotoView[] = [];
     // ทีละไฟล์ เพื่อให้รูปขึ้นบนจอ kiosk ตามลำดับที่อัปโหลด
     for (const file of imageFiles) {
+      const prepared = await preparePhoto(file);
+      if (!prepared.converted) {
+        this.logger.warn(
+          `Cannot resize ${file.originalname} (${file.mimetype}) — storing original`,
+        );
+      }
       const imagePath = buildUploadKey(
         project.organizationId,
         projectId,
         uuidv4(),
-        path.extname(file.originalname).toLowerCase(),
+        prepared.extension,
       );
       await this.tosService.putObject(
         tosConfigs().tosBucket,
         imagePath,
-        file.buffer,
+        prepared.buffer,
       );
       const photo = await this.photoRepo.create({
         data: {
@@ -69,8 +75,8 @@ export class PhotoEventPhotosService {
           userId: dto.userId,
           imagePath,
           imageName: file.originalname,
-          imageType: file.mimetype,
-          imageSize: file.size,
+          imageType: prepared.mimetype,
+          imageSize: prepared.buffer.length,
         },
       });
       const photoView = {

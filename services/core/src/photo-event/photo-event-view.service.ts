@@ -5,7 +5,10 @@ import {
   PhotoEventGenerationView,
   PhotoEventPhotoView,
 } from './dto/photo-event-view.dto';
-import { PhotoEventGenerationStatus } from './photo-event.constants';
+import {
+  PHOTO_EVENT_THUMB_WIDTH,
+  PhotoEventGenerationStatus,
+} from './photo-event.constants';
 
 /** แปลงแถว DB เป็น payload ที่ส่งให้ frontend — presign URL ทุกครั้งที่อ่าน */
 @Injectable()
@@ -41,6 +44,10 @@ export class PhotoEventViewService {
       projectId: photo.projectId,
       imageName: photo.imageName,
       url: await this.storageUrl.toDisplayUrl(photo.imagePath),
+      thumbUrl: await this.storageUrl.toThumbnailUrl(
+        photo.imagePath,
+        PHOTO_EVENT_THUMB_WIDTH,
+      ),
       createdAt: photo.createdAt,
     };
   }

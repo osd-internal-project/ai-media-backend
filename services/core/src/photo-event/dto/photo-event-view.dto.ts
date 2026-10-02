@@ -29,6 +29,7 @@ export interface PhotoEventPhotoView {
   projectId: string;
   imageName: string;
   url: string | null;
+  thumbUrl: string | null;
   createdAt: Date;
   generations: PhotoEventGenerationView[];
 }

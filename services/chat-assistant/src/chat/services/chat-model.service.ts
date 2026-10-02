@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { ChatModelConfigRepository } from '@ai-media/share';
+import { ChatModelConfigRepository, ChatSendConfig } from '@ai-media/share';
 
 /** พารามิเตอร์ของโมเดลที่ resolve แล้ว พร้อมส่งให้ gateway */
 export interface ResolvedChatModel {
@@ -7,6 +7,9 @@ export interface ResolvedChatModel {
   readonly temperature: number;
   readonly maxTokens: number;
   readonly supportsVision: boolean;
+  /** ปลายทางจาก chat_model_config.send_api — null = ใช้ค่าจาก env */
+  readonly sendApi: string | null;
+  readonly sendConfig: ChatSendConfig | null;
 }
 
 @Injectable()
@@ -26,7 +29,8 @@ export class ChatModelService {
       orderBy: [{ sortOrder: 'asc' }, { displayName: 'asc' }],
     });
 
-    // ตัด field ที่ผู้ใช้ไม่ต้องใช้ออก — และไม่มี secret ในตารางนี้อยู่แล้วโดยตั้งใจ
+    // เลือกคืนเฉพาะ field ที่ frontend ใช้ — ห้ามเติม sendApi / sendConfig เข้ามา
+    // เด็ดขาด sendConfig ถือ token สำรองของโมเดลได้
     return rows.map((row) => ({
       modelId: row.modelId,
       displayName: row.displayName,
@@ -88,12 +92,39 @@ export class ChatModelService {
     temperature: unknown;
     maxTokens: number;
     supportsVision: boolean;
+    sendApi: string;
+    sendConfig: unknown;
   }): ResolvedChatModel {
+    const sendApi = row.sendApi?.trim();
     return {
       modelId: row.modelId,
       temperature: Number(row.temperature),
       maxTokens: row.maxTokens,
       supportsVision: row.supportsVision,
+      sendApi: sendApi ? sendApi : null,
+      sendConfig: this.toSendConfig(row.sendConfig),
     };
+  }
+
+  /**
+   * อ่าน send_config ที่เป็น Json ของ Prisma ให้เป็นรูปที่ใช้ได้
+   *
+   * ค่าในคอลัมน์ Json เป็นอะไรก็ได้ (array, string, null) จึงต้องกันไว้ก่อน —
+   * ส่ง array เข้าไปเป็น sendConfig แล้ว `sendConfig.headers` จะเป็น undefined
+   * เงียบ ๆ แทนที่จะรู้ว่าข้อมูลตั้งไว้ผิด
+   *
+   * @param value ค่าดิบจากคอลัมน์ send_config
+   * @returns config ที่ใช้ได้ หรือ null เมื่อไม่ใช่ object
+   */
+  private toSendConfig(value: unknown): ChatSendConfig | null {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      if (value !== null && value !== undefined) {
+        this.logger.warn(
+          `Ignoring chat_model_config.send_config that is not an object: ${JSON.stringify(value)}`,
+        );
+      }
+      return null;
+    }
+    return value as ChatSendConfig; // narrow แล้วว่าเป็น object ธรรมดา field ทุกตัวเป็น optional
   }
 }

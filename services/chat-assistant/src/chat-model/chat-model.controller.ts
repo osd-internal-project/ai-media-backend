@@ -6,8 +6,9 @@ import { ChatModelService } from '../chat/services/chat-model.service';
 /**
  * รายชื่อโมเดลที่ผู้ใช้เลือกได้ในหน้าแชท
  *
- * อ่านอย่างเดียว และไม่มี secret อยู่ในตาราง chat_model_config เลยโดยตั้งใจ —
- * ต่างจาก GET /ai-models ของ core ที่คืน sendConfig ทั้งก้อนรวม token ของ provider
+ * อ่านอย่างเดียว และไม่คืน sendApi / sendConfig ออกไปเด็ดขาด — sendConfig ถือ
+ * token สำรองของโมเดลได้ (เหมือน master_model_type) การคืนทั้งก้อนจึงเป็นการแจก
+ * credential ให้ frontend แบบเดียวกับที่ GET /ai-models ของ core ทำอยู่
  *
  * การเพิ่ม/แก้โมเดลทำที่ระดับข้อมูล (migration หรือ SQL) ยังไม่มี CRUD ผ่าน API
  */

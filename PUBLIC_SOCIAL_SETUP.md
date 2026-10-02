@@ -134,6 +134,11 @@ to a dedicated `/page/admin-management/social-config` page with an org picker.
 
 ## Provider setup (not code — allow weeks of lead time)
 
+> **Step-by-step console walkthrough:** [`docs/social-setup/`](docs/social-setup/README.md) —
+> per-platform guides covering app creation, redirect URIs, obtaining a long-lived Page token
+> and TikTok/YouTube refresh tokens, the full env var table per service, and an error-message
+> troubleshooting index. The summary below is the short version.
+
 - **Facebook Page + Instagram** — one Meta app. Scopes: `pages_show_list`,
   `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`,
   `instagram_content_publish`, `business_management`. All need **App Review**.

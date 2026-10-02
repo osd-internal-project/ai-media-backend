@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import {
+  LlmChatRequest,
   LlmChatService,
   LlmGatewayService,
   LlmMessage,
@@ -105,10 +106,8 @@ export class ChatService {
     try {
       result = await this.llmChat.complete({
         apiKey,
-        model: model.modelId,
+        ...this.toLlmModelParams(model),
         messages,
-        temperature: model.temperature,
-        maxTokens: model.maxTokens,
         tools: requestTools.length > 0 ? requestTools : undefined,
       });
     } catch (error) {
@@ -207,10 +206,11 @@ export class ChatService {
     );
 
     // key ของ org เอง ไม่ใช่ key กลางใบเดียวเหมือนเดิม — mint ให้อัตโนมัติถ้ายังไม่มี
+    // ตกไปใช้ token ของโมเดลได้เมื่อ mint ไม่สำเร็จ ลำดับเดียวกับ generate image
     const apiKey = await this.llmGateway.getOrCreateApiKey(
       input.organizationId,
     );
-    if (!apiKey) {
+    if (!apiKey && !model.sendConfig?.authorization) {
       throw new BadRequestException(
         'No LLM gateway key is available for this organization',
       );
@@ -233,7 +233,8 @@ export class ChatService {
       input.message,
     );
 
-    return { conversation, messages, model, apiKey };
+    // ว่างได้เมื่อโมเดลมี token สำรอง — LlmChatService จะเลือก sendConfig.authorization ให้
+    return { conversation, messages, model, apiKey: apiKey ?? '' };
   }
 
   /**
@@ -254,27 +255,11 @@ export class ChatService {
       content: query.message,
     });
 
-    let fullContent = '';
-    let usage: LlmUsage | null = null;
-    let usedModel = model.modelId;
-
-    for await (const event of this.llmChat.stream({
-      apiKey,
-      model: model.modelId,
-      messages,
-      temperature: model.temperature,
-      maxTokens: model.maxTokens,
-    })) {
-      if (event.type === 'delta') {
-        fullContent += event.content;
-        const chunk: StreamChunkDto = { type: 'content', delta: event.content };
-        subject.next({ data: JSON.stringify(chunk) } as MessageEvent);
-        continue;
-      }
-      // usage มาเป็นก้อนสุดท้ายจาก gateway — ใช้ค่านี้แทนการนับ chunk เอง
-      usage = event.usage;
-      usedModel = event.model;
-    }
+    const { fullContent, usage, usedModel } = await this.emitAnswer(
+      { apiKey, ...this.toLlmModelParams(model), messages },
+      model,
+      subject,
+    );
 
     const assistantMessage = await this.persistMessage(conversation.id, {
       role: 'assistant',
@@ -307,6 +292,79 @@ export class ChatService {
       finishReason: 'stop',
     };
     subject.next({ data: JSON.stringify(doneChunk) } as MessageEvent);
+  }
+
+  /**
+   * แปลงโมเดลที่ resolve แล้วเป็นพารามิเตอร์ของคำขอ
+   *
+   * รวม sendApi/sendConfig ของแถวนั้นไปด้วยเสมอ — ปลายทางเป็นของโมเดล ไม่ใช่ของ
+   * process จึงต้องเดินทางไปพร้อมกันทุกจุดที่เรียก ไม่งั้นจะมี path ที่หลุดไปใช้ env
+   *
+   * @param model โมเดลที่ resolve แล้ว
+   * @returns field ที่ spread ลง LlmChatRequest ได้ตรง ๆ
+   */
+  private toLlmModelParams(model: ResolvedChatModel) {
+    return {
+      model: model.modelId,
+      temperature: model.temperature,
+      maxTokens: model.maxTokens,
+      sendApi: model.sendApi ?? undefined,
+      sendConfig: model.sendConfig ?? undefined,
+    };
+  }
+
+  /**
+   * ส่งคำตอบออกทาง SSE แล้วคืนเนื้อหาที่ประกอบครบแล้ว
+   *
+   * โมเดลที่ตั้ง `sendConfig.stream = false` ไว้จะถูกเรียกแบบรอจนจบแล้วส่งออกเป็น
+   * ก้อนเดียว — ยิง `stream: true` ใส่ปลายทางที่ไม่รองรับทำให้ client เห็นแค่
+   * stream ที่พังกลางคัน ซึ่งแยกไม่ออกจาก network ขาด
+   *
+   * @param request พารามิเตอร์ที่จะส่งให้ gateway
+   * @param model โมเดลที่ resolve แล้ว (ใช้ดู sendConfig.stream)
+   * @param subject ช่องทางส่ง SSE event
+   * @returns เนื้อหาเต็ม usage และโมเดลที่ gateway ใช้จริง
+   */
+  private async emitAnswer(
+    request: LlmChatRequest,
+    model: ResolvedChatModel,
+    subject: Subject<MessageEvent>,
+  ): Promise<{
+    fullContent: string;
+    usage: LlmUsage | null;
+    usedModel: string;
+  }> {
+    const send = (delta: string) => {
+      const chunk: StreamChunkDto = { type: 'content', delta };
+      subject.next({ data: JSON.stringify(chunk) } as MessageEvent);
+    };
+
+    if (model.sendConfig?.stream === false) {
+      const result = await this.llmChat.complete(request);
+      if (result.content) send(result.content);
+      return {
+        fullContent: result.content,
+        usage: result.usage,
+        usedModel: result.model,
+      };
+    }
+
+    let fullContent = '';
+    let usage: LlmUsage | null = null;
+    let usedModel = model.modelId;
+
+    for await (const event of this.llmChat.stream(request)) {
+      if (event.type === 'delta') {
+        fullContent += event.content;
+        send(event.content);
+        continue;
+      }
+      // usage มาเป็นก้อนสุดท้ายจาก gateway — ใช้ค่านี้แทนการนับ chunk เอง
+      usage = event.usage;
+      usedModel = event.model;
+    }
+
+    return { fullContent, usage, usedModel };
   }
 
   /**
@@ -351,14 +409,12 @@ export class ChatService {
 
     const followUp = await this.llmChat.complete({
       apiKey: input.apiKey,
-      model: input.model.modelId,
+      ...this.toLlmModelParams(input.model),
       messages: [
         ...input.previousMessages,
         assistantMessage as LlmMessage,
         ...(toolMessages as unknown as LlmMessage[]),
       ],
-      temperature: input.model.temperature,
-      maxTokens: input.model.maxTokens,
     });
 
     const finalMessage = await this.persistMessage(input.conversationId, {

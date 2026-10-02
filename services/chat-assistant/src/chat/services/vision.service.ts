@@ -96,7 +96,7 @@ export class VisionService {
     }
 
     const apiKey = await this.llmGateway.getOrCreateApiKey(dto.organizationId);
-    if (!apiKey) {
+    if (!apiKey && !model.sendConfig?.authorization) {
       throw new BadRequestException(
         'No LLM gateway key is available for this organization',
       );
@@ -125,10 +125,12 @@ export class VisionService {
     let result: Awaited<ReturnType<LlmChatService['complete']>>;
     try {
       result = await this.llmChat.complete({
-        apiKey,
+        apiKey: apiKey ?? '',
         model: model.modelId,
         messages,
         maxTokens: VISION_MAX_TOKENS,
+        sendApi: model.sendApi ?? undefined,
+        sendConfig: model.sendConfig ?? undefined,
       });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);

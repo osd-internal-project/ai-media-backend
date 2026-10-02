@@ -198,6 +198,8 @@ export class TosService {
       contentType?: string;
       contentDisposition?: string;
       expires?: number;
+      /** TOS image processing เช่น `image/resize,w_480` — ต้องเปิด IMP บน bucket */
+      process?: string;
     },
   ) {
     try {
@@ -206,6 +208,9 @@ export class TosService {
         bucket: bucketName,
         key: objectName,
         expires: options?.expires,
+        query: options?.process
+          ? { 'x-tos-process': options.process }
+          : undefined,
         // Let the presigned URL carry download semantics (forces the browser to
         // save with the right name/type) so the file streams straight from TOS.
         response:

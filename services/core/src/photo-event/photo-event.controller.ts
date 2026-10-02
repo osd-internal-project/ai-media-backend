@@ -16,6 +16,7 @@ import { SetTemplatesDto } from './dto/set-templates.dto';
 import { UploadPhotosDto } from './dto/upload-photos.dto';
 import {
   PHOTO_EVENT_DEFAULT_PROMPT_TAIL,
+  PHOTO_EVENT_MAX_FILE_BYTES,
   PHOTO_EVENT_MAX_UPLOAD_FILES,
 } from './photo-event.constants';
 import { PhotoEventGenerationsService } from './photo-event-generations.service';
@@ -54,7 +55,11 @@ export class PhotoEventController {
   }
 
   @Post('photos')
-  @UseInterceptors(FilesInterceptor('files', PHOTO_EVENT_MAX_UPLOAD_FILES))
+  @UseInterceptors(
+    FilesInterceptor('files', PHOTO_EVENT_MAX_UPLOAD_FILES, {
+      limits: { fileSize: PHOTO_EVENT_MAX_FILE_BYTES },
+    }),
+  )
   uploadPhotos(
     @Param('projectId') projectId: string,
     @Body() dto: UploadPhotosDto,

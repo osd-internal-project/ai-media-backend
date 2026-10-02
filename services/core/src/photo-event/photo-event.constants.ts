@@ -28,6 +28,14 @@ export const PHOTO_EVENT_FEATURE_TYPE = 'photo-event';
 
 export const PHOTO_EVENT_MAX_UPLOAD_FILES = 20;
 
+/** ต้องเท่ากับ PHOTO_EVENT_MAX_FILE_BYTES ของ frontend */
+export const PHOTO_EVENT_MAX_FILE_BYTES = 50 * 1024 * 1024;
+
+/** ด้านยาวสุดของรูปที่เก็บ — รูปใหญ่กว่านี้ถูกย่อก่อนเก็บและก่อนส่งเข้า model */
+export const PHOTO_EVENT_MAX_IMAGE_EDGE = 4096;
+
+export const PHOTO_EVENT_THUMB_WIDTH = 480;
+
 /** ต้องเท่ากับ PROMPT_MAX_LENGTH ของ frontend */
 export const PHOTO_EVENT_PROMPT_MAX_LENGTH = 5000;
 

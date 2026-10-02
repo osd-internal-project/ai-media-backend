@@ -54,6 +54,29 @@ export class StorageUrlService {
   }
 
   /**
+   * URL รูปย่อด้วย TOS image processing (read path — ไม่ throw)
+   * @returns URL รูปย่อ, null เมื่อ value ว่าง/เป็น URL ภายนอก/presign ล้มเหลว
+   */
+  async toThumbnailUrl(
+    value: string | null | undefined,
+    width: number,
+  ): Promise<string | null> {
+    if (!value || isAbsoluteUrl(value)) return null;
+    try {
+      return await this.tosService.getPreSignedUrl(this.bucket, value, {
+        process: `image/resize,w_${width}`,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `thumbnail presign failed for "${value}": ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * แปลง reference หลายค่าพร้อมกัน โดยตัดค่าว่างทิ้ง
    *
    * @param values list ของ object key หรือ URL
