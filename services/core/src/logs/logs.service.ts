@@ -90,7 +90,7 @@ export class LogsService {
         ...(user && { userId: user.userId }),
       },
       distinct: ['taskId'],
-      orderBy: { createdAt: 'desc' },
+      orderBy: { seq: 'desc' }, // ต้องตรงกับ cursor fristsql/lastsql
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
 
@@ -210,7 +210,7 @@ export class LogsService {
 
       // include: { users: true },
       // distinct: ['taskId'],
-      orderBy: { createdAt: 'desc' },
+      orderBy: { seq: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
     const targetTaskIds = tasks.map((t) => t.taskId);
@@ -342,7 +342,7 @@ export class LogsService {
         ...(user && { userId: user.userId }),
       },
       distinct: ['taskId'],
-      orderBy: { createdAt: 'desc' },
+      orderBy: { seq: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
     const targetTaskIds = tasks.map((t) => t.taskId);
@@ -474,7 +474,7 @@ export class LogsService {
       },
       distinct: ['taskId'],
       include: { users: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { seq: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
     const targetTaskIds = tasks.map((t) => t.taskId);

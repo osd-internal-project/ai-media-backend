@@ -22,6 +22,8 @@ export default () => ({
     },
   },
   emailApiUrl: process.env.EMAIL_API_URL || 'http://localhost:5000',
+  /** base URL ของ core รวม `/api` — ใช้ปลุก socket noti คำเชิญ; ว่าง = ไม่ส่ง */
+  coreApiUrl: process.env.CORE_API_URL,
   omise: {
     secretKey: process.env.OMISE_SECRET_KEY,
     apiUrl: process.env.OMISE_API_URL || 'https://api.omise.co',

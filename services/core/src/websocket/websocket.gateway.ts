@@ -22,6 +22,11 @@ import { redisConfigs } from '../configs';
 import { LogsService } from 'src/logs/logs.service';
 
 import { JoinRoomDto, LeaveRoomDto, SendMessageDto } from './dto/chat.dto';
+import {
+  INVITATION_CHANGED_EVENT,
+  INVITATION_NOTIFY_CHANNEL,
+  invitationRoom,
+} from './invitation-notify';
 
 @WebSocketGateway({
   path: '/websockets',
@@ -118,10 +123,15 @@ export class WebsocketGatewayService
       'worker:dreamactor-upload-success',
       'worker:dreamactor-complete',
       'worker:dreamactor-error',
+      INVITATION_NOTIFY_CHANNEL,
     );
 
     // รับ messages จาก Worker
     this.redisSubscriber.on('message', async (channel, message) => {
+      if (channel === INVITATION_NOTIFY_CHANNEL) {
+        this.emitInvitationChanged(message);
+        return;
+      }
       try {
         const data = JSON.parse(message);
         const { clientId, event, payload } = data;
@@ -597,6 +607,26 @@ export class WebsocketGatewayService
   }
 
   // Group Chat Handlers
+
+  /** client ที่ login อยู่เข้าห้องของ email ตัวเองเพื่อรับ noti คำเชิญ */
+  @SubscribeMessage('join-invitations')
+  async handleJoinInvitations(
+    @MessageBody() data: { email?: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (typeof data?.email !== 'string' || !data.email.includes('@')) return;
+    await client.join(invitationRoom(data.email));
+  }
+
+  private emitInvitationChanged(message: string) {
+    try {
+      const { email } = JSON.parse(message) as { email?: unknown };
+      if (typeof email !== 'string') return;
+      this.server.to(invitationRoom(email)).emit(INVITATION_CHANGED_EVENT, {});
+    } catch (error) {
+      this.logger.error('Invalid invitation notify message', error);
+    }
+  }
 
   @SubscribeMessage('join-room')
   async handleJoinRoom(

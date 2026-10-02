@@ -46,6 +46,10 @@ export class OrganizationController {
   createInvitation(@Body() createInvitationDto: CreateInvitationDto) {
     return this.organizationService.createInvitation(createInvitationDto);
   }
+  @Get('invitation/pending')
+  findPendingInvitations(@Query('email') email: string) {
+    return this.organizationService.findPendingInvitations(email);
+  }
 @Get('invitation/organization/:organizationId')
   findInvitationsByOrganizationId(@Param('organizationId') organizationId: string) {
     return this.organizationService.findInvitationsByOrganizationId(organizationId);

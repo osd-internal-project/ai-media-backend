@@ -44,6 +44,8 @@ spec:
           value: {{ .Values.env.pathDomain | quote }}
         - name: EMAIL_API_URL
           value: {{ .Values.env.emailApiUrl | quote }}
+        - name: CORE_API_URL
+          value: {{ .Values.env.coreApiUrl | quote }}
         - name: FRONTEND_URL
           value: {{ .Values.env.frontendUrl | quote }}
         - name: KEYCLOAK_URL

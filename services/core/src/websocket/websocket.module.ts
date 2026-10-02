@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { WebsocketGatewayService } from './websocket.gateway';
 import { WebsocketService } from './websocket.service';
+import { WebsocketController } from './websocket.controller';
 import { GenerateModule } from 'src/generate/generate.module';
 import {
   PrismaModule,
@@ -46,6 +47,7 @@ import { LogsService } from 'src/logs/logs.service';
       name: 'tasks',
     }),
   ],
+  controllers: [WebsocketController],
   providers: [WebsocketGatewayService, WebsocketService, LogsService],
   exports: [WebsocketGatewayService, WebsocketService, LogsService],
 })

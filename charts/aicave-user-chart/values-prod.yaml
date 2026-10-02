@@ -24,6 +24,7 @@ env:
   pathMountdirUpload: "./uploads"
   pathDomain: "http://www.aicave.ai"
   emailApiUrl: "http://aicave-email-api-service.aicave-prod.svc.cluster.local:8974"
+  coreApiUrl: "http://aicave-core-service.aicave-prod.svc.cluster.local:8971/api"
   frontendUrl: "https://www.aicave.ai"
   keycloakUrl: "https://id24.aicave.ai"
   keycloakRealm: "eportal"
