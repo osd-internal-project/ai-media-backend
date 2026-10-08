@@ -2,6 +2,41 @@ import { TosClient } from '@volcengine/tos-sdk';
 import { Injectable } from '@nestjs/common';
 import { handleError } from './handleError';
 
+/** Cache-Control สำหรับ object ที่ key ไม่ซ้ำ (uuid/timestamp) — เนื้อไฟล์ไม่มีวันเปลี่ยน */
+export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
+export interface PutObjectOptions {
+  contentType?: string;
+  cacheControl?: string;
+}
+
+/** อ่านค่าตัวเลขจาก env — ไม่ได้ตั้งหรือไม่ใช่ตัวเลขให้คืน undefined เพื่อใช้ default ของ SDK */
+function optionalNumberEnv(name: string): number | undefined {
+  const raw = process.env[name];
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function buildPresignQuery(options?: {
+  process?: string;
+  cacheControl?: string;
+}): Record<string, string> | undefined {
+  const query: Record<string, string> = {};
+  if (options?.process) query['x-tos-process'] = options.process;
+  if (options?.cacheControl) {
+    query['response-cache-control'] = options.cacheControl;
+  }
+  return Object.keys(query).length ? query : undefined;
+}
+
+/** รวม chunk ของ stream ครั้งเดียว — concat ทุกรอบเป็น O(n²) */
+async function readAll(content: AsyncIterable<Buffer>): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of content) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
 @Injectable()
 export class TosService {
   private client: TosClient;
@@ -13,6 +48,10 @@ export class TosService {
       accessKeySecret: process.env.TOS_SECRET_KEY!,
       region: process.env.TOS_REGION!,
       endpoint: process.env.TOS_ENDPOINT!,
+      maxConnections: optionalNumberEnv('TOS_MAX_CONNECTIONS'),
+      connectionTimeout: optionalNumberEnv('TOS_CONNECTION_TIMEOUT_MS'),
+      requestTimeout: optionalNumberEnv('TOS_REQUEST_TIMEOUT_MS'),
+      maxRetryCount: optionalNumberEnv('TOS_MAX_RETRY_COUNT'),
     });
   }
 
@@ -50,17 +89,19 @@ export class TosService {
     }
   }
 
-  async putObject(bucketName: string, objectName: string, body: Buffer) {
+  async putObject(
+    bucketName: string,
+    objectName: string,
+    body: Buffer,
+    options?: PutObjectOptions,
+  ) {
     try {
-      await this.client.putObject({
+      const { data } = await this.client.putObject({
         bucket: bucketName,
         key: objectName,
         body: body,
-      });
-
-      const { data } = await this.client.headObject({
-        bucket: bucketName,
-        key: objectName,
+        contentType: options?.contentType,
+        cacheControl: options?.cacheControl,
       });
       return data;
     } catch (error) {
@@ -73,6 +114,7 @@ export class TosService {
    * bytes flow source→TOS and never transit this pod — used to store
    * provider-generated videos without downloading + re-uploading them.
    * @param url Publicly fetchable source URL (must be reachable by TOS).
+   * @throws ส่งต่อ error หลัง log เพื่อให้ผู้เรียก fallback ไปดาวน์โหลดเองได้
    */
   async fetchObject(bucketName: string, objectName: string, url: string) {
     try {
@@ -84,6 +126,7 @@ export class TosService {
       return data;
     } catch (error) {
       handleError(error);
+      throw error;
     }
   }
 
@@ -92,19 +135,21 @@ export class TosService {
    * data processing (`video/snapshot`) and persist the small image. Only the
    * tiny snapshot bytes pass through this pod, never the full video.
    * @param atMs Snapshot position in milliseconds into the video.
-   * @returns The thumbnail object key, or undefined on failure.
+   * @returns The thumbnail object key.
+   * @throws ส่งต่อ error หลัง log เพื่อให้ผู้เรียก fallback ไปใช้ ffmpeg ได้
    */
   async createVideoThumbnail(
     bucketName: string,
     videoObjectName: string,
     thumbObjectName: string,
     atMs = 2000,
+    format: 'jpg' | 'png' = 'jpg',
   ) {
     try {
       const process = `video/snapshot,t_${Math.max(
         0,
         Math.floor(atMs),
-      )},f_jpg,w_320`;
+      )},f_${format},w_320`;
       const {
         data: { content },
       } = await this.client.getObjectV2({
@@ -112,18 +157,19 @@ export class TosService {
         key: videoObjectName,
         process,
       });
-      let snapshot = Buffer.from([]);
-      for await (const chunk of content as any) {
-        snapshot = Buffer.concat([snapshot, chunk]);
-      }
+      // getObjectV2 ใน Node คืน Readable ซึ่งเป็น AsyncIterable<Buffer>
+      const snapshot = await readAll(content as AsyncIterable<Buffer>);
       await this.client.putObject({
         bucket: bucketName,
         key: thumbObjectName,
         body: snapshot,
+        contentType: format === 'png' ? 'image/png' : 'image/jpeg',
+        cacheControl: IMMUTABLE_CACHE_CONTROL,
       });
       return thumbObjectName;
     } catch (error) {
       handleError(error);
+      throw error;
     }
   }
 
@@ -162,11 +208,8 @@ export class TosService {
         bucket: bucketName,
         key: objectName,
       });
-      let allContent = Buffer.from([]);
-      for await (const chunk of content as any) {
-        allContent = Buffer.concat([allContent, chunk]);
-      }
-      return allContent;
+      // getObjectV2 ใน Node คืน Readable ซึ่งเป็น AsyncIterable<Buffer>
+      return await readAll(content as AsyncIterable<Buffer>);
     } catch (error) {
       handleError(error);
     }
@@ -200,6 +243,8 @@ export class TosService {
       expires?: number;
       /** TOS image processing เช่น `image/resize,w_480` — ต้องเปิด IMP บน bucket */
       process?: string;
+      /** override header `Cache-Control` ของ response ผ่าน `response-cache-control` */
+      cacheControl?: string;
     },
   ) {
     try {
@@ -208,9 +253,7 @@ export class TosService {
         bucket: bucketName,
         key: objectName,
         expires: options?.expires,
-        query: options?.process
-          ? { 'x-tos-process': options.process }
-          : undefined,
+        query: buildPresignQuery(options),
         // Let the presigned URL carry download semantics (forces the browser to
         // save with the right name/type) so the file streams straight from TOS.
         response:
@@ -227,6 +270,28 @@ export class TosService {
       // ต่างจาก method อื่นในคลาสนี้: log แล้ว rethrow เพราะการกลืน error ทำให้ได้
       // `url: undefined` หลุดไปถึง provider payload โดยไม่มีใครรู้
       // ผู้ตัดสินใจว่าจะ soft/hard fail คือ StorageUrlService ไม่ใช่ที่นี่
+      handleError(error);
+      throw error;
+    }
+  }
+
+  /**
+   * Presigned PUT URL ให้ browser อัปโหลดตรงเข้า TOS โดยไม่ผ่าน pod
+   * signature ไม่ผูก Content-Type/ขนาดไฟล์ — ผู้เรียกต้องตรวจด้วย headObject หลังอัปโหลด
+   */
+  getPreSignedPutUrl(
+    bucketName: string,
+    objectName: string,
+    expires?: number,
+  ): string {
+    try {
+      return this.client.getPreSignedUrl({
+        method: 'PUT',
+        bucket: bucketName,
+        key: objectName,
+        expires,
+      });
+    } catch (error) {
       handleError(error);
       throw error;
     }

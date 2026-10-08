@@ -1938,6 +1938,21 @@
     tos-crc64-js "0.0.1"
     type-fest "^1.4.0"
 
+"@volcengine/tos-sdk@^2.9.1":
+  version "2.9.1"
+  resolved "https://registry.yarnpkg.com/@volcengine/tos-sdk/-/tos-sdk-2.9.1.tgz#a1ef0390c8265d531070f2403b691643a607e2da"
+  integrity sha512-hmrBzl7/LpJYezGWytPg6CZk5lvFgmDKUVZJLM3vwZgp3UKSZwgxFA7V0QmLnerPDRpLPAqh0bP8qUBSVHfmhA==
+  dependencies:
+    axios "^0.21.1"
+    axios-adapter-uniapp "^0.1.4"
+    crypto-js "^4.2.0"
+    debug "^4.3.4"
+    http-proxy-middleware "^2.0.1"
+    lodash "^4.17.21"
+    qs "^6.11.2"
+    tos-crc64-js "0.0.1"
+    type-fest "^1.4.0"
+
 "@webassemblyjs/ast@1.14.1", "@webassemblyjs/ast@^1.11.5":
   version "1.14.1"
   resolved "https://registry.yarnpkg.com/@webassemblyjs/ast/-/ast-1.14.1.tgz#a9f6a07f2b03c95c8d38c4536a1fdfb521ff55b6"

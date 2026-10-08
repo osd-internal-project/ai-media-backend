@@ -28,6 +28,8 @@ import {
   CreditBalanceRepository,
   MasterdataModelTypeRepository,
   MasterModelTypeDto,
+  IMMUTABLE_CACHE_CONTROL,
+  describeTosError,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
@@ -235,19 +237,20 @@ export class ImageProcessor extends WorkerHost {
           type: 'image',
         });
 
-        // Download image
-        const imgRes = await axios.get(imageData.url, {
-          responseType: 'arraybuffer',
-          httpsAgent: this.agent,
-          timeout: 60000,
-        });
-
-        const buffer = Buffer.from(imgRes.data);
-        const uuidName = uuidv4();
-        const ext = 'jpg';
-        const objectName = `${uuidName}.${ext}`;
-
-        this.logger.debug(`📦 Buffer size: ${buffer.length} bytes`);
+        const objectName = `${uuidv4()}.jpg`;
+        const bucketname = tosConfigs().tosBucket;
+        const imagePath = buildOutputKey(
+          body.organizationId,
+          body.projectId,
+          'image',
+          objectName,
+        );
+        await this.storeOutputImage(
+          bucketname,
+          imagePath,
+          imageData.url,
+          `${index + 1}/${totalImages}`,
+        );
 
         // ส่ง progress: uploading
         await this.publishToCore(clientId, 'worker:progress', {
@@ -259,16 +262,6 @@ export class ImageProcessor extends WorkerHost {
           projectId: body.projectId,
           type: 'image',
         });
-
-        // Upload to Object Storage
-        const bucketname = tosConfigs().tosBucket;
-        const imagePath = buildOutputKey(
-          body.organizationId,
-          body.projectId,
-          'image',
-          objectName,
-        );
-        await this.tosService.putObject(bucketname, imagePath, buffer);
 
         uploadedImages.push(objectName);
 
@@ -579,6 +572,51 @@ export class ImageProcessor extends WorkerHost {
   /**
    * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
    */
+  /**
+   * เก็บรูปผลลัพธ์ลง TOS: ให้ TOS ดึงจาก URL ของ provider เอง (`fetchObject`) ก่อน
+   * ถ้าล้มค่อยดาวน์โหลดผ่าน pod แล้ว `putObject` — log บอกทุกครั้งว่าใช้ทางไหน
+   */
+  private async storeOutputImage(
+    bucket: string,
+    key: string,
+    sourceUrl: string,
+    label: string,
+  ): Promise<void> {
+    const startedAt = Date.now();
+    try {
+      await this.tosService.fetchObject(bucket, key, sourceUrl);
+      this.logger.log(
+        `🚀 [fetchObject] image ${label} stored by TOS directly (${
+          Date.now() - startedAt
+        }ms) → ${key}`,
+      );
+      return;
+    } catch (error) {
+      this.logger.warn(
+        `⚠️ [fetchObject] image ${label} failed after ${
+          Date.now() - startedAt
+        }ms — ${describeTosError(error)}; falling back to download+upload`,
+      );
+    }
+
+    const fallbackStartedAt = Date.now();
+    const imgRes = await axios.get<ArrayBuffer>(sourceUrl, {
+      responseType: 'arraybuffer',
+      httpsAgent: this.agent,
+      timeout: 60000,
+    });
+    const buffer = Buffer.from(imgRes.data);
+    await this.tosService.putObject(bucket, key, buffer, {
+      contentType: 'image/jpeg',
+      cacheControl: IMMUTABLE_CACHE_CONTROL,
+    });
+    this.logger.log(
+      `📦 [download+upload] image ${label} stored via pod (${
+        buffer.length
+      } bytes, ${Date.now() - fallbackStartedAt}ms) → ${key}`,
+    );
+  }
+
   private async publishToCore(clientId: string, event: string, payload: any) {
     // Use the last segment so 'worker:generate:error' → channel 'worker:error' (not 'worker:generate')
     const parts = event.split(':');

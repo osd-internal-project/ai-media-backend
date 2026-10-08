@@ -16,6 +16,7 @@ import { RedisModule } from '@nestjs-modules/ioredis';
 import { OmnihumenProcessor } from './omnihumen.service';
 import { DreamactorProcessor } from './dreamactor.service';
 import { GenerateHelperService } from './generate-helper.service';
+import { VideoStorageService } from './video-storage.service';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { GenerateHelperService } from './generate-helper.service';
     OmnihumenProcessor,
     DreamactorProcessor,
     GenerateHelperService,
+    VideoStorageService,
   ], // อย่าลืมใส่ Processor
   exports: [
     ImageProcessor,

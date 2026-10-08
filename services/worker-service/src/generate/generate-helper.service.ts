@@ -364,7 +364,7 @@ export class GenerateHelperService {
     }
   }
 
-   async logAudit(
+  async logAudit(
     userId: string,
     action: string,
     details: any,

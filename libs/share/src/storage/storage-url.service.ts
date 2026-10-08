@@ -17,15 +17,56 @@ import {
  *  4. read path พังแบบ soft (คืน placeholder), send path พังแบบ hard (throw)
  *     เพื่อไม่ให้ยิง `url: undefined` ไปหา provider เงียบ ๆ อีก
  */
+/**
+ * URL แสดงผลอายุ 6 ชม. แต่ใช้ซ้ำจาก cache แค่ 1 ชม. — URL ที่ออกไปจึงเหลืออายุ ≥ 5 ชม. เสมอ
+ * (frontend อาจถือ URL ไว้แล้วส่งกลับมาเป็น reference ให้ provider)
+ */
+const DISPLAY_URL_EXPIRES_SEC = 6 * 60 * 60;
+/** ช่วงที่คืน URL เดิมซ้ำ — URL นิ่งทำให้ browser cache รูปได้ */
+const DISPLAY_URL_CACHE_TTL_MS = 60 * 60 * 1000;
+/** กัน memory โต — เกินแล้วทิ้ง entry ที่เก่าที่สุด */
+const DISPLAY_URL_CACHE_MAX = 10_000;
+
 @Injectable()
 export class StorageUrlService {
   private readonly logger = new Logger(StorageUrlService.name);
+  private readonly urlCache = new Map<
+    string,
+    { url: string; expiresAt: number }
+  >();
 
   constructor(private readonly tosService: TosService) {}
 
   /** bucket ปัจจุบัน — อ่านตอนเรียกใช้ ไม่ cache ตอน construct เพื่อให้ test override env ได้ */
   private get bucket(): string {
     return process.env.TOS_BUCKET!;
+  }
+
+  /**
+   * presign แบบ cache ต่อ pod: คืน URL เดิมจนใกล้หมดอายุ และฝัง Cache-Control ให้ browser
+   * เก็บรูปไว้ได้ตลอดช่วงที่ URL ยังถูกใช้ซ้ำ
+   */
+  private async presignDisplay(key: string, process?: string): Promise<string> {
+    const cacheKey = `${this.bucket}|${key}|${process ?? ''}`;
+    const now = Date.now();
+    const hit = this.urlCache.get(cacheKey);
+    if (hit && hit.expiresAt > now) return hit.url;
+
+    const url = await this.tosService.getPreSignedUrl(this.bucket, key, {
+      expires: DISPLAY_URL_EXPIRES_SEC,
+      process,
+      cacheControl: `private, max-age=${DISPLAY_URL_CACHE_TTL_MS / 1000}`,
+    });
+    this.urlCache.delete(cacheKey);
+    if (this.urlCache.size >= DISPLAY_URL_CACHE_MAX) {
+      const oldest = this.urlCache.keys().next().value;
+      if (oldest !== undefined) this.urlCache.delete(oldest);
+    }
+    this.urlCache.set(cacheKey, {
+      url,
+      expiresAt: now + DISPLAY_URL_CACHE_TTL_MS,
+    });
+    return url;
   }
 
   /**
@@ -42,7 +83,7 @@ export class StorageUrlService {
     if (!value) return null;
     if (isAbsoluteUrl(value)) return value;
     try {
-      return await this.tosService.getPreSignedUrl(this.bucket, value);
+      return await this.presignDisplay(value);
     } catch (error) {
       this.logger.warn(
         `presign failed for "${value}": ${
@@ -63,9 +104,7 @@ export class StorageUrlService {
   ): Promise<string | null> {
     if (!value || isAbsoluteUrl(value)) return null;
     try {
-      return await this.tosService.getPreSignedUrl(this.bucket, value, {
-        process: `image/resize,w_${width}`,
-      });
+      return await this.presignDisplay(value, `image/resize,w_${width}`);
     } catch (error) {
       this.logger.warn(
         `thumbnail presign failed for "${value}": ${
@@ -135,6 +174,7 @@ export class StorageUrlService {
       throw new Error('Storage reference is empty — cannot build provider URL');
     }
     if (isAbsoluteUrl(value)) return value;
+    // ไม่ใช้ cache: provider อาจดึงไฟล์ช้าหลังเข้าคิว ต้องได้ URL อายุเต็ม
     const url = await this.tosService.getPreSignedUrl(this.bucket, value);
     if (!url) {
       throw new Error(`Failed to presign storage reference "${value}"`);

@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
-import { Logger, Injectable, BadRequestException } from '@nestjs/common';
+import { Logger, Injectable } from '@nestjs/common';
 import {
   GalleryRepository,
   LogRepository,
@@ -10,39 +10,17 @@ import {
   RequestOmnihumenGenerateDto,
   StorageUrlService,
   TosService,
-  buildOutputKey,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
 import { OnWorkerEvent } from '@nestjs/bullmq';
 import axios from 'axios';
-import { v4 as uuidv4 } from 'uuid';
 import * as https from 'https';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as ffmpeg from 'fluent-ffmpeg';
-import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
-const ffmpegPath = require('ffmpeg-static');
-const ffprobePath = require('ffprobe-static');
-
-ffmpeg.setFfmpegPath(ffmpegPath);
-ffmpeg.setFfprobePath(ffprobePath.path);
+import { VideoStorageService } from './video-storage.service';
 
 // Local Multer file shape — the ambient `Express.Multer.File` namespace isn't
 // resolved in this build context (mirrors video.service.ts).
-interface MulterFile {
-  fieldname: string;
-  originalname: string;
-  encoding: string;
-  mimetype: string;
-  buffer: Buffer;
-  size: number;
-  stream: null;
-  destination: string;
-  filename: string;
-  path: string;
-}
 
 interface OmnihumenProcessJob {
   taskId: string;
@@ -96,6 +74,7 @@ export class OmnihumenProcessor extends WorkerHost {
     private readonly refImageRepository: RefImageRepository,
     private readonly tosService: TosService,
     private readonly storageUrl: StorageUrlService,
+    private readonly videoStorage: VideoStorageService,
     private readonly generateHelperService: GenerateHelperService,
   ) {
     super();
@@ -292,38 +271,14 @@ export class OmnihumenProcessor extends WorkerHost {
           });
           const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${body.userId}`;
 
-          // Download the finished video through this pod, then upload to TOS. TOS
-          // server-side `fetchObject` can't complete the TLS handshake to the
-          // provider's ByteDance/TikTok CDN (net/http: TLS handshake timeout), so
-          // we mirror the working video/dreamactor flows. `axios.get` also throws
-          // on failure, so a genuine fetch error hits the outer catch (proper
-          // failed status + credit refund) instead of faking success.
-          const videoRes = await axios.get(videoUrl, {
-            responseType: 'arraybuffer',
-            httpsAgent: this.agent,
+          // ถ้า storeVideoWithThumbnail throw จะไปเข้า outer catch (status failed + คืน credit)
+          // ไม่ทำเป็นสำเร็จทั้งที่ไฟล์ไม่ได้ถูกเก็บ
+          const result = await this.videoStorage.storeVideoWithThumbnail({
+            organizationId: body.organizationId,
+            projectId: body.projectId,
+            typeGenerate: 'omnihumen',
+            sourceUrl: videoUrl,
           });
-          const buffer = Buffer.from(videoRes.data);
-          const uuidName = uuidv4();
-          const ext = 'mp4';
-
-          const mockFile: MulterFile = {
-            fieldname: 'file',
-            originalname: `${uuidName}.${ext}`,
-            encoding: '7bit',
-            mimetype: 'video/mp4',
-            buffer: buffer,
-            size: buffer.length,
-            stream: null,
-            destination: '',
-            filename: '',
-            path: '',
-          };
-          const result = await this.uploadVideoWithThumbnail(
-            body.organizationId,
-            body.projectId,
-            mockFile,
-            taskId,
-          );
           console.log('returngenerate');
 
           await this.publishToCore(
@@ -588,85 +543,6 @@ export class OmnihumenProcessor extends WorkerHost {
       content: body?.prompt,
       ...(body?.generateAudio && { generateAudio: body?.generateAudio }),
     };
-  }
-
-  private async uploadVideoWithThumbnail(
-    organizationId: string,
-    projectId: string,
-    file: MulterFile,
-    id: string,
-  ) {
-    const videoFileName = `${Date.now()}-${file.originalname}`;
-    const thumbnailFileName = `thumb-${Date.now()}.png`;
-    const objectName = `${videoFileName}`;
-    const thumbnailObjectName = `${thumbnailFileName}`;
-
-    // Use os.tmpdir() for better compatibility
-    const os = require('os');
-    const tempDir = os.tmpdir();
-    const tempVideoPath = path.join(tempDir, videoFileName);
-    const tempThumbPath = path.join(tempDir, thumbnailFileName);
-
-    // 2. เขียนไฟล์วิดีโอลง Disk ชั่วคราวเพื่อให้ FFmpeg อ่าน
-    fs.writeFileSync(tempVideoPath, file.buffer);
-
-    try {
-      // 3. สร้าง Thumbnail ด้วย FFmpeg
-      await new Promise((resolve, reject) => {
-        ffmpeg(tempVideoPath)
-          .screenshots({
-            count: 1,
-            folder: path.dirname(tempThumbPath),
-            filename: path.basename(tempThumbPath),
-            timemarks: ['20%'], // จับภาพที่ตำแหน่ง 20% ของวิดีโอ
-            size: '320x?', // ปรับขนาด (กว้าง 320, สูง auto)
-          })
-          .on('end', resolve)
-          .on('error', reject);
-      });
-
-      // 4. Upload Video ขึ้น MinIO (ใช้ putObject แทน fPutObject)
-
-      await this.tosService.putObject(
-        tosConfigs().tosBucket,
-        buildOutputKey(organizationId, projectId, 'omnihumen', objectName),
-        file.buffer,
-      );
-
-      // 5. Upload Thumbnail ขึ้น MinIO
-      // อ่านไฟล์ thumbnail ขึ้นมาเป็น buffer ก่อน
-      const thumbBuffer = fs.readFileSync(tempThumbPath);
-      await this.tosService.putObject(
-        tosConfigs().tosBucket,
-        buildOutputKey(
-          organizationId,
-          projectId,
-          'omnihumen',
-          thumbnailObjectName,
-        ),
-        thumbBuffer,
-      );
-
-      // 6. (Optional) สร้าง Presigned URL แบบ Public (ถ้า bucket เป็น public ไม่ต้องใช้ presigned ก็ได้ แต่ code เดิมใช้)
-      // const videoUrl = await this.minioClient.presignedGetObject(bucket, objectName, 24 * 60 * 60);
-      // const thumbUrl = await this.minioClient.presignedGetObject(bucket, thumbnailObjectName, 24 * 60 * 60);
-
-      return {
-        file: objectName,
-        thumbnail: thumbnailObjectName,
-      };
-    } catch (error: any) {
-      console.error('Error in uploadVideoWithThumbnail:', error);
-      throw new BadRequestException('Error processing video: ' + error.message);
-    } finally {
-      // 7. Cleanup: ลบไฟล์ temp ทิ้งเสมอ
-      try {
-        if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
-        if (fs.existsSync(tempThumbPath)) fs.unlinkSync(tempThumbPath);
-      } catch (cleanupError) {
-        console.error('Error cleaning up temp files:', cleanupError);
-      }
-    }
   }
 
   /**

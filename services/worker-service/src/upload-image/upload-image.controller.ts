@@ -12,11 +12,15 @@ import {
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
-import { UploadImageService } from './upload-image.service';
+import {
+  DirectUploadKind,
+  PresignUploadInput,
+  UploadImageService,
+} from './upload-image.service';
 
 @Controller('upload')
 export class UploadImageController {
-  constructor(private readonly uploadImageService: UploadImageService) { }
+  constructor(private readonly uploadImageService: UploadImageService) {}
 
   @Post()
   @UseInterceptors(FileInterceptor('file'))
@@ -82,6 +86,25 @@ export class UploadImageController {
       uid,
       organizationId,
     );
+  }
+
+  /** Direct upload ขั้น 1 — คืน presigned PUT URL ให้ browser อัปโหลดตรงเข้า TOS */
+  @Post('presign')
+  async presignUpload(@Body() body: PresignUploadInput) {
+    return this.uploadImageService.presignUpload({
+      ...body,
+      index: Number(body.index),
+      size: Number(body.size),
+    });
+  }
+
+  /** Direct upload ขั้น 2 — ตรวจไฟล์ใน TOS แล้วเปิดใช้งาน row */
+  @Post('confirm')
+  async confirmUpload(
+    @Body('kind') kind: DirectUploadKind,
+    @Body('uid') uid: string,
+  ) {
+    return this.uploadImageService.confirmUpload(kind, uid);
   }
 
   @Delete('delete/:uid')
