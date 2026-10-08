@@ -44,6 +44,25 @@ const videoCtxKey = (taskId: string) => `video-ctx:${taskId}`;
 const videoFinalKey = (taskId: string) => `video-final:${taskId}`;
 const isTerminal = (status: string) =>
   (BYTEPLUS_TERMINAL_STATUSES as readonly string[]).includes(status);
+/**
+ * LLM gateway ห่อ error ของ provider เป็น string เช่น `Video generation task HTTP 400: {"error":{"message":"…"}}`
+ * — ดึง `error.message` ข้างในออกมา (แกะซ้ำเผื่อห่อหลายชั้น) · แกะไม่ได้คืน text เดิม
+ */
+export const unwrapProviderMessage = (text: string): string => {
+  const start = text.indexOf('{');
+  if (start === -1) return text;
+  let inner: { error?: { message?: unknown }; message?: unknown };
+  try {
+    inner = JSON.parse(text.slice(start));
+  } catch {
+    // ไม่ใช่ JSON (เช่นข้อความมีปีกกาเฉย ๆ) — ใช้ข้อความเดิม
+    return text;
+  }
+  const message = inner?.error?.message ?? inner?.message;
+  return typeof message === 'string' && message.trim()
+    ? unwrapProviderMessage(message)
+    : text;
+};
 /** ข้อความ error จริงจาก Ark (`{ status: 'failed', error: { code, message } }`) — ไม่มีก็บอกแค่ status */
 const providerError = (
   result: ProviderVideoResult,
@@ -52,7 +71,7 @@ const providerError = (
     ?.error;
   const message =
     typeof error?.message === 'string' && error.message.trim()
-      ? error.message
+      ? unwrapProviderMessage(error.message)
       : `provider task ${result.status}`;
   return { code: typeof error?.code === 'string' ? error.code : null, message };
 };
@@ -240,8 +259,9 @@ export class VideoProcessor extends WorkerHost {
           // clean message. The outer catch owns all failure reporting.
           const apiStatus = error.response?.status;
           const apiBody = error.response?.data;
-          const apiMessage =
-            apiBody?.error?.message ?? apiBody?.message ?? error.message;
+          const apiMessage = unwrapProviderMessage(
+            String(apiBody?.error?.message ?? apiBody?.message ?? error.message),
+          );
           this.logger.error(
             `${tag(
               taskId,

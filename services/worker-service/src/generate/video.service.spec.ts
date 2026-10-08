@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { VideoProcessor } from './video.service';
+import { VideoProcessor, unwrapProviderMessage } from './video.service';
 
 jest.mock('ioredis', () => ({
   Redis: jest.fn().mockImplementation(() => ({ publish: jest.fn() })),
@@ -375,6 +375,56 @@ describe('VideoProcessor (callback + poll-check)', () => {
         data: { taskId: 't1' },
       });
       expect(redis.zset.has('t1')).toBe(false);
+    });
+  });
+
+  describe('gateway-wrapped provider error', () => {
+    const inner =
+      "The request failed because the input image 'content[1]' may contain real person. Request id: 0217";
+    const wrapped = `Video generation task HTTP 400: ${JSON.stringify({
+      error: {
+        code: 'InputImageSensitiveContentDetected.PrivacyInformation',
+        message: inner,
+        param: '',
+        type: 'BadRequest',
+      },
+    })}`;
+
+    it('unwraps the provider message from the gateway string', () => {
+      expect(unwrapProviderMessage(wrapped)).toBe(inner);
+    });
+
+    it('keeps plain text and broken JSON as is', () => {
+      expect(unwrapProviderMessage('quota exceeded')).toBe('quota exceeded');
+      expect(unwrapProviderMessage('bad {json')).toBe('bad {json');
+    });
+
+    it('submit rejected by the gateway → user gets only the provider message', async () => {
+      axiosPost.mockRejectedValue({
+        message: 'Request failed with status code 400',
+        response: { status: 400, data: { error: { message: wrapped } } },
+      });
+      const job = {
+        name: 'vdo-generate-queue',
+        id: '1',
+        attemptsMade: 0,
+        data: {
+          taskId: 't1',
+          clientId: 'c1',
+          userId: 'u1',
+          statusBaseUrl: 'https://gw/tasks',
+          sendApi: 'https://gw/create',
+          sendConfig: {
+            type: 'seedance1',
+            configType: 'application/json',
+            authorization: 'key',
+          },
+          body: { ...body, prompt: 'p', ratio: '1:1', image: [], files: [] },
+        },
+        updateData: jest.fn(),
+      };
+      await expect(processor.process(job)).rejects.toThrow(inner);
+      expect(publishedError()?.message).toBe(inner);
     });
   });
 });
