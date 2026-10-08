@@ -1,5 +1,5 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job, UnrecoverableError } from 'bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job, Queue, UnrecoverableError } from 'bullmq';
 import { Logger, Injectable } from '@nestjs/common';
 import {
   GalleryRepository,
@@ -11,6 +11,10 @@ import {
   RequestVideoGenerateDto,
   StorageUrlService,
   TosService,
+  VIDEO_JOB_FINALIZE,
+  VIDEO_JOB_POLL_CHECK,
+  BYTEPLUS_TERMINAL_STATUSES,
+  buildByteplusVideoCallbackUrl,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
@@ -19,6 +23,34 @@ import axios from 'axios';
 import * as https from 'https';
 import { GenerateHelperService } from './generate-helper.service';
 import { VideoStorageService } from './video-storage.service';
+
+/** ctx ของงานที่ส่งแล้ว — finalize ต้องใช้ แต่ callback ส่งมาแค่ taskId */
+const VIDEO_CTX_TTL_SEC = 24 * 60 * 60;
+/** poll สำรองห่าง ๆ เผื่อ callback ไม่มา */
+const VIDEO_POLL_INTERVAL_MS = 2 * 60 * 1000;
+/** เท่ากับ timeout ของ loop polling เดิม */
+const VIDEO_POLL_TIMEOUT_MS = 20 * 60 * 1000;
+
+const videoCtxKey = (taskId: string) => `video-ctx:${taskId}`;
+const videoFinalKey = (taskId: string) => `video-final:${taskId}`;
+const isTerminal = (status: string) =>
+  (BYTEPLUS_TERMINAL_STATUSES as readonly string[]).includes(status);
+
+interface VideoTaskContext {
+  taskId: string;
+  clientId: string;
+  body: RequestVideoGenerateDto;
+  userId: string;
+  statusBaseUrl: string;
+  authToken: string;
+  videoTaskId: string;
+  submittedAt: number;
+}
+
+interface ProviderVideoResult {
+  status: string;
+  data: unknown;
+}
 
 interface ProjectMemberCredit {
   usedCreditAllowance: number;
@@ -82,6 +114,7 @@ export class VideoProcessor extends WorkerHost {
     private readonly videoStorage: VideoStorageService,
     private readonly generateHelperService: GenerateHelperService,
     private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
+    @InjectQueue(QUEUE_NAME_VDO) private readonly videoQueue: Queue,
   ) {
     super();
     this.agent = new https.Agent({
@@ -114,6 +147,16 @@ export class VideoProcessor extends WorkerHost {
   }
 
   async process(job: any, token?: string): Promise<any> {
+    if (job.name === VIDEO_JOB_FINALIZE) return this.handleFinalize(job);
+    if (job.name === VIDEO_JOB_POLL_CHECK) return this.handlePollCheck(job);
+    return this.handleSubmit(job);
+  }
+
+  /**
+   * ส่งงานให้ provider แล้วคืน worker slot ทันที — ผลมาทาง callback (finalize) หรือ poll-check สำรอง
+   * job เก่าที่มี `videoTaskId` อยู่แล้ว (retry/stalled) ไม่ส่งซ้ำ แค่ตั้ง poll-check ใหม่
+   */
+  private async handleSubmit(job: Job): Promise<unknown> {
     const {
       taskId,
       clientId,
@@ -123,22 +166,17 @@ export class VideoProcessor extends WorkerHost {
       sendApi,
       sendConfig,
     } = job.data as VideoProcessJob;
-    console.log(`taskId`, taskId, clientId, body, userId);
     // Per-org LLM gateway key set by the producer (falls back to the model token).
     const authorization: string =
       (job.data as any).authorization ?? sendConfig?.authorization ?? '';
-    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
-    this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
+    this.logger.log(`👨‍🍳 Submitting job: ${job.id}, Task: ${taskId}`);
 
     try {
-      // 0. Call external API here so queue concurrency limits simultaneous API calls.
-      // Backward-compat: old jobs already have videoTaskId; new jobs need the API call.
       let videoTaskId: string;
       let authToken: string = authorization;
       if ((job.data as any).videoTaskId) {
         videoTaskId = (job.data as any).videoTaskId;
-        authToken = authorization;
       } else {
         const axiosConfig = {
           headers: {
@@ -147,7 +185,7 @@ export class VideoProcessor extends WorkerHost {
           },
           httpsAgent: this.agent,
         };
-        const payload = await this.buildPayload(body, sendConfig);
+        const payload = await this.buildPayload(body, sendConfig, taskId);
         let apiRes: any;
         try {
           apiRes = await axios.post(sendApi, payload, axiosConfig);
@@ -160,8 +198,7 @@ export class VideoProcessor extends WorkerHost {
         } catch (error: any) {
           // Surface the real API rejection reason. Log the verbose detail
           // (payload + response) server-side for debugging, but throw only the
-          // clean message. The outer catch owns all failure reporting (status,
-          // event, credit refund, DB rows) — don't duplicate it here.
+          // clean message. The outer catch owns all failure reporting.
           const apiStatus = error.response?.status;
           const apiBody = error.response?.data;
           const apiMessage =
@@ -179,301 +216,228 @@ export class VideoProcessor extends WorkerHost {
         authToken = String(sendConfig.authorization ?? '');
         await this.updateTaskStatus(taskId, { videoTaskId });
         // Persist into the job payload so a BullMQ retry/stalled re-process
-        // resumes polling this provider task instead of submitting a new one
-        // (which would re-generate and re-transfer the video).
+        // resumes this provider task instead of submitting a new one.
         await job.updateData({ ...(job.data as any), videoTaskId });
       }
 
-      // 1. ส่ง event "started" ไปยัง Core Service
+      // บันทึกสิ่งที่ finalize ต้องใช้ — callback ส่งมาแค่ taskId
+      const ctx: VideoTaskContext = {
+        taskId,
+        clientId,
+        body,
+        userId,
+        statusBaseUrl,
+        authToken,
+        videoTaskId,
+        submittedAt: Date.now(),
+      };
+      await this.redis.set(
+        videoCtxKey(taskId),
+        JSON.stringify(ctx),
+        'EX',
+        VIDEO_CTX_TTL_SEC,
+      );
+
       await this.publishToCore(clientId, 'worker:video-started', {
         taskId,
         timestamp: new Date().toISOString(),
         type: 'video',
         projectId: body.projectId,
       });
-
-      // อัพเดทสถานะใน Redis
       await this.updateTaskStatus(taskId, {
         status: 'processing',
         startedAt: new Date().toISOString(),
       });
-      const sleep = (ms: number) =>
-        new Promise((resolve) => setTimeout(resolve, ms));
-
-      // Bound the poll so a job stuck in a non-terminal provider state fails
-      // cleanly instead of holding a worker slot (and re-running on restart).
-      const POLL_TIMEOUT_MS = 20 * 60 * 1000;
-      const pollStartedAt = Date.now();
-      while (true) {
-        if (Date.now() - pollStartedAt > POLL_TIMEOUT_MS) {
-          throw new UnrecoverableError('generation timed out');
-        }
-        await this.publishToCore(clientId, 'worker:video-progress', {
-          taskId,
-          timestamp: new Date().toISOString(),
-          type: 'video',
-          projectId: body.projectId,
-        });
-        const url = `${statusBaseUrl}/${videoTaskId}`;
-        const rawToken = authToken;
-        const authHeader = rawToken.startsWith('Bearer ')
-          ? rawToken
-          : `Bearer ${rawToken}`;
-        // Logger.debug('Status API response', { url, taskId, authHeader });
-
-        const getResult = await axios.get(url, {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: authHeader,
-          },
-          httpsAgent: this.agent,
-        });
-        Logger.debug('Status API response', getResult.data);
-
-        // mockdata
-        // const getResult = {
-        //     data: {
-        //         id: "cgt-2025******-****",
-        //         model: "seedance-1-5-pro-251215",
-        //         status: "succeeded",
-        //         content: {
-        //             video_url: "https://www.aicave.ai/public/api/v1/s3/ai-media-image-vdo/cgt-20260202111751-ncbdf/1770002305718-f543977d-b0e8-456e-b3d1-22b48810efe0.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260203%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260203T032016Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=c08d0cda185e086ed197d71c6b76922e62f0b349fa7bf8b2b4cb9069a298e626"
-        //         },
-        //         usage: {
-        //             completion_tokens: 108900,
-        //             total_tokens: 108900
-        //         },
-        //         created_at: 1743414619,
-        //         updated_at: 1743414673,
-        //         seed: 10,
-        //         resolution: "720p",
-        //         ratio: "16:9",
-        //         duration: 5,
-        //         framespersecond: 24,
-        //         service_tier: "default",
-        //         execution_expires_after: 172800,
-        //         generate_audio: true,
-        //         draft: false
-        //     }
-        // }
-        const status = getResult.data.status;
-        if (status === 'succeeded') {
-          console.log(getResult.data);
-          const { id, content, usage } = getResult.data as BytepluseResponse;
-          console.log('----- task succeeded -----');
-          await this.publishToCore(clientId, 'worker:video-url-success', {
-            taskId,
-            videoUrl: content.video_url,
-            timestamp: new Date().toISOString(),
-            type: 'video',
-            projectId: body.projectId,
-          });
-          const result = await this.videoStorage.storeVideoWithThumbnail({
-            organizationId: body.organizationId,
-            projectId: body.projectId,
-            typeGenerate: 'video',
-            sourceUrl: content.video_url,
-            durationSec: Number(body.duration) || undefined,
-          });
-
-          console.log('returngenerate');
-
-          await this.publishToCore(clientId, 'worker:video-upload-success', {
-            taskId,
-            videoUrl: await this.storageUrl.resolveOutputUrl(
-              body.organizationId,
-              body.projectId,
-              'video',
-              result.file,
-            ),
-            thumbnailUrl: await this.storageUrl.resolveOutputUrl(
-              body.organizationId,
-              body.projectId,
-              'video',
-              result.thumbnail,
-            ),
-            timestamp: new Date().toISOString(),
-            type: 'video',
-            projectId: body.projectId,
-          });
-          // await this.redis.set(
-          //   redisVideoCacheKey,
-          //   usage.total_tokens.toString(),
-          //   'EX',
-          //   24 * 60 * 60,
-          // );
-          const log = await this.logrepo.findOne({
-            where: { taskId: taskId },
-          });
-          const modelDto = await this.masterModelTypeRepo.findOne({
-            where: { modelType: body.model, isActive: true },
-          });
-          const realCredit = await this.generateHelperService.getUsedCredit(
-            usage.total_tokens,
-            body,
-            modelDto,
-          );
-          await this.galleryRepo.updateMany({
-            where: { taskId: taskId },
-            data: {
-              imageUrl: result.file,
-              resultUrl: [result.file],
-              thumbnailUrl: result.thumbnail,
-              genneratedStatus: 'SUCCESS',
-              usedCredit: realCredit.credit,
-              // denormalize token จริงจาก log ลง gallery (dual-write)
-              tokenUsed: usage.total_tokens,
-            },
-          });
-
-          await this.logrepo.updateMany({
-            where: { taskId: taskId },
-            data: {
-              status: 'success',
-              tokenUsed: usage.total_tokens,
-              usedCredit: realCredit.credit,
-            },
-          });
-
-          //Update used credit
-          if (log) {
-            const updated =
-              (await this.generateHelperService.updateUsedCreditSuccess(
-                userId,
-                body.organizationId,
-                body.projectId,
-                'credit',
-                realCredit.credit,
-                log.usedCredit,
-              )) as ProjectMemberCredit;
-            const usedCredit =
-              updated.usedCreditAllowance + updated.holdCreditAllowance;
-            await this.redis.set(
-              redisVideoCacheKey,
-              usedCredit.toString(),
-              'EX',
-              60 * 60,
-            );
-          }
-          break;
-        } else if (status === 'failed') {
-          console.log('----- task failed -----');
-          await this.logrepo.updateMany({
-            where: { taskId },
-            data: {
-              status: 'failed',
-            },
-          });
-          const failedLog = await this.logrepo.findOne({
-            where: { taskId },
-          });
-          const updated =
-            (await this.generateHelperService.updateUsedCreditFail(
-              userId,
-              body.organizationId,
-              body.projectId,
-              'credit',
-              failedLog.usedCredit,
-            )) as ProjectMemberCredit;
-
-          const usedCredit =
-            updated.usedCreditAllowance + updated.holdCreditAllowance;
-          await this.redis.set(
-            redisVideoCacheKey,
-            usedCredit.toString(),
-            'EX',
-            60 * 60,
-          );
-          // console.error("Error:", getResult.data.error);
-          break;
-        } else {
-          console.log(
-            `Current status: ${status}, Retrying after 10 seconds...`,
-          );
-          await sleep(10_000);
-        }
-      }
-
-      // 4. อัพเดทสถานะเป็น completed
-      await this.updateTaskStatus(taskId, {
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-      });
-
-      // 5. ส่ง event "complete" ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:video-complete', {
-        taskId,
-        success: true,
-        timestamp: new Date().toISOString(),
-        type: 'video',
-        projectId: body.projectId,
-      });
-
-      this.logger.log(`🎉 Job ${taskId} completed!`);
-
-      return {
-        success: true,
-        taskId,
-        data: {
-          projectId: body.projectId,
-          userId,
-          prompt: body.prompt,
-          imageUrl: '',
-          typeGenerate: 'image',
-          genneratedStatus: 'SUCCESS',
-          status: true,
-          generateConfig: this.buildGenerateConfig({
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
-            prompt: body.prompt,
-            duration: +body.duration,
-            modelName: body.model,
-            imageCount: body.maxImages,
-            resolution: body.resolution,
-            generateAudio: false,
-          }),
-        },
-      };
+      await this.schedulePollCheck(taskId);
+      this.logger.log(
+        `📨 Task ${taskId} submitted (provider ${videoTaskId}) — waiting for callback / poll-check`,
+      );
+      return { submitted: true, taskId, videoTaskId };
     } catch (error) {
-      const err = error as Error;
-      this.logger.error(`❌ Job ${job.id} failed: ${err.message}`, err.stack);
+      await this.failTask({ taskId, clientId, body, userId }, error as Error);
+      throw error;
+    }
+  }
 
-      // อัพเดทสถานะเป็น failed
-      await this.updateTaskStatus(taskId, {
-        status: 'failed',
-        failedAt: new Date().toISOString(),
-        error: err.message,
-      });
+  /** job จาก webhook ของ core — เช็คสถานะจริงกับ provider ก่อนปิดงาน (ไม่เชื่อ body ของ callback) */
+  private async handleFinalize(job: Job): Promise<unknown> {
+    const { taskId } = job.data as { taskId: string };
+    const ctx = await this.loadCtx(taskId);
+    if (!ctx) {
+      if (await this.redis.exists(videoFinalKey(taskId))) {
+        return { skipped: 'already finalized' };
+      }
+      // callback มาก่อน submit บันทึก ctx เสร็จ — ให้ BullMQ retry (attempts/backoff ตั้งที่ core)
+      throw new Error(`video ctx for ${taskId} not found yet`);
+    }
+    const result = await this.fetchProviderStatus(ctx);
+    if (!isTerminal(result.status)) {
+      return { pending: result.status };
+    }
+    this.logger.log(`🔔 [callback] ${taskId} → ${result.status}`);
+    await this.finalizeVideoTask(ctx, result);
+    return { finalized: result.status };
+  }
 
-      // ส่ง error event ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:video-error', {
-        taskId,
-        error: err.message,
-        timestamp: new Date().toISOString(),
-        type: 'video',
-        projectId: body.projectId,
-        message: err.message,
-      });
+  /** สำรองกรณี callback ไม่มา: GET สถานะ 1 ครั้งต่อรอบ จนจบหรือเกินเวลา */
+  private async handlePollCheck(job: Job): Promise<unknown> {
+    const { taskId } = job.data as { taskId: string };
+    if (await this.redis.exists(videoFinalKey(taskId))) {
+      return { skipped: 'already finalized' };
+    }
+    const ctx = await this.loadCtx(taskId);
+    if (!ctx) {
+      this.logger.warn(`poll-check ${taskId}: ctx expired — nothing to do`);
+      return { skipped: 'no ctx' };
+    }
+    if (Date.now() - ctx.submittedAt > VIDEO_POLL_TIMEOUT_MS) {
+      await this.failOnce(ctx, new Error('generation timed out'));
+      return { timedOut: true };
+    }
+    let result: ProviderVideoResult;
+    try {
+      result = await this.fetchProviderStatus(ctx);
+    } catch (error) {
+      // GET ล้มชั่วคราว (network/5xx) — ลองรอบหน้า ไม่ fail งาน
+      this.logger.warn(
+        `poll-check ${taskId}: status request failed — ${
+          (error as Error).message
+        }`,
+      );
+      await this.schedulePollCheck(taskId);
+      return { retry: true };
+    }
+    if (isTerminal(result.status)) {
+      this.logger.log(`⏱️ [poll-check] ${taskId} → ${result.status}`);
+      await this.finalizeVideoTask(ctx, result);
+      return { finalized: result.status };
+    }
+    await this.publishToCore(ctx.clientId, 'worker:video-progress', {
+      taskId,
+      timestamp: new Date().toISOString(),
+      type: 'video',
+      projectId: ctx.body.projectId,
+    });
+    await this.schedulePollCheck(taskId);
+    return { pending: result.status };
+  }
 
-      // บันทึก error log
-      await this.logrepo.updateMany({
-        where: { taskId },
-        data: {
-          status: 'failed',
-        },
-      });
-      const failedLog = await this.logrepo.findOne({
-        where: { taskId },
-      });
-      const updated = (await this.generateHelperService.updateUsedCreditFail(
+  /**
+   * ปิดงานครั้งเดียวต่อ taskId (callback + poll-check อาจมาพร้อมกัน) — กันตัด/คืนเครดิตซ้ำ
+   * succeeded → เก็บไฟล์ + ตัดเครดิตจริง · failed/expired/cancelled → fail path (คืนเครดิต)
+   */
+  private async finalizeVideoTask(
+    ctx: VideoTaskContext,
+    result: ProviderVideoResult,
+  ): Promise<void> {
+    const acquired = await this.redis.set(
+      videoFinalKey(ctx.taskId),
+      '1',
+      'EX',
+      VIDEO_CTX_TTL_SEC,
+      'NX',
+    );
+    if (acquired === null) {
+      this.logger.log(`Task ${ctx.taskId} already finalized — skip`);
+      return;
+    }
+    try {
+      if (result.status === 'succeeded') {
+        await this.completeVideoTask(ctx, result.data as BytepluseResponse);
+      } else {
+        await this.failTask(ctx, new Error(`provider task ${result.status}`));
+      }
+    } catch (error) {
+      // เก็บไฟล์/อัปเดต DB ล้มหลังได้ lock แล้ว — ต้องปิดเป็น failed เอง ไม่งั้นค้าง processing
+      await this.failTask(ctx, error as Error);
+    } finally {
+      await this.redis.del(videoCtxKey(ctx.taskId));
+    }
+  }
+
+  /** โค้ด success เดิมจาก loop polling — ย้ายมาเรียกจาก finalize */
+  private async completeVideoTask(
+    ctx: VideoTaskContext,
+    data: BytepluseResponse,
+  ): Promise<void> {
+    const { taskId, clientId, body, userId } = ctx;
+    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
+    const { content, usage } = data;
+    await this.publishToCore(clientId, 'worker:video-url-success', {
+      taskId,
+      videoUrl: content.video_url,
+      timestamp: new Date().toISOString(),
+      type: 'video',
+      projectId: body.projectId,
+    });
+    const result = await this.videoStorage.storeVideoWithThumbnail({
+      organizationId: body.organizationId,
+      projectId: body.projectId,
+      typeGenerate: 'video',
+      sourceUrl: content.video_url,
+      durationSec: Number(body.duration) || undefined,
+    });
+
+    await this.publishToCore(clientId, 'worker:video-upload-success', {
+      taskId,
+      videoUrl: await this.storageUrl.resolveOutputUrl(
+        body.organizationId,
+        body.projectId,
+        'video',
+        result.file,
+      ),
+      thumbnailUrl: await this.storageUrl.resolveOutputUrl(
+        body.organizationId,
+        body.projectId,
+        'video',
+        result.thumbnail,
+      ),
+      timestamp: new Date().toISOString(),
+      type: 'video',
+      projectId: body.projectId,
+    });
+    const log = await this.logrepo.findOne({
+      where: { taskId: taskId },
+    });
+    const modelDto = await this.masterModelTypeRepo.findOne({
+      where: { modelType: body.model, isActive: true },
+    });
+    const realCredit = await this.generateHelperService.getUsedCredit(
+      usage.total_tokens,
+      body,
+      modelDto,
+    );
+    await this.galleryRepo.updateMany({
+      where: { taskId: taskId },
+      data: {
+        imageUrl: result.file,
+        resultUrl: [result.file],
+        thumbnailUrl: result.thumbnail,
+        genneratedStatus: 'SUCCESS',
+        usedCredit: realCredit.credit,
+        // denormalize token จริงจาก log ลง gallery (dual-write)
+        tokenUsed: usage.total_tokens,
+      },
+    });
+
+    await this.logrepo.updateMany({
+      where: { taskId: taskId },
+      data: {
+        status: 'success',
+        tokenUsed: usage.total_tokens,
+        usedCredit: realCredit.credit,
+      },
+    });
+
+    if (log) {
+      const updated = (await this.generateHelperService.updateUsedCreditSuccess(
         userId,
         body.organizationId,
         body.projectId,
         'credit',
-        failedLog.usedCredit,
+        realCredit.credit,
+        log.usedCredit,
       )) as ProjectMemberCredit;
-
       const usedCredit =
         updated.usedCreditAllowance + updated.holdCreditAllowance;
       await this.redis.set(
@@ -482,15 +446,125 @@ export class VideoProcessor extends WorkerHost {
         'EX',
         60 * 60,
       );
-      await this.galleryRepo.updateMany({
-        where: { taskId },
-        data: {
-          genneratedStatus: 'FAILED',
-        },
-      });
-
-      throw error;
     }
+
+    await this.updateTaskStatus(taskId, {
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+    });
+    await this.publishToCore(clientId, 'worker:video-complete', {
+      taskId,
+      success: true,
+      timestamp: new Date().toISOString(),
+      type: 'video',
+      projectId: body.projectId,
+    });
+    this.logger.log(`🎉 Job ${taskId} completed!`);
+  }
+
+  /** fail path เดิม (เคยอยู่ใน catch ของ process) — สถานะ failed, แจ้ง core, คืนเครดิต, gallery FAILED */
+  private async failTask(
+    ctx: Pick<VideoTaskContext, 'taskId' | 'clientId' | 'body' | 'userId'>,
+    err: Error,
+  ): Promise<void> {
+    const { taskId, clientId, body, userId } = ctx;
+    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
+    this.logger.error(`❌ Task ${taskId} failed: ${err.message}`, err.stack);
+
+    await this.updateTaskStatus(taskId, {
+      status: 'failed',
+      failedAt: new Date().toISOString(),
+      error: err.message,
+    });
+    await this.publishToCore(clientId, 'worker:video-error', {
+      taskId,
+      error: err.message,
+      timestamp: new Date().toISOString(),
+      type: 'video',
+      projectId: body.projectId,
+      message: err.message,
+    });
+    await this.logrepo.updateMany({
+      where: { taskId },
+      data: {
+        status: 'failed',
+      },
+    });
+    const failedLog = await this.logrepo.findOne({
+      where: { taskId },
+    });
+    const updated = (await this.generateHelperService.updateUsedCreditFail(
+      userId,
+      body.organizationId,
+      body.projectId,
+      'credit',
+      failedLog.usedCredit,
+    )) as ProjectMemberCredit;
+
+    const usedCredit =
+      updated.usedCreditAllowance + updated.holdCreditAllowance;
+    await this.redis.set(
+      redisVideoCacheKey,
+      usedCredit.toString(),
+      'EX',
+      60 * 60,
+    );
+    await this.galleryRepo.updateMany({
+      where: { taskId },
+      data: {
+        genneratedStatus: 'FAILED',
+      },
+    });
+  }
+
+  /** fail ที่เกิดหลัง submit (timeout) — ใช้ lock เดียวกับ finalize กันคืนเครดิตซ้ำ */
+  private async failOnce(ctx: VideoTaskContext, err: Error): Promise<void> {
+    const acquired = await this.redis.set(
+      videoFinalKey(ctx.taskId),
+      '1',
+      'EX',
+      VIDEO_CTX_TTL_SEC,
+      'NX',
+    );
+    if (acquired === null) return;
+    try {
+      await this.failTask(ctx, err);
+    } finally {
+      await this.redis.del(videoCtxKey(ctx.taskId));
+    }
+  }
+
+  private async loadCtx(taskId: string): Promise<VideoTaskContext | null> {
+    const raw = await this.redis.get(videoCtxKey(taskId));
+    return raw ? (JSON.parse(raw) as VideoTaskContext) : null;
+  }
+
+  private async fetchProviderStatus(
+    ctx: VideoTaskContext,
+  ): Promise<ProviderVideoResult> {
+    const authHeader = ctx.authToken.startsWith('Bearer ')
+      ? ctx.authToken
+      : `Bearer ${ctx.authToken}`;
+    const res = await axios.get(`${ctx.statusBaseUrl}/${ctx.videoTaskId}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader,
+      },
+      httpsAgent: this.agent,
+    });
+    return { status: String(res.data?.status ?? ''), data: res.data };
+  }
+
+  private async schedulePollCheck(taskId: string): Promise<void> {
+    await this.videoQueue.add(
+      VIDEO_JOB_POLL_CHECK,
+      { taskId },
+      {
+        delay: VIDEO_POLL_INTERVAL_MS,
+        removeOnComplete: { age: 24 * 60 * 60 },
+        removeOnFail: { age: 24 * 60 * 60 },
+      },
+    );
   }
 
   /**
@@ -531,30 +605,6 @@ export class VideoProcessor extends WorkerHost {
     }
   }
 
-  private buildGenerateConfig(body: {
-    ratio: string;
-    width: number;
-    height: number;
-    prompt: string;
-    duration: number;
-    modelName: string;
-    imageCount: number;
-    resolution: string;
-    generateAudio: boolean;
-  }) {
-    return {
-      ...(body?.width && { width: body?.width }),
-      ...(body?.height && { height: body?.height }),
-      ...(body?.ratio && { ratio: body?.ratio }),
-      ...(body?.imageCount && { imageCount: body?.imageCount }),
-      ...(body?.resolution && { resolution: body?.resolution }),
-      ...(body?.modelName && { modelName: body?.modelName }),
-      ...(body?.duration && { duration: body?.duration }),
-      content: body?.prompt,
-      ...(body?.generateAudio && { generateAudio: body?.generateAudio }),
-    };
-  }
-
   // แยก builder แต่ละ model เป็น private method
   private readonly payloadBuilders: Record<
     string,
@@ -564,7 +614,11 @@ export class VideoProcessor extends WorkerHost {
     seedance2: this.buildSeedance2Payload.bind(this),
   };
 
-  private async buildPayload(body: RequestVideoGenerateDto, sendConfig: any) {
+  private async buildPayload(
+    body: RequestVideoGenerateDto,
+    sendConfig: any,
+    taskId: string,
+  ) {
     const builder = this.payloadBuilders[sendConfig?.type];
     if (!builder) {
       // ไม่มี builder = config ใน master_model_type ผิด retry ไปก็ไม่หาย
@@ -572,7 +626,10 @@ export class VideoProcessor extends WorkerHost {
         `Unsupported video sendConfig.type: "${sendConfig?.type}"`,
       );
     }
-    return builder(body, sendConfig);
+    const payload = await builder(body, sendConfig);
+    // ไม่ได้ตั้ง BYTEPLUS_CALLBACK_* → null → ไม่ใส่ field (ได้ผลจาก poll-check อย่างเดียว)
+    const callbackUrl = buildByteplusVideoCallbackUrl(taskId);
+    return callbackUrl ? { ...payload, callback_url: callbackUrl } : payload;
   }
 
   /**

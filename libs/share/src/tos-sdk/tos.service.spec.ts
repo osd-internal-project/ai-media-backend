@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { Readable } from 'stream';
 import { TosClient } from '@volcengine/tos-sdk';
 import { IMMUTABLE_CACHE_CONTROL, TosService } from './tos.service';
@@ -80,5 +81,87 @@ describe('TosService', () => {
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     const service = new TosService();
     expect(() => service.getPreSignedPutUrl('b', 'k')).toThrow('bad key');
+  });
+  describe('createPostPolicy', () => {
+    beforeEach(() => {
+      process.env.TOS_ACCESS_KEY = 'AK';
+      process.env.TOS_SECRET_KEY = 'SK';
+      process.env.TOS_REGION = 'ap-southeast-3';
+      process.env.TOS_ENDPOINT = 'tos-ap-southeast-3.bytepluses.com';
+      process.env.TOS_BUCKET = 'bucket';
+    });
+
+    const decode = (policy: string) =>
+      JSON.parse(Buffer.from(policy, 'base64').toString()) as {
+        conditions: unknown[];
+      };
+
+    it('scopes the policy to a key prefix, size and type — without pinning one key', () => {
+      const { url, fields } = new TosService().createPostPolicy({
+        keyPrefix: 'organize/o/p/upload/',
+        contentTypePrefix: 'image/',
+        maxBytes: 500,
+        expiresSec: 3600,
+      });
+      expect(url).toBe('https://bucket.tos-ap-southeast-3.bytepluses.com');
+      const { conditions } = decode(fields.policy);
+      expect(conditions).toEqual(
+        expect.arrayContaining([
+          { bucket: 'bucket' },
+          ['starts-with', '$key', 'organize/o/p/upload/'],
+          ['content-length-range', 1, 500],
+          ['starts-with', '$Content-Type', 'image/'],
+        ]),
+      );
+      expect(conditions).not.toContainEqual(
+        expect.objectContaining({ key: expect.anything() }),
+      );
+    });
+
+    it('signs the policy with the TOS4 derived key', () => {
+      const { fields } = new TosService().createPostPolicy({
+        keyPrefix: 'k/',
+        contentTypePrefix: 'image/',
+        maxBytes: 1,
+        expiresSec: 60,
+      });
+      const date8 = fields['x-tos-date'].slice(0, 8);
+      const h = (k: string | Buffer, d: string) =>
+        createHmac('sha256', k).update(d).digest();
+      const key = h(h(h(h('SK', date8), 'ap-southeast-3'), 'tos'), 'request');
+      expect(fields['x-tos-signature']).toBe(
+        createHmac('sha256', key).update(fields.policy).digest('hex'),
+      );
+      expect(fields['x-tos-credential']).toBe(
+        `AK/${date8}/ap-southeast-3/tos/request`,
+      );
+    });
+
+    it('pins the callback in the policy and lets the browser add per-file vars', () => {
+      const { fields } = new TosService().createPostPolicy({
+        keyPrefix: 'k/',
+        contentTypePrefix: 'image/',
+        maxBytes: 1,
+        expiresSec: 60,
+        callback: { url: 'https://w/upload/callback', body: '{"key":${object}}' },
+      });
+      const cb = JSON.parse(
+        Buffer.from(fields['x-tos-callback'], 'base64').toString(),
+      );
+      expect(cb).toEqual({
+        callbackUrl: 'https://w/upload/callback',
+        callbackBody: '{"key":${object}}',
+        callbackBodyType: 'application/json',
+      });
+      const { conditions } = decode(fields.policy);
+      expect(conditions).toContainEqual({
+        'x-tos-callback': fields['x-tos-callback'],
+      });
+      expect(conditions).toContainEqual([
+        'starts-with',
+        '$x-tos-callback-var',
+        '',
+      ]);
+    });
   });
 });

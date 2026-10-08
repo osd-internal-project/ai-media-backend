@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { TosClient } from '@volcengine/tos-sdk';
 import { Injectable } from '@nestjs/common';
 import { handleError } from './handleError';
@@ -8,6 +9,26 @@ export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 export interface PutObjectOptions {
   contentType?: string;
   cacheControl?: string;
+}
+
+export interface PostPolicyInput {
+  /** ทุก key ที่อัปด้วย policy นี้ต้องขึ้นต้นด้วย prefix นี้ */
+  keyPrefix: string;
+  /** เช่น `image/` — TOS ปฏิเสธไฟล์ที่ Content-Type ไม่ขึ้นต้นด้วยค่านี้ */
+  contentTypePrefix: string;
+  maxBytes: number;
+  expiresSec: number;
+  /** TOS เรียก URL นี้แบบ sync หลังเก็บไฟล์ แล้วส่ง response กลับให้ browser */
+  callback?: { url: string; body: string; bodyType?: string };
+}
+
+export interface PostPolicy {
+  /** URL ของ bucket สำหรับ form POST */
+  url: string;
+  /** form field ที่ต้องแนบทุกครั้ง (ไม่รวม key / Content-Type / file) */
+  fields: Record<string, string>;
+  keyPrefix: string;
+  expiresAt: string;
 }
 
 /** อ่านค่าตัวเลขจาก env — ไม่ได้ตั้งหรือไม่ใช่ตัวเลขให้คืน undefined เพื่อใช้ default ของ SDK */
@@ -273,6 +294,68 @@ export class TosService {
       handleError(error);
       throw error;
     }
+  }
+
+  /**
+   * POST policy สำหรับ browser form upload ใช้ซ้ำได้หลายไฟล์ภายใน `keyPrefix`
+   * sign แบบ TOS4 เหมือน SDK `calculatePostSignature` แต่ไม่ล็อก key ตรงตัว (SDK บังคับ eq key)
+   */
+  createPostPolicy(input: PostPolicyInput): PostPolicy {
+    const accessKeyId = process.env.TOS_ACCESS_KEY!;
+    const secret = process.env.TOS_SECRET_KEY!;
+    const region = process.env.TOS_REGION!;
+    const now = new Date();
+    const dateStr = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const date8 = dateStr.slice(0, 8);
+    const credential = [accessKeyId, date8, region, 'tos', 'request'].join('/');
+    const expiresAt = new Date(now.valueOf() + input.expiresSec * 1000).toISOString();
+
+    const fields: Record<string, string> = {
+      'x-tos-algorithm': 'TOS4-HMAC-SHA256',
+      'x-tos-date': dateStr,
+      'x-tos-credential': credential,
+    };
+    const conditions: unknown[] = [
+      { bucket: this.bucket },
+      ['starts-with', '$key', input.keyPrefix],
+      ['content-length-range', 1, input.maxBytes],
+      ['starts-with', '$Content-Type', input.contentTypePrefix],
+    ];
+    if (input.callback) {
+      fields['x-tos-callback'] = Buffer.from(
+        JSON.stringify({
+          callbackUrl: input.callback.url,
+          callbackBody: input.callback.body,
+          callbackBodyType: input.callback.bodyType ?? 'application/json',
+        }),
+      ).toString('base64');
+      // ค่าต่อไฟล์ (uid, ชื่อ ฯลฯ) browser ใส่เองผ่าน x-tos-callback-var
+      conditions.push(['starts-with', '$x-tos-callback-var', '']);
+    }
+    for (const [name, value] of Object.entries(fields)) {
+      conditions.push({ [name]: value });
+    }
+
+    const policy = Buffer.from(
+      JSON.stringify({ expiration: expiresAt, conditions }),
+    ).toString('base64');
+    const hmac = (key: string | Buffer, data: string) =>
+      createHmac('sha256', key).update(data).digest();
+    const signingKey = hmac(
+      hmac(hmac(hmac(secret, date8), region), 'tos'),
+      'request',
+    );
+    fields.policy = policy;
+    fields['x-tos-signature'] = createHmac('sha256', signingKey)
+      .update(policy)
+      .digest('hex');
+
+    return {
+      url: `https://${this.bucket}.${process.env.TOS_ENDPOINT}`,
+      fields,
+      keyPrefix: input.keyPrefix,
+      expiresAt,
+    };
   }
 
   /**

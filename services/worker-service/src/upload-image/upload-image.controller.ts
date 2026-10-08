@@ -10,6 +10,8 @@ import {
   UploadedFile,
   UseInterceptors,
   Logger,
+  Query,
+  HttpCode,
 } from '@nestjs/common';
 import { FileInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import {
@@ -17,10 +19,31 @@ import {
   PresignUploadInput,
   UploadImageService,
 } from './upload-image.service';
+import {
+  UploadCallbackBody,
+  UploadPolicyQuery,
+  UploadPolicyService,
+} from './upload-policy.service';
 
 @Controller('upload')
 export class UploadImageController {
-  constructor(private readonly uploadImageService: UploadImageService) {}
+  constructor(
+    private readonly uploadImageService: UploadImageService,
+    private readonly uploadPolicyService: UploadPolicyService,
+  ) {}
+
+  /** PostObject policy ใช้ซ้ำได้ทั้งชั่วโมงภายใน prefix ของ project / prompt guide */
+  @Get('policy')
+  getUploadPolicy(@Query() query: UploadPolicyQuery) {
+    return this.uploadPolicyService.createPolicy(query);
+  }
+
+  /** TOS เรียกหลังเก็บไฟล์ — response ถูกส่งต่อให้ browser ใน POST เดียวกัน */
+  @Post('callback')
+  @HttpCode(200)
+  handleUploadCallback(@Body() body: UploadCallbackBody) {
+    return this.uploadPolicyService.handleCallback(body);
+  }
 
   @Post()
   @UseInterceptors(FileInterceptor('file'))

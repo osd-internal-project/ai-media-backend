@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { Request } from 'express';
 
 export * from './crypto.util';
+export * from './byteplus-callback.util';
 
 const { Decimal } = Prisma;
 

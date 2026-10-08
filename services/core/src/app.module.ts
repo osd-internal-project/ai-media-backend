@@ -36,6 +36,7 @@ import { BrandKitDetailTypeModule } from './brand-kit-detail-type/brand-kit-deta
 import { ContactSaleLogModule } from './contact-sale-log/contact-sale-log.module';
 import { WorkflowModule } from './workflow/workflow.module';
 import { PhotoEventModule } from './photo-event/photo-event.module';
+import { ByteplusWebhookModule } from './byteplus-webhook/byteplus-webhook.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { PhotoEventModule } from './photo-event/photo-event.module';
     ContactSaleLogModule,
     WorkflowModule,
     PhotoEventModule,
+    ByteplusWebhookModule,
   ],
   controllers: [InventoryController],
   providers: [InventoryService],
