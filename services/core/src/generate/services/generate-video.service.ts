@@ -7,10 +7,13 @@ import {
   QUEUE_NAME_VDO,
   RequestVideoGenerateDto,
   MasterModelTypeDto,
+  VIDEO_INFLIGHT_DATA_KEY,
+  VIDEO_INFLIGHT_KEY,
+  VideoInflightData,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import {
@@ -21,6 +24,8 @@ import { GenerateHelperService } from './generate-helper.service';
 
 @Injectable()
 export class GenerateVideoService extends BaseGenerateService {
+  private readonly logger = new Logger(GenerateVideoService.name);
+
   constructor(
     generateHelperService: GenerateHelperService,
     galleryRepo: GalleryRepository,
@@ -54,6 +59,37 @@ export class GenerateVideoService extends BaseGenerateService {
 
   protected getCreditCacheKeyPrefix(): string {
     return 'video_used';
+  }
+
+  /**
+   * ลงทะเบียนงานให้ sweeper ของ worker ปิดได้ถ้าไม่มีใครปิด
+   * ห้าม throw — job เข้าคิวไปแล้ว ถ้า throw ตรงนี้ catch ของ base จะคืน hold เครดิตทั้งที่งานยังวิ่ง
+   */
+  protected async afterEnqueue(
+    taskId: string,
+    clientId: string,
+    userId: string,
+    body: RequestVideoGenerateDto,
+  ): Promise<void> {
+    const data: VideoInflightData = {
+      clientId,
+      userId,
+      organizationId: body.organizationId,
+      projectId: body.projectId,
+    };
+    try {
+      await this.redis
+        .multi()
+        .zadd(VIDEO_INFLIGHT_KEY, Date.now(), taskId)
+        .hset(VIDEO_INFLIGHT_DATA_KEY, taskId, JSON.stringify(data))
+        .exec();
+    } catch (error) {
+      this.logger.error(
+        `[video][${taskId}] register inflight failed — sweeper will not cover this task: ${
+          (error as Error).message
+        }`,
+      );
+    }
   }
 
   protected calculateCreditToken(body: RequestVideoGenerateDto): number {

@@ -116,6 +116,16 @@ export abstract class BaseGenerateService {
   // ── Can override (have defaults) ─────────────────────────────────────────────
 
   /** Redis cache key suffix; override to 'video_used' for video */
+  /** เรียกหลัง job เข้าคิวสำเร็จ — default ไม่ทำอะไร (video ใช้ลงทะเบียนงานให้ sweeper) */
+  protected async afterEnqueue(
+    _taskId: string,
+    _clientId: string,
+    _userId: string,
+    _body: any,
+  ): Promise<void> {
+    return;
+  }
+
   protected getCreditCacheKeyPrefix(): string {
     return 'credit_used';
   }
@@ -363,6 +373,8 @@ export abstract class BaseGenerateService {
           removeOnFail: 50,
         },
       );
+
+      await this.afterEnqueue(taskId, clientId, user.userId, body);
 
       await this.redis.set(
         `task:${taskId}`,

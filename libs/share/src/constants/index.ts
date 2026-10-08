@@ -30,6 +30,22 @@ export const MAX_CONCURRENT_TASKS_PER_TYPE = 10;
 /** ชื่อ job ใน QUEUE_NAME_VDO นอกจากงาน submit (ชื่อเดียวกับคิว) */
 export const VIDEO_JOB_FINALIZE = 'video-finalize';
 export const VIDEO_JOB_POLL_CHECK = 'video-poll-check';
+export const VIDEO_JOB_SWEEP = 'video-sweep';
+
+/**
+ * งาน video ที่เข้าคิวแล้วแต่ยังไม่ปิด — core เพิ่มตอนเข้าคิว, worker ลบตอนจบ/fail
+ * sweeper ใช้หางานที่ไม่มีใครปิด (worker ไม่หยิบ / stalled / poll-check ขาด)
+ * ZSET score = เวลาเข้าคิว (ms) · HASH เก็บข้อมูลที่ fail path ต้องใช้
+ */
+export const VIDEO_INFLIGHT_KEY = 'video:inflight';
+export const VIDEO_INFLIGHT_DATA_KEY = 'video:inflight:data';
+
+export interface VideoInflightData {
+  clientId: string;
+  userId: string;
+  organizationId: string;
+  projectId: string;
+}
 
 /** สถานะของ BytePlus Ark task ที่จบแล้ว — ไม่เปลี่ยนอีก */
 export const BYTEPLUS_TERMINAL_STATUSES = [
