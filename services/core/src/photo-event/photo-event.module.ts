@@ -11,6 +11,7 @@ import { PublicRateLimitGuard } from '../public-community/public-rate-limit.guar
 import { WebsocketModule } from '../websocket/websocket.module';
 import { PhotoEventController } from './photo-event.controller';
 import { PhotoEventAccessService } from './photo-event-access.service';
+import { PhotoEventEnabledGuard } from './photo-event-enabled.guard';
 import { PhotoEventEventsService } from './photo-event-events.service';
 import { PhotoEventGenerationsService } from './photo-event-generations.service';
 import { PhotoEventPhotosService } from './photo-event-photos.service';
@@ -34,6 +35,7 @@ import { PublicPhotoEventService } from './public-photo-event.service';
     PrismaTransactionService,
     PublicRateLimitGuard,
     PhotoEventAccessService,
+    PhotoEventEnabledGuard,
     PhotoEventViewService,
     PhotoEventTemplatesService,
     PhotoEventPhotosService,

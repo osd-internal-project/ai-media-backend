@@ -43,17 +43,26 @@ describe('VideoStorageService', () => {
     expect(tos.createVideoThumbnail).toHaveBeenCalledWith(
       'bucket',
       expect.stringContaining('.mp4'),
-      expect.stringContaining('.png'),
+      expect.stringContaining('.jpg'),
       1000,
-      'png',
+      'jpg',
+      640,
     );
     expect(tos.putObject).not.toHaveBeenCalled();
   });
 
-  it('keeps the original object naming', async () => {
+  it('names the thumbnail after the video id so concurrent jobs never collide', async () => {
     const result = await service.storeVideoWithThumbnail(input);
     expect(result.file).toMatch(/^\d+-[0-9a-f-]+\.mp4$/);
-    expect(result.thumbnail).toMatch(/^thumb-\d+\.png$/);
+    expect(result.thumbnail).toBe(`thumb-${result.file.replace(/\.mp4$/, '')}.jpg`);
+  });
+
+  it('two videos stored in the same millisecond get different thumbnails', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    const a = await service.storeVideoWithThumbnail(input);
+    const b = await service.storeVideoWithThumbnail(input);
+    jest.restoreAllMocks();
+    expect(a.thumbnail).not.toBe(b.thumbnail);
   });
 
   it('fetch fails: surfaces the error so the job is marked failed', async () => {
@@ -70,9 +79,9 @@ describe('VideoStorageService', () => {
     tos.fetchObject.mockReturnValue(new Promise(() => undefined));
     const pending = service.storeVideoWithThumbnail(input);
     // timer ของ fetch ถูกสร้างแบบ sync ตอนเรียก — jest 29.0 ยังไม่มี advanceTimersByTimeAsync
-    jest.advanceTimersByTime(30_000);
+    jest.advanceTimersByTime(90_000);
     jest.useRealTimers();
-    await expect(pending).rejects.toThrow('timed out after 30000ms');
+    await expect(pending).rejects.toThrow('timed out after 90000ms');
   });
 
   it('snapshot fails: removes the stored video and fails the job', async () => {

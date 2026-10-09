@@ -8,12 +8,14 @@ import {
   Put,
   Query,
   UploadedFiles,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { CreateGenerationDto } from './dto/create-generation.dto';
 import { SetTemplatesDto } from './dto/set-templates.dto';
 import { UploadPhotosDto } from './dto/upload-photos.dto';
+import { PhotoEventEnabledGuard } from './photo-event-enabled.guard';
 import {
   PHOTO_EVENT_DEFAULT_PROMPT_TAIL,
   PHOTO_EVENT_MAX_FILE_BYTES,
@@ -24,6 +26,7 @@ import { PhotoEventPhotosService } from './photo-event-photos.service';
 import { PhotoEventTemplatesService } from './photo-event-templates.service';
 
 @Controller('projects/:projectId/photo-event')
+@UseGuards(PhotoEventEnabledGuard)
 export class PhotoEventController {
   constructor(
     private readonly templatesService: PhotoEventTemplatesService,

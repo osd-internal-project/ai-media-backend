@@ -29,7 +29,16 @@ interface DreamactorProcessJob {
   statusBaseUrl: string;
   sendApi?: string;
   sendConfig?: { type: string; [k: string]: unknown };
+  /** task id จริงของ provider — ตั้งหลัง submit สำเร็จ ใช้กันส่งซ้ำตอน retry */
+  providerTaskId?: string;
+  submittedAt?: number;
 }
+
+const DREAMACTOR_POLL_INTERVAL_MS = 10_000;
+/** เท่ากับ omnihuman — ความยาวงานขึ้นกับวิดีโออ้างอิง */
+const DREAMACTOR_POLL_TIMEOUT_MS = 30 * 60 * 1000;
+const DREAMACTOR_FINAL_TTL_SEC = 24 * 60 * 60;
+const dreamactorFinalKey = (taskId: string) => `dreamactor-final:${taskId}`;
 
 interface BytepluseResponse {
   id: string;
@@ -105,73 +114,25 @@ export class DreamactorProcessor extends WorkerHost {
     this.logger.error(`❌ Job ${job.id} failed: ${error.message}`);
   }
 
-  async process(job: any, token?: string): Promise<any> {
-    const {
-      taskId,
-      clientId,
-      body,
-      userId,
-      reqKey,
-      statusBaseUrl,
-      sendApi,
-      sendConfig,
-    } = job.data as DreamactorProcessJob;
+  // `any` ตาม video.service — bullmq มี 2 สำเนา (root + worker) ทำให้ Job ของ WorkerHost ไม่ตรงกับที่ import
+  async process(job: any, token?: string): Promise<unknown> {
+    const data = job.data as DreamactorProcessJob;
+    const { taskId, clientId, body, userId } = data;
     console.log(`taskId`, taskId, clientId, body, userId);
 
-    this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
-    const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
+    this.logger.log(
+      `👨‍🍳 Processing job: ${job.id}, Task: ${taskId} attempt=${
+        job.attemptsMade + 1
+      }`,
+    );
+    if (await this.redis.exists(dreamactorFinalKey(taskId))) {
+      this.logger.log(`Task ${taskId} already finalized — skip`);
+      return { skipped: 'already finalized' };
+    }
 
+    let finalizeError: Error | null;
     try {
-      // 0. Call external API (CVSync2AsyncSubmitTask) here so queue concurrency limits simultaneous API calls.
-      // Backward-compat: old jobs already have dreamactorTaskId from core; new jobs need the API call.
-      let dreamactorTaskId: string = (job.data as DreamactorProcessJob)
-        .dreamactorTaskId;
-      if (sendApi) {
-        const modelDetail = { modelType: reqKey };
-        const builder = this.payloadBuilders[sendConfig?.type ?? 'dreamactor'];
-        if (!builder) {
-          // ไม่มี builder = config ใน master_model_type ผิด retry ไปก็ไม่หาย
-          throw new UnrecoverableError(
-            `Unsupported dreamactor sendConfig.type: "${sendConfig?.type}"`,
-          );
-        }
-        const submitPayload = await builder(body, modelDetail);
-        // Auth/content-type/cookie and the full action-versioned URL all come from
-        // the model's DB config now (LLM gateway), so no request signing here and
-        // no axios `params` (the query string is already baked into `sendApi`).
-        const headers = this.buildGatewayHeaders(sendConfig);
-        let apiRes: any;
-        try {
-          apiRes = await axios.post(sendApi, submitPayload, {
-            headers,
-            httpsAgent: this.agent,
-          });
-          await this.generateHelperService.logAudit(
-            userId,
-            'CREATE',
-            body,
-            taskId,
-          );
-        } catch (error: any) {
-          // Surface the real API rejection reason. Log the verbose detail
-          // (payload + response) server-side for debugging, but throw only the
-          // clean message. The outer catch owns all failure reporting (status,
-          // event, credit refund, DB rows) — don't duplicate it here.
-          const apiStatus = error.response?.status;
-          const apiBody = error.response?.data;
-          const apiMessage =
-            apiBody?.error?.message ?? apiBody?.message ?? error.message;
-          this.logger.error(
-            `❌ Dreamactor API call failed: API ${apiStatus}: ${apiMessage} | payload=${JSON.stringify(
-              submitPayload,
-            )} | response=${JSON.stringify(apiBody)}`,
-          );
-
-          throw new UnrecoverableError(apiMessage);
-        }
-        dreamactorTaskId = apiRes.data?.data?.task_id ?? dreamactorTaskId;
-        await this.updateTaskStatus(taskId, { dreamactorTaskId });
-      }
+      const { providerTaskId, submittedAt } = await this.submitOnce(job);
 
       // 1. ส่ง event "started" ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:dreamactor-started', {
@@ -186,247 +147,362 @@ export class DreamactorProcessor extends WorkerHost {
         status: 'processing',
         startedAt: new Date().toISOString(),
       });
-      const sleep = (ms: number) =>
-        new Promise((resolve) => setTimeout(resolve, ms));
 
-      while (true) {
-        await this.publishToCore(clientId, 'worker:dreamactor-progress', {
-          taskId,
-          timestamp: new Date().toISOString(),
-          type: 'dreamactor',
-          projectId: body.projectId,
-        });
-        const url = statusBaseUrl;
-        const bodyPayload = {
-          req_key: reqKey,
-          task_id: dreamactorTaskId,
-        };
+      const result = await this.pollUntilTerminal(
+        data,
+        providerTaskId,
+        submittedAt,
+      );
+      finalizeError = await this.finalizeOnce(
+        data,
+        result.status === 'done'
+          ? { videoUrl: result.videoUrl }
+          : { error: new Error(result.message) },
+      );
+    } catch (error) {
+      this.logger.error(
+        `❌ Job ${job.id} failed: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+      finalizeError = await this.finalizeOnce(data, { error: error as Error });
+    }
 
-        // `statusBaseUrl` (= taskPollApi) already carries the model/action/version
-        // query string; auth + cookie come from the model's DB config.
-        const headers = this.buildGatewayHeaders(sendConfig);
+    if (finalizeError) {
+      // ปิดเป็น failed + คืนเครดิตแล้ว — retry จะส่งงาน provider ซ้ำและคืนเครดิตซ้ำ
+      throw new UnrecoverableError(finalizeError.message);
+    }
 
-        const getResult = await axios.post(url, bodyPayload, {
+    this.logger.log(`🎉 Job ${taskId} completed!`);
+
+    return {
+      success: true,
+      taskId,
+      data: {
+        projectId: body.projectId,
+        userId,
+        prompt: body.prompt,
+        imageUrl: '',
+        typeGenerate: 'image',
+        genneratedStatus: 'SUCCESS',
+        status: true,
+        generateConfig: this.buildGenerateConfig({
+          ratio: body.ratio,
+          width: body.width,
+          height: body.height,
+          prompt: body.prompt,
+          duration: +body.duration,
+          modelName: body.model,
+          imageCount: body.maxImages,
+          resolution: body.resolution,
+          generateAudio: false,
+        }),
+      },
+    };
+  }
+
+  /**
+   * ส่งงานให้ provider ครั้งเดียวต่อ job — retry/stalled ที่มี `providerTaskId` แล้วจะ poll ต่อ ไม่ส่งซ้ำ
+   * (`dreamactorTaskId` จาก core อาจเป็นแค่ placeholder จึงใช้แยกไม่ได้)
+   */
+  private async submitOnce(
+    job: Job,
+  ): Promise<{ providerTaskId: string; submittedAt: number }> {
+    const data = job.data as DreamactorProcessJob;
+    const { taskId, body, userId, reqKey, sendApi, sendConfig } = data;
+    if (data.providerTaskId) {
+      this.logger.log(
+        `Task ${taskId}: resume provider task ${data.providerTaskId} (retry/stalled) — no resubmit`,
+      );
+      return {
+        providerTaskId: data.providerTaskId,
+        submittedAt: data.submittedAt ?? Date.now(),
+      };
+    }
+    // Backward-compat: old jobs already have dreamactorTaskId from core; new jobs need the API call.
+    if (!sendApi) {
+      return { providerTaskId: data.dreamactorTaskId, submittedAt: Date.now() };
+    }
+
+    // 0. Call external API (CVSync2AsyncSubmitTask) here so queue concurrency limits simultaneous API calls.
+    const modelDetail = { modelType: reqKey };
+    const builder = this.payloadBuilders[sendConfig?.type ?? 'dreamactor'];
+    if (!builder) {
+      // ไม่มี builder = config ใน master_model_type ผิด retry ไปก็ไม่หาย
+      throw new UnrecoverableError(
+        `Unsupported dreamactor sendConfig.type: "${sendConfig?.type}"`,
+      );
+    }
+    const submitPayload = await builder(body, modelDetail);
+    // Auth/content-type/cookie and the full action-versioned URL all come from
+    // the model's DB config now (LLM gateway), so no request signing here and
+    // no axios `params` (the query string is already baked into `sendApi`).
+    const headers = this.buildGatewayHeaders(sendConfig);
+    let apiRes: any;
+    try {
+      apiRes = await axios.post(sendApi, submitPayload, {
+        headers,
+        httpsAgent: this.agent,
+      });
+      await this.generateHelperService.logAudit(userId, 'CREATE', body, taskId);
+    } catch (error: any) {
+      // Surface the real API rejection reason. Log the verbose detail
+      // (payload + response) server-side for debugging, but throw only the
+      // clean message. process() owns all failure reporting (status,
+      // event, credit refund, DB rows) — don't duplicate it here.
+      const apiStatus = error.response?.status;
+      const apiBody = error.response?.data;
+      const apiMessage =
+        apiBody?.error?.message ?? apiBody?.message ?? error.message;
+      this.logger.error(
+        `❌ Dreamactor API call failed: API ${apiStatus}: ${apiMessage} | payload=${JSON.stringify(
+          submitPayload,
+        )} | response=${JSON.stringify(apiBody)}`,
+      );
+
+      throw new UnrecoverableError(apiMessage);
+    }
+    const providerTaskId: string =
+      apiRes.data?.data?.task_id ?? data.dreamactorTaskId;
+    const submittedAt = Date.now();
+    await this.updateTaskStatus(taskId, { dreamactorTaskId: providerTaskId });
+    await job.updateData({ ...data, providerTaskId, submittedAt });
+    return { providerTaskId, submittedAt };
+  }
+
+  /**
+   * poll ทุก 10s จน provider ตอบ done/failed — GET ล้มชั่วคราวไม่ fail งาน
+   * @throws เมื่อเกิน DREAMACTOR_POLL_TIMEOUT_MS หรือ done แต่ไม่มี video_url
+   */
+  private async pollUntilTerminal(
+    data: DreamactorProcessJob,
+    providerTaskId: string,
+    submittedAt: number,
+  ): Promise<
+    { status: 'done'; videoUrl: string } | { status: 'failed'; message: string }
+  > {
+    const { taskId, clientId, body, reqKey, statusBaseUrl, sendConfig } = data;
+    while (true) {
+      const elapsedMs = Date.now() - submittedAt;
+      if (elapsedMs > DREAMACTOR_POLL_TIMEOUT_MS) {
+        this.logger.warn(
+          `⏱️ Task ${taskId}: no result after ${Math.round(
+            elapsedMs / 1000,
+          )}s — timed out`,
+        );
+        throw new Error('generation timed out');
+      }
+      await this.publishToCore(clientId, 'worker:dreamactor-progress', {
+        taskId,
+        timestamp: new Date().toISOString(),
+        type: 'dreamactor',
+        projectId: body.projectId,
+      });
+      const bodyPayload = {
+        req_key: reqKey,
+        task_id: providerTaskId,
+      };
+
+      // `statusBaseUrl` (= taskPollApi) already carries the model/action/version
+      // query string; auth + cookie come from the model's DB config.
+      const headers = this.buildGatewayHeaders(sendConfig);
+
+      let getResult: any;
+      try {
+        getResult = await axios.post(statusBaseUrl, bodyPayload, {
           headers: headers,
           httpsAgent: this.agent,
         });
-
-        // mockdata
-        // const getResult = {
-        //     data: {
-        //         id: "cgt-2025******-****",
-        //         model: "seedance-1-5-pro-251215",
-        //         status: "succeeded",
-        //         content: {
-        //             video_url: "https://www.aicave.ai/public/api/v1/s3/ai-media-image-vdo/cgt-20260202111751-ncbdf/1770002305718-f543977d-b0e8-456e-b3d1-22b48810efe0.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=LB7kAwp1rgI1g4d3h0Wa%2F20260203%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260203T032016Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=c08d0cda185e086ed197d71c6b76922e62f0b349fa7bf8b2b4cb9069a298e626"
-        //         },
-        //         usage: {
-        //             completion_tokens: 108900,
-        //             total_tokens: 108900
-        //         },
-        //         created_at: 1743414619,
-        //         updated_at: 1743414673,
-        //         seed: 10,
-        //         resolution: "720p",
-        //         ratio: "16:9",
-        //         duration: 5,
-        //         framespersecond: 24,
-        //         service_tier: "default",
-        //         execution_expires_after: 172800,
-        //         generate_audio: true,
-        //         draft: false
-        //     }
-        // }
-        const status = getResult.data.data.status;
-        console.log('status', status);
-        if (status === 'done') {
-          console.log(getResult.data);
-          let videoUrl = '';
-          try {
-            const respData = JSON.parse(getResult.data.data.resp_data);
-            videoUrl = respData.video_url;
-          } catch (e) {
-            console.error('Error parse resp_data', e);
-          }
-
-          console.log('----- task succeeded -----');
-          await this.publishToCore(clientId, 'worker:dreamactor-url-success', {
-            taskId,
-            videoUrl: videoUrl,
-            timestamp: new Date().toISOString(),
-            type: 'dreamactor',
-            projectId: body.projectId,
-          });
-          // const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/dreamactor${body.userId}`;
-          const result = await this.videoStorage.storeVideoWithThumbnail({
-            organizationId: body.organizationId,
-            projectId: body.projectId,
-            typeGenerate: 'dreamactor',
-            sourceUrl: videoUrl,
-          });
-
-          await this.publishToCore(
-            clientId,
-            'worker:dreamactor-upload-success',
-            {
-              taskId,
-              videoUrl: await this.storageUrl.resolveOutputUrl(
-                body.organizationId,
-                body.projectId,
-                'dreamactor',
-                result.file,
-              ),
-              thumbnailUrl: await this.storageUrl.resolveOutputUrl(
-                body.organizationId,
-                body.projectId,
-                'dreamactor',
-                result.thumbnail,
-              ),
-              timestamp: new Date().toISOString(),
-              type: 'dreamactor',
-              projectId: body.projectId,
-            },
-          );
-          // await this.redis.set(
-          //   redisVideoCacheKey,
-          //   usage.total_tokens.toString(),
-          //   'EX',
-          //   24 * 60 * 60,
-          // );
-          await this.galleryRepo.updateMany({
-            where: { taskId: taskId },
-            data: {
-              imageUrl: result.file,
-              resultUrl: [result.file],
-              thumbnailUrl: result.thumbnail,
-              genneratedStatus: 'SUCCESS',
-              // denormalize token จริงจาก log ลง gallery (dual-write)
-              tokenUsed: 0,
-            },
-          });
-          await this.logrepo.updateMany({
-            where: { taskId: taskId },
-            data: { status: 'success', tokenUsed: 0 },
-          });
-          break;
-        } else if (status === 'failed') {
-          console.log('----- task failed -----');
-          await this.logrepo.updateMany({
-            where: { taskId },
-            data: {
-              status: 'failed',
-            },
-          });
-          const failedLog = await this.logrepo.findOne({
-            where: { taskId },
-          });
-          const updated = await this.generateHelperService.updateUsedCreditFail(
-            userId,
-            body.organizationId,
-            body.projectId,
-            'credit',
-            failedLog.usedCredit,
-          );
-          const usedCredit =
-            updated.usedCreditAllowance + updated.holdCreditAllowance;
-          await this.redis.set(
-            redisVideoCacheKey,
-            usedCredit.toString(),
-            'EX',
-            60 * 60,
-          );
-          break;
-        } else {
-          console.log(
-            `Current status: ${status}, Retrying after 10 seconds...`,
-          );
-          await sleep(10_000);
-        }
+      } catch (error) {
+        this.logger.warn(
+          `Task ${taskId}: status request failed — ${
+            (error as Error).message
+          }, retrying after 10 seconds...`,
+        );
+        await this.wait(DREAMACTOR_POLL_INTERVAL_MS);
+        continue;
       }
 
-      // 4. อัพเดทสถานะเป็น completed
-      await this.updateTaskStatus(taskId, {
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-      });
+      const status = getResult.data?.data?.status;
+      console.log('status', status);
+      if (status === 'done') {
+        console.log(getResult.data);
+        let videoUrl = '';
+        try {
+          const respData = JSON.parse(getResult.data.data.resp_data);
+          videoUrl = respData.video_url;
+        } catch (e) {
+          console.error('Error parse resp_data', e);
+        }
+        if (!videoUrl) throw new Error('Provider returned no video_url');
+        console.log('----- task succeeded -----');
+        return { status: 'done', videoUrl };
+      }
+      if (status === 'failed') {
+        console.log('----- task failed -----');
+        this.logger.warn(
+          `Task ${taskId}: provider failed response=${JSON.stringify(
+            getResult.data,
+          )}`,
+        );
+        return { status: 'failed', message: 'DreamActor generation failed' };
+      }
+      console.log(`Current status: ${status}, Retrying after 10 seconds...`);
+      await this.wait(DREAMACTOR_POLL_INTERVAL_MS);
+    }
+  }
 
-      // 5. ส่ง event "complete" ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:dreamactor-complete', {
-        taskId,
-        success: true,
-        timestamp: new Date().toISOString(),
-        type: 'dreamactor',
-        projectId: body.projectId,
-      });
-
-      this.logger.log(`🎉 Job ${taskId} completed!`);
-
-      return {
-        success: true,
-        taskId,
-        data: {
-          projectId: body.projectId,
-          userId,
-          prompt: body.prompt,
-          imageUrl: '',
-          typeGenerate: 'image',
-          genneratedStatus: 'SUCCESS',
-          status: true,
-          generateConfig: this.buildGenerateConfig({
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
-            prompt: body.prompt,
-            duration: +body.duration,
-            modelName: body.model,
-            imageCount: body.maxImages,
-            resolution: body.resolution,
-            generateAudio: false,
-          }),
-        },
-      };
-    } catch (error: any) {
-      await this.generateHelperService.logError(
-        userId,
-        error.message,
-        error.stack,
-        body,
+  /**
+   * ปิดงานครั้งเดียวต่อ taskId (lock เดียวกันทั้ง success/fail) — กันตัด/คืนเครดิตซ้ำเมื่อ job ถูก retry/stalled
+   * @returns error ที่ทำให้งานจบแบบ failed หรือ null เมื่อสำเร็จ/ปิดไปแล้ว
+   */
+  private async finalizeOnce(
+    data: DreamactorProcessJob,
+    outcome: { videoUrl: string } | { error: Error },
+  ): Promise<Error | null> {
+    const acquired = await this.redis.set(
+      dreamactorFinalKey(data.taskId),
+      '1',
+      'EX',
+      DREAMACTOR_FINAL_TTL_SEC,
+      'NX',
+    );
+    if (acquired === null) {
+      this.logger.log(`Task ${data.taskId} already finalized — skip`);
+      return null;
+    }
+    const error =
+      'error' in outcome
+        ? outcome.error
+        : await this.completeTask(data, outcome.videoUrl).then(
+            () => null,
+            // เก็บไฟล์/อัปเดต DB ล้มหลังได้ lock — ต้องปิดเป็น failed เอง ไม่งั้นค้าง processing
+            (err: Error) => err,
+          );
+    if (!error) return null;
+    try {
+      await this.failTask(data, error);
+    } catch (failError) {
+      this.logger.error(
+        `❌ Task ${data.taskId}: fail path itself failed — ${
+          (failError as Error).message
+        }`,
+        (failError as Error).stack,
       );
+    }
+    return error;
+  }
 
-      // อัพเดทสถานะเป็น failed
-      await this.updateTaskStatus(taskId, {
+  /** success path เดิมจาก loop polling — เขียน DB ก่อนแจ้ง front ว่า upload สำเร็จ (เดิมไม่ตัดเครดิตตอนสำเร็จ — คงไว้) */
+  private async completeTask(
+    data: DreamactorProcessJob,
+    videoUrl: string,
+  ): Promise<void> {
+    const { taskId, clientId, body } = data;
+    await this.publishToCore(clientId, 'worker:dreamactor-url-success', {
+      taskId,
+      videoUrl: videoUrl,
+      timestamp: new Date().toISOString(),
+      type: 'dreamactor',
+      projectId: body.projectId,
+    });
+
+    const result = await this.videoStorage.storeVideoWithThumbnail({
+      organizationId: body.organizationId,
+      projectId: body.projectId,
+      typeGenerate: 'dreamactor',
+      sourceUrl: videoUrl,
+    });
+    console.log('returngenerate');
+
+    await this.galleryRepo.updateMany({
+      where: { taskId: taskId },
+      data: {
+        imageUrl: result.file,
+        resultUrl: [result.file],
+        thumbnailUrl: result.thumbnail,
+        genneratedStatus: 'SUCCESS',
+        // denormalize token จริงจาก log ลง gallery (dual-write)
+        tokenUsed: 0,
+      },
+    });
+    await this.logrepo.updateMany({
+      where: { taskId: taskId },
+      data: { status: 'success', tokenUsed: 0 },
+    });
+
+    await this.publishToCore(clientId, 'worker:dreamactor-upload-success', {
+      taskId,
+      videoUrl: await this.storageUrl.resolveOutputUrl(
+        body.organizationId,
+        body.projectId,
+        'dreamactor',
+        result.file,
+      ),
+      thumbnailUrl: await this.storageUrl.resolveOutputUrl(
+        body.organizationId,
+        body.projectId,
+        'dreamactor',
+        result.thumbnail,
+      ),
+      timestamp: new Date().toISOString(),
+      type: 'dreamactor',
+      projectId: body.projectId,
+    });
+
+    // 4. อัพเดทสถานะเป็น completed
+    await this.updateTaskStatus(taskId, {
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+    });
+
+    // 5. ส่ง event "complete" ไปยัง Core Service
+    await this.publishToCore(clientId, 'worker:dreamactor-complete', {
+      taskId,
+      success: true,
+      timestamp: new Date().toISOString(),
+      type: 'dreamactor',
+      projectId: body.projectId,
+    });
+  }
+
+  /** fail path เดียว (provider failed / timeout / throw) — สถานะ failed, แจ้ง front, คืนเครดิต, gallery FAILED */
+  private async failTask(data: DreamactorProcessJob, error: Error) {
+    const { taskId, clientId, body, userId } = data;
+    await this.generateHelperService.logError(
+      userId,
+      error.message,
+      error.stack,
+      body,
+    );
+
+    // อัพเดทสถานะเป็น failed
+    await this.updateTaskStatus(taskId, {
+      status: 'failed',
+      failedAt: new Date().toISOString(),
+      error: error.message,
+    });
+
+    // ส่ง error event ไปยัง Core Service
+    await this.publishToCore(clientId, 'worker:dreamactor-error', {
+      taskId,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      type: 'dreamactor',
+      projectId: body.projectId,
+      message: error.message,
+    });
+
+    // บันทึก error log
+    await this.logrepo.updateMany({
+      where: { taskId },
+      data: {
         status: 'failed',
-        failedAt: new Date().toISOString(),
-        error: error.message,
-      });
-
-      // ส่ง error event ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:dreamactor-error', {
-        taskId,
-        error: error.message,
-        timestamp: new Date().toISOString(),
-        type: 'dreamactor',
-        projectId: body.projectId,
-        message: error.message,
-      });
-
-      // บันทึก error log
-      await this.logrepo.updateMany({
-        where: { taskId },
-        data: {
-          status: 'failed',
-        },
-      });
-      await this.galleryRepo.updateMany({
-        where: { taskId },
-        data: {
-          genneratedStatus: 'FAILED',
-        },
-      });
-
-      const failedLog = await this.logrepo.findOne({
-        where: { taskId },
-      });
+      },
+    });
+    const failedLog = await this.logrepo.findOne({
+      where: { taskId },
+    });
+    if (failedLog) {
       const updated = await this.generateHelperService.updateUsedCreditFail(
         userId,
         body.organizationId,
@@ -437,13 +513,29 @@ export class DreamactorProcessor extends WorkerHost {
       const usedCredit =
         updated.usedCreditAllowance + updated.holdCreditAllowance;
       await this.redis.set(
-        redisVideoCacheKey,
+        this.creditCacheKey(data),
         usedCredit.toString(),
         'EX',
         60 * 60,
       );
-      throw error; // Stop retrying by not throwing error
+    } else {
+      this.logger.warn(`Task ${taskId}: no log row — credit not refunded`);
     }
+    await this.galleryRepo.updateMany({
+      where: { taskId },
+      data: {
+        genneratedStatus: 'FAILED',
+      },
+    });
+  }
+
+  private creditCacheKey(data: DreamactorProcessJob): string {
+    return `${data.body.organizationId}/${data.body.projectId}/credit_used_${data.userId}`;
+  }
+
+  /** แยกไว้ให้ test ข้ามการรอได้ */
+  private wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

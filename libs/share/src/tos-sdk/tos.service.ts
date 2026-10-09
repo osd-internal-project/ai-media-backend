@@ -156,6 +156,7 @@ export class TosService {
    * data processing (`video/snapshot`) and persist the small image. Only the
    * tiny snapshot bytes pass through this pod, never the full video.
    * @param atMs Snapshot position in milliseconds into the video.
+   * @param width Output width in px (height keeps the aspect ratio).
    * @returns The thumbnail object key.
    * @throws ส่งต่อ error หลัง log ให้ผู้เรียก fail งาน
    */
@@ -165,12 +166,13 @@ export class TosService {
     thumbObjectName: string,
     atMs = 2000,
     format: 'jpg' | 'png' = 'jpg',
+    width = 320,
   ) {
     try {
       const process = `video/snapshot,t_${Math.max(
         0,
         Math.floor(atMs),
-      )},f_${format},w_320`;
+      )},f_${format},w_${width}`;
       const {
         data: { content },
       } = await this.client.getObjectV2({

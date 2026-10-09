@@ -1,3 +1,6 @@
+/** access code ใน `Organization.accessCodes` ที่ super admin ติ๊กเพื่อเปิด Photo Event ให้ org */
+export const PHOTO_EVENT_ACCESS_CODE = 'photo_event';
+
 /** model ที่ kiosk ใช้ generate — ต้องมีแถว active ใน master_model_type */
 export const PHOTO_EVENT_MODEL = 'seedream-5-0-260128';
 

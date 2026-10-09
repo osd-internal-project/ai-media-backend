@@ -7,7 +7,10 @@ import { tosConfigs } from 'src/configs';
 const DEFAULT_SNAPSHOT_MS = 1000;
 
 /** รอ TOS fetch ไม่เกินนี้ — omnihuman เคย TLS handshake timeout กับ CDN ของ ByteDance/TikTok */
-const TOS_FETCH_TIMEOUT_MS = 30_000;
+const TOS_FETCH_TIMEOUT_MS = 90_000;
+
+/** ความกว้าง thumbnail — 320 เดิมแตกบนจอ retina ใน gallery */
+const THUMBNAIL_WIDTH = 640;
 
 export interface StoreVideoInput {
   organizationId: string;
@@ -40,9 +43,10 @@ export class VideoStorageService {
    * @throws BadRequestException เมื่อ fetch หรือ snapshot ล้ม
    */
   async storeVideoWithThumbnail(input: StoreVideoInput): Promise<StoredVideo> {
-    const now = Date.now();
-    const file = `${now}-${uuidv4()}.mp4`;
-    const thumbnail = `thumb-${now}.png`;
+    // thumbnail ใช้ id เดียวกับวิดีโอ — เดิม `thumb-${Date.now()}` ชนกันได้เมื่อหลายงานจบใน ms เดียวกัน
+    const id = `${Date.now()}-${uuidv4()}`;
+    const file = `${id}.mp4`;
+    const thumbnail = `thumb-${id}.jpg`;
     const bucket = tosConfigs().tosBucket;
     const videoKey = this.key(input, file);
     const thumbKey = this.key(input, thumbnail);
@@ -129,7 +133,8 @@ export class VideoStorageService {
         videoKey,
         thumbKey,
         atMs,
-        'png',
+        'jpg',
+        THUMBNAIL_WIDTH,
       );
       this.logger.log(
         `🖼️ [snapshot] ${input.typeGenerate} thumbnail by TOS (${
