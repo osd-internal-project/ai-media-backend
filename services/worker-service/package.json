@@ -1,7 +1,7 @@
 {
   "name": "@ai-media/worker-service",
   "description": "",
-  "version": "1.2.03",
+  "version": "1.2.04",
   "author": "",
   "dependencies": {
     "@ai-media/share": "0.0.2",

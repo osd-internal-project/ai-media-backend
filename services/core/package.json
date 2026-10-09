@@ -1,7 +1,7 @@
 {
   "name": "@ai-media/core",
   "description": "",
-  "version": "1.3.02",
+  "version": "1.3.03",
   "author": "",
   "dependencies": {
     "@ai-media/share": "0.0.2",
