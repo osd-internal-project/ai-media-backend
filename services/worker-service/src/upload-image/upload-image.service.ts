@@ -14,7 +14,6 @@ import {
   TosService,
   buildPromptGuideKey,
   buildUploadKey,
-  IMMUTABLE_CACHE_CONTROL,
 } from '@ai-media/share';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
@@ -62,44 +61,6 @@ export class UploadImageService {
     private readonly storageUrl: StorageUrlService,
   ) {}
 
-  async uploadImage(
-    userId: string,
-    index: number,
-    projectId: string,
-    generateType: 'image' | 'video',
-    file: Express.Multer.File,
-    uid: string,
-    organizationId: string,
-  ) {
-    const bucketname = tosConfigs().tosBucket;
-    const ext = path.extname(file.originalname);
-    const imagePath = buildUploadKey(organizationId, projectId, uid, ext);
-    await this.tosService.putObject(bucketname, imagePath, file.buffer, {
-      contentType: file.mimetype,
-      cacheControl: IMMUTABLE_CACHE_CONTROL,
-    });
-    await this.refImageRepository.create({
-      data: {
-        uid: uid,
-        userId: userId,
-        projectId: projectId,
-        index: index,
-        imageName: file.originalname,
-        imagePath: imagePath,
-        imageType: file.mimetype,
-        imageSize: file.size,
-        generateType: generateType,
-        status: 'waiting',
-      },
-    });
-    return {
-      uid: uid,
-      name: file.originalname,
-      url: await this.storageUrl.toDisplayUrl(imagePath),
-      imagePath: imagePath,
-      status: 'waiting', //waiting,processing,done
-    };
-  }
   async deleteImage(uid: string) {
     const bucketName = tosConfigs().tosBucket;
     const file = await this.refImageRepository.findOne({
@@ -171,45 +132,6 @@ export class UploadImageService {
         throw new Error('Failed to get image');
       }
     }
-  }
-  async uploadPromptGuideImage(
-    userId: string,
-    index: number,
-    promptGuideId: string,
-    generateType: 'image' | 'video',
-    file: Express.Multer.File,
-    uid: string,
-    organizationId: string,
-  ) {
-    const bucketname = tosConfigs().tosBucket;
-    const ext = path.extname(file.originalname);
-    const imagePath = buildPromptGuideKey(organizationId, uid, ext);
-    await this.tosService.putObject(bucketname, imagePath, file.buffer, {
-      contentType: file.mimetype,
-      cacheControl: IMMUTABLE_CACHE_CONTROL,
-    });
-    const uploadedImage = await this.promptGuideImageRepository.create({
-      data: {
-        uid: uid,
-        userId: userId,
-        index: index,
-        promptGuideId: +promptGuideId,
-        imageName: file.originalname,
-        imagePath: imagePath,
-        imageType: file.mimetype,
-        imageSize: file.size,
-        generateType: generateType,
-        status: 'waiting',
-      },
-    });
-    Logger.debug(uploadedImage);
-    return {
-      uid: uid,
-      name: file.originalname,
-      url: await this.storageUrl.toDisplayUrl(imagePath),
-      imagePath: imagePath,
-      status: 'waiting', //waiting,processing,done
-    };
   }
   async deletePromptGuideImage(uid: string) {
     const file = await this.promptGuideImageRepository.findOne({

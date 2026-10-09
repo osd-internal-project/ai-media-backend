@@ -28,7 +28,6 @@ import {
   CreditBalanceRepository,
   MasterdataModelTypeRepository,
   MasterModelTypeDto,
-  IMMUTABLE_CACHE_CONTROL,
   describeTosError,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
@@ -570,11 +569,7 @@ export class ImageProcessor extends WorkerHost {
   }
 
   /**
-   * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
-   */
-  /**
-   * เก็บรูปผลลัพธ์ลง TOS: ให้ TOS ดึงจาก URL ของ provider เอง (`fetchObject`) ก่อน
-   * ถ้าล้มค่อยดาวน์โหลดผ่าน pod แล้ว `putObject` — log บอกทุกครั้งว่าใช้ทางไหน
+   * เก็บรูปผลลัพธ์ลง TOS: ให้ TOS ดึงจาก URL ของ provider เอง (`fetchObject`) — ล้ม = throw ให้งาน fail
    */
   private async storeOutputImage(
     bucket: string,
@@ -585,37 +580,24 @@ export class ImageProcessor extends WorkerHost {
     const startedAt = Date.now();
     try {
       await this.tosService.fetchObject(bucket, key, sourceUrl);
-      this.logger.log(
-        `🚀 [fetchObject] image ${label} stored by TOS directly (${
-          Date.now() - startedAt
-        }ms) → ${key}`,
-      );
-      return;
     } catch (error) {
-      this.logger.warn(
-        `⚠️ [fetchObject] image ${label} failed after ${
+      this.logger.error(
+        `❌ [fetchObject] image ${label} failed after ${
           Date.now() - startedAt
-        }ms — ${describeTosError(error)}; falling back to download+upload`,
+        }ms — ${describeTosError(error)}`,
       );
+      throw error;
     }
-
-    const fallbackStartedAt = Date.now();
-    const imgRes = await axios.get<ArrayBuffer>(sourceUrl, {
-      responseType: 'arraybuffer',
-      httpsAgent: this.agent,
-      timeout: 60000,
-    });
-    const buffer = Buffer.from(imgRes.data);
-    await this.tosService.putObject(bucket, key, buffer, {
-      contentType: 'image/jpeg',
-      cacheControl: IMMUTABLE_CACHE_CONTROL,
-    });
     this.logger.log(
-      `📦 [download+upload] image ${label} stored via pod (${
-        buffer.length
-      } bytes, ${Date.now() - fallbackStartedAt}ms) → ${key}`,
+      `🚀 [fetchObject] image ${label} stored by TOS directly (${
+        Date.now() - startedAt
+      }ms) → ${key}`,
     );
   }
+
+  /**
+   * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
+   */
 
   private async publishToCore(clientId: string, event: string, payload: any) {
     // Use the last segment so 'worker:generate:error' → channel 'worker:error' (not 'worker:generate')

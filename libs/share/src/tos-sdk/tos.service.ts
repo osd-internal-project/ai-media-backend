@@ -135,7 +135,7 @@ export class TosService {
    * bytes flow source→TOS and never transit this pod — used to store
    * provider-generated videos without downloading + re-uploading them.
    * @param url Publicly fetchable source URL (must be reachable by TOS).
-   * @throws ส่งต่อ error หลัง log เพื่อให้ผู้เรียก fallback ไปดาวน์โหลดเองได้
+   * @throws ส่งต่อ error หลัง log ให้ผู้เรียก fail งาน
    */
   async fetchObject(bucketName: string, objectName: string, url: string) {
     try {
@@ -157,7 +157,7 @@ export class TosService {
    * tiny snapshot bytes pass through this pod, never the full video.
    * @param atMs Snapshot position in milliseconds into the video.
    * @returns The thumbnail object key.
-   * @throws ส่งต่อ error หลัง log เพื่อให้ผู้เรียก fallback ไปใช้ ffmpeg ได้
+   * @throws ส่งต่อ error หลัง log ให้ผู้เรียก fail งาน
    */
   async createVideoThumbnail(
     bucketName: string,
