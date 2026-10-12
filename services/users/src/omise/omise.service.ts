@@ -125,9 +125,10 @@ export class OmiseService {
     method: 'get' | 'post' | 'patch' | 'delete',
     path: string,
     body?: Record<string, unknown>,
+    extraHeaders?: Record<string, string>,
   ): Promise<T> {
     try {
-      const headers = this.authHeaders();
+      const headers = { ...this.authHeaders(), ...extraHeaders };
       const url = `${this.apiUrl}${path}`;
       let obs;
       if (method === 'get') {
@@ -205,15 +206,21 @@ export class OmiseService {
     invoiceNo: string;
   }): Promise<OmiseCharge> {
     console.log('Charging customer card with input:', input);
-    return this.send<OmiseCharge>('post', '/charges', {
-      amount: this.toSatang(input.amountBaht),
-      currency: 'thb',
-      customer: input.customerId,
-      card: input.cardId,
-      description: input.description,
-      capture: true,
-      'metadata[invoiceNo]': input.invoiceNo,
-    });
+    // Omise คืน charge เดิมถ้า key ซ้ำ — กันตัดเงินซ้ำเมื่อ cron/request ถูกยิงหลายครั้ง
+    return this.send<OmiseCharge>(
+      'post',
+      '/charges',
+      {
+        amount: this.toSatang(input.amountBaht),
+        currency: 'thb',
+        customer: input.customerId,
+        card: input.cardId,
+        description: input.description,
+        capture: true,
+        'metadata[invoiceNo]': input.invoiceNo,
+      },
+      { 'Idempotency-Key': input.invoiceNo },
+    );
   }
 
   /** Charge a tokenized card immediately (capture: true). */

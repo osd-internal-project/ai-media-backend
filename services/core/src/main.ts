@@ -59,15 +59,18 @@ async function bootstrap() {
   // ===================================
   // 5. Swagger Documentation
   // ===================================
-  const options = new DocumentBuilder()
-    .setTitle('AI Media API')
-    .setDescription('The AI Media API description')
-    .setVersion('1.0')
-    .addTag('AI Media')
-    .build();
+  // Swagger เปิดเฉพาะนอก prod — chart prod ใช้ "Production" จึงเทียบแบบไม่สนตัวพิมพ์
+  if (process.env.NODE_ENV?.toLowerCase() !== 'production') {
+    const options = new DocumentBuilder()
+      .setTitle('AI Media API')
+      .setDescription('The AI Media API description')
+      .setVersion('1.0')
+      .addTag('AI Media')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, options);
-  SwaggerModule.setup('api', app, document);
+    const document = SwaggerModule.createDocument(app, options);
+    SwaggerModule.setup('api', app, document);
+  }
 
   // ===================================
   // 6. Start Server

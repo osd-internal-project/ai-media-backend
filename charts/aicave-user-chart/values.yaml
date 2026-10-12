@@ -36,9 +36,12 @@ ingress:
     secretName: aicave-console-tls
 
 env:
+  nodeOptions: "--max-old-space-size=384"
   nodeEnv: "development"
   port: "4000"
   nodeTlsRejectUnauthorized: "0"
+  # ไม่ใช้ Omise แล้ว (org สร้างโดย admin) — "true" เพื่อเปิดซื้อ/จ่ายเงินกลับมา
+  billingEnabled: "false"
   pathMountdirUpload: "./uploads"
   pathDomain: "http://www.aicave.ai"
   emailApiUrl: "http://aicave-email-api-service.aicave-prod.svc.cluster.local:8974"

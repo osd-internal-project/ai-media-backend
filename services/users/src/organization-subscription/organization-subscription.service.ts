@@ -8,7 +8,9 @@ import {
   PlanRepository,
   PrismaService,
 } from '@ai-media/share';
+import { OrganizationSubscription } from '@prisma/client';
 import * as dayjs from 'dayjs';
+import configs from '../configs';
 import { OmiseService } from '../omise/omise.service';
 
 @Injectable()
@@ -222,6 +224,37 @@ export class OrganizationSubscriptionService {
     }
   }
   // cron job
+  /** ต่อรอบโดยไม่เก็บเงิน (เดิมเป็น branch ของ plan ฟรี) — reset เครดิตตาม allowance + เลื่อนวันของรอบ */
+  private async rollCycleWithoutCharge(
+    sub: Pick<
+      OrganizationSubscription,
+      'id' | 'organizationId' | 'periodCount' | 'creditAllowance' | 'imageAllowance'
+    >,
+    now: dayjs.Dayjs,
+  ): Promise<void> {
+    const startDate = now.add(1, 'day');
+    const endDate = dayjs(startDate).add(1, 'month').subtract(1, 'day');
+    const nextBillingDate = dayjs(startDate)
+      .add(sub.periodCount || 1, 'month')
+      .subtract(1, 'day');
+    await this.creditBalanceRepo.update({
+      where: { organizationId: sub.organizationId },
+      data: {
+        currentCycleBalance: sub.creditAllowance,
+        currentCycleImage: sub.imageAllowance,
+      },
+    });
+    await this.organizationSubscriptionRepo.update({
+      where: { id: sub.id },
+      data: {
+        currentPeriodStart: startDate.toDate(),
+        currentPeriodEnd: endDate.toDate(),
+        nextBillingDate: nextBillingDate.toDate(),
+        periodCurrent: 1,
+      },
+    });
+  }
+
   async changeCycleSubscription() {
     Logger.log('Running subscription renewal check...');
     const now = dayjs();
@@ -242,27 +275,7 @@ export class OrganizationSubscriptionService {
           // Free plan (price 0): perpetual, never charged. Roll the cycle forward
           // for free — refresh credits + advance dates — and keep it active.
           if (Number(sub.price) === 0) {
-            const startDate = now.add(1, 'day');
-            const endDate = dayjs(startDate).add(1, 'month').subtract(1, 'day');
-            const nextBillingDate = dayjs(startDate)
-              .add(sub.periodCount || 1, 'month')
-              .subtract(1, 'day');
-            await this.creditBalanceRepo.update({
-              where: { organizationId: sub.organizationId },
-              data: {
-                currentCycleBalance: sub.creditAllowance,
-                currentCycleImage: sub.imageAllowance,
-              },
-            });
-            await this.organizationSubscriptionRepo.update({
-              where: { id: sub.id },
-              data: {
-                currentPeriodStart: startDate.toDate(),
-                currentPeriodEnd: endDate.toDate(),
-                nextBillingDate: nextBillingDate.toDate(),
-                periodCurrent: 1,
-              },
-            });
+            await this.rollCycleWithoutCharge(sub, now);
             continue;
           }
 
@@ -270,6 +283,15 @@ export class OrganizationSubscriptionService {
           // Cancellation expiry is handled by the pending_cancel branch below at
           // currentPeriodEnd; a bare autoRenew-off paid sub simply won't renew.
           if (!sub.autoRenew) {
+            continue;
+          }
+
+          // ปิด billing (org ถูกสร้างโดย admin): autoRenew คือ switch ต่อรอบให้เองโดยไม่ตัดเงิน
+          if (!configs().billingEnabled) {
+            await this.rollCycleWithoutCharge(sub, now);
+            Logger.log(
+              `Sub ${sub.id} renewed without charge (billing disabled, autoRenew on)`,
+            );
             continue;
           }
 

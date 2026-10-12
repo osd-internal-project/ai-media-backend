@@ -45,6 +45,7 @@ ingress:
     secretName: aicave-console-tls
 
 env:
+  nodeOptions: "--max-old-space-size=576"
   nodeEnv: "Production"
   port: "4004"
   # OpenAI / LLM

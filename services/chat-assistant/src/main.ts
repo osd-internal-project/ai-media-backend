@@ -36,16 +36,19 @@ async function bootstrap() {
     new ValidationPipe({ whitelist: true, transform: true }),
   );
 
-  const options = new DocumentBuilder()
-    .setTitle('Chat Assistant API')
-    .setDescription('AI Chat Assistant — Chat, Streaming, Vision Prompt Generation')
-    .setVersion('1.0')
-    .addTag('Chat')
-    .addTag('Conversations')
-    .build();
+  // Swagger เปิดเฉพาะนอก prod — chart prod ใช้ "Production" จึงเทียบแบบไม่สนตัวพิมพ์
+  if (process.env.NODE_ENV?.toLowerCase() !== 'production') {
+    const options = new DocumentBuilder()
+      .setTitle('Chat Assistant API')
+      .setDescription('AI Chat Assistant — Chat, Streaming, Vision Prompt Generation')
+      .setVersion('1.0')
+      .addTag('Chat')
+      .addTag('Conversations')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, options);
-  SwaggerModule.setup('api/docs', app, document);
+    const document = SwaggerModule.createDocument(app, options);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   await app.listen(PORT);
   console.log(`Chat Assistant service started on port: ${PORT}`);

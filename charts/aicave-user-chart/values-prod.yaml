@@ -18,9 +18,11 @@ ingress:
     secretName: aicave-console-tls
 
 env:
-  nodeEnv: "development"
+  nodeOptions: "--max-old-space-size=384"
+  nodeEnv: "Production"
   port: "4000"
-  nodeTlsRejectUnauthorized: "0"
+  # ว่าง = ไม่ใส่ env (ตรวจ cert ตามปกติ) — ต้อง override ค่า "0" ของ values.yaml
+  nodeTlsRejectUnauthorized: ""
   pathMountdirUpload: "./uploads"
   pathDomain: "http://www.aicave.ai"
   emailApiUrl: "http://aicave-email-api-service.aicave-prod.svc.cluster.local:8974"

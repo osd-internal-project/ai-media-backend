@@ -24,6 +24,8 @@ export default () => ({
   emailApiUrl: process.env.EMAIL_API_URL || 'http://localhost:5000',
   /** base URL ของ core รวม `/api` — ใช้ปลุก socket noti คำเชิญ; ว่าง = ไม่ส่ง */
   coreApiUrl: process.env.CORE_API_URL,
+  /** ปิดการรับชำระเงิน (Omise) ทั้งหมดเมื่อไม่ใช่ `true` — org ถูกสร้างโดย admin */
+  billingEnabled: process.env.BILLING_ENABLED === 'true',
   omise: {
     secretKey: process.env.OMISE_SECRET_KEY,
     apiUrl: process.env.OMISE_API_URL || 'https://api.omise.co',

@@ -29,10 +29,18 @@ spec:
         env:
         - name: NODE_ENV
           value: {{ .Values.env.nodeEnv | quote }}
+        {{- if .Values.env.nodeOptions }}
+        - name: NODE_OPTIONS
+          value: {{ .Values.env.nodeOptions | quote }}
+        {{- end }}
         - name: PORT
           value: {{ .Values.env.port | quote }}
+        {{- if .Values.env.nodeTlsRejectUnauthorized }}
         - name: NODE_TLS_REJECT_UNAUTHORIZED
           value: {{ .Values.env.nodeTlsRejectUnauthorized | quote }}
+        {{- end }}
+        - name: BILLING_ENABLED
+          value: {{ .Values.env.billingEnabled | default "false" | quote }}
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:

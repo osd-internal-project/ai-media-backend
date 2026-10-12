@@ -18,6 +18,7 @@ ingress:
     secretName: aicave-console-tls-uat
 
 env:
+  nodeOptions: "--max-old-space-size=288"
   nodeEnv: "staging"
   port: "4001"
   pathMountdirUpload: "./uploads"

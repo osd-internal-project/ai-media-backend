@@ -12,6 +12,7 @@ import { appConfigs } from '../configs';
  * `dist/email/email.service.js`, so templates live one level up.
  */
 const TEMPLATES_DIR = join(__dirname, '..', 'templates');
+const TEMPLATE_NAME = /^[a-z0-9_-]+$/;
 
 /**
  * Sends transactional emails over an unauthenticated SMTP relay using raw
@@ -78,6 +79,16 @@ export class EmailService {
       return dto.html;
     }
 
+    // ชื่อ template เท่านั้น — กัน `../` อ่านไฟล์นอก TEMPLATES_DIR
+    if (!TEMPLATE_NAME.test(dto.template ?? '')) {
+      throw new HttpException(
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: `Invalid email template name "${dto.template}"`,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     const filePath = join(TEMPLATES_DIR, `${dto.template}.hbs`);
     try {
       const source = readFileSync(filePath, 'utf-8');

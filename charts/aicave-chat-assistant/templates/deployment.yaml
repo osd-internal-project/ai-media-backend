@@ -29,6 +29,10 @@ spec:
         env:
         - name: NODE_ENV
           value: {{ .Values.env.nodeEnv | quote }}
+        {{- if .Values.env.nodeOptions }}
+        - name: NODE_OPTIONS
+          value: {{ .Values.env.nodeOptions | quote }}
+        {{- end }}
         - name: PORT
           value: {{ .Values.env.port | quote }}
         - name: DATABASE_URL

@@ -20,6 +20,7 @@ ingress:
   websocketBackendPort: 8971
 
 env:
+  nodeOptions: "--max-old-space-size=384"
   nodeEnv: "Production"
   port: "4000"
   redisHost: "my-redis-master.aicave-prod.svc.cluster.local"

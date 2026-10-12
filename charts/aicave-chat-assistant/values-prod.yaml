@@ -18,6 +18,7 @@ ingress:
     secretName: aicave-console-tls
 
 env:
+  nodeOptions: "--max-old-space-size=576"
   nodeEnv: "Production"
   port: "4004"
   # LLM gateway — the per-request credential is each organization's own

@@ -54,4 +54,4 @@ FROM base AS runner
 COPY --from=cleaner /app/ .
 WORKDIR /app/services/report
 USER node
-CMD node dist/main
+CMD ["node", "dist/main"]

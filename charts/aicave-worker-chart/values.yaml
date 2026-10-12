@@ -25,7 +25,8 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    # ไฟล์ upload ตรงเข้า TOS แล้ว worker รับแค่ JSON/FormData เล็ก ๆ
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
     nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
     nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
     nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "32k"
@@ -41,6 +42,7 @@ ingress:
     secretName: aicave-console-tls
 
 env:
+  nodeOptions: "--max-old-space-size=384"
   nodeEnv: "Development"
   port: "4000"
   redisHost: "my-redis-master.aicave-prod.svc.cluster.local"

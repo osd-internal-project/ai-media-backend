@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   PhotoEventPhotoRepository,
   TosService,
@@ -52,10 +57,12 @@ export class PhotoEventPhotosService {
     // ทีละไฟล์ เพื่อให้รูปขึ้นบนจอ kiosk ตามลำดับที่อัปโหลด
     for (const file of imageFiles) {
       const prepared = await preparePhoto(file);
+      // sharp อ่านไม่ได้ = ไม่ใช่รูปจริง (mimetype มาจาก client) — ไม่เก็บไฟล์ต้นฉบับ
       if (!prepared.converted) {
         this.logger.warn(
-          `Cannot resize ${file.originalname} (${file.mimetype}) — storing original`,
+          `Cannot resize ${file.originalname} (${file.mimetype}) — skipped`,
         );
+        continue;
       }
       const imagePath = buildUploadKey(
         project.organizationId,
@@ -85,6 +92,12 @@ export class PhotoEventPhotosService {
       };
       this.emit(projectId, PHOTO_EVENT_EVENTS.photoCreated, photoView);
       created.push(photoView);
+    }
+    if (imageFiles.length > 0 && created.length === 0) {
+      // ทุกไฟล์ถูกข้าม — แจ้งผู้ใช้แทนการคืนผลว่างเงียบ ๆ
+      throw new BadRequestException(
+        'No readable images — use JPEG, PNG, WebP or GIF',
+      );
     }
     this.logger.log(`Imported ${created.length} photos into ${projectId}`);
     return created;

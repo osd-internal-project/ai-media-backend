@@ -16,11 +16,13 @@ import {
   buildUploadKey,
 } from '@ai-media/share';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import {
+  MAX_BYTES_BY_MEDIA,
+  isAllowedUpload,
+  isExtensionAllowed,
+  mediaTypeOfMime,
+} from './upload-rules';
 
-/** ชนิดไฟล์ที่หน้าบ้านรับได้ (image/video/audio reference) */
-const ALLOWED_UPLOAD_TYPES = ['image/', 'video/', 'audio/'];
-/** เท่ากับ ingress proxy-body-size เดิม (500m) — ไม่ให้ direct upload เข้มกว่า/หลวมกว่า multipart */
-const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
 const PRESIGN_PUT_EXPIRES_SEC = 15 * 60;
 /** row ที่ออก presigned URL แล้วแต่ยังไม่ confirm — cron ลบทิ้งเมื่อค้างเกิน 24 ชม. */
 const STATUS_UPLOADING = 'uploading';
@@ -41,13 +43,6 @@ export interface PresignUploadInput {
   projectId?: string;
   /** kind = 'prompt-guide' */
   promptGuideId?: string;
-}
-
-function isAllowedType(contentType: string | undefined): boolean {
-  return (
-    !!contentType &&
-    ALLOWED_UPLOAD_TYPES.some((prefix) => contentType.startsWith(prefix))
-  );
 }
 
 @Injectable()
@@ -162,17 +157,25 @@ export class UploadImageService {
         'uid, organizationId and fileName are required',
       );
     }
-    if (!isAllowedType(input.contentType)) {
+    const mediaType = mediaTypeOfMime(input.contentType);
+    if (!mediaType) {
       throw new BadRequestException(
         `Unsupported file type: ${input.contentType}`,
       );
     }
-    if (!(input.size > 0) || input.size > MAX_UPLOAD_BYTES) {
+    const maxBytes = MAX_BYTES_BY_MEDIA[mediaType];
+    if (!(input.size > 0) || input.size > maxBytes) {
       throw new BadRequestException(
-        `File size must be 1..${MAX_UPLOAD_BYTES} bytes`,
+        `File size must be 1..${maxBytes} bytes for ${mediaType}`,
       );
     }
     const ext = path.extname(input.fileName);
+    // presigned PUT ผูก Content-Type ไม่ได้ — อย่างน้อยนามสกุลของ key ต้องตรงกับชนิดที่ประกาศ
+    if (!isExtensionAllowed(input.contentType, ext)) {
+      throw new BadRequestException(
+        `File extension ${ext} does not match ${input.contentType}`,
+      );
+    }
     const row = {
       uid: input.uid,
       userId: input.userId,
@@ -246,7 +249,7 @@ export class UploadImageService {
     const size = Number(head['content-length']);
     const rawType = head['content-type'];
     const contentType = typeof rawType === 'string' ? rawType : undefined;
-    if (!isAllowedType(contentType) || !(size > 0) || size > MAX_UPLOAD_BYTES) {
+    if (!isAllowedUpload(contentType, size)) {
       this.logger.warn(
         `Rejecting upload ${file.imagePath}: type=${contentType} size=${size}`,
       );

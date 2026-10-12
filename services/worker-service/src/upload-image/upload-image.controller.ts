@@ -45,7 +45,8 @@ export class UploadImageController {
   }
 
   @Post('from-prompt')
-  @UseInterceptors(AnyFilesInterceptor())
+  // ยังต้อง parse FormData ที่ frontend ส่งมา แต่ไม่รับไฟล์ — เดิมไม่จำกัด ยิงไฟล์ใหญ่เข้า memory ได้
+  @UseInterceptors(AnyFilesInterceptor({ limits: { files: 0 } }))
   async uploadImageFromPrompt(
     @Body(`userId`) userId: string,
     @Body(`index`) index: number,

@@ -142,4 +142,43 @@ describe('UploadImageService direct upload', () => {
     expect(tos.deleteObject).toHaveBeenCalledWith('bucket', 'k.exe');
     expect(refRepo.deleteMany).toHaveBeenCalledWith({ where: { uid: 'abc' } });
   });
+
+  it.each([
+    ['an SVG', { contentType: 'image/svg+xml', fileName: 'x.svg' }],
+    ['HTML', { contentType: 'text/html', fileName: 'x.html' }],
+    ['an extension that does not match the type', { fileName: 'x.html' }],
+    ['an image over 20MB', { size: 21 * 1024 * 1024 }],
+  ])('presign rejects %s', async (_label, patch) => {
+    await expect(
+      service.presignUpload({ ...base, ...patch }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(refRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('presign allows a 400MB video', async () => {
+    await service.presignUpload({
+      ...base,
+      contentType: 'video/mp4',
+      fileName: 'clip.MP4',
+      size: 400 * 1024 * 1024,
+    });
+    expect(refRepo.create).toHaveBeenCalled();
+  });
+
+  it('confirm deletes an SVG that was PUT under an image presign', async () => {
+    refRepo.findOne.mockResolvedValue({
+      uid: 'abc',
+      imagePath: 'organize/org/proj/upload/abc.png',
+      imageName: 'cat.png',
+    });
+    tos.headObject.mockResolvedValue({
+      'content-length': '70',
+      'content-type': 'image/svg+xml',
+    });
+    await expect(service.confirmUpload('ref', 'abc')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(tos.deleteObject).toHaveBeenCalled();
+    expect(refRepo.deleteMany).toHaveBeenCalled();
+  });
 });

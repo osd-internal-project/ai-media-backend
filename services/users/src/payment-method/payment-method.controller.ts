@@ -1,8 +1,18 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { BillingEnabledGuard } from '../billing/billing-enabled.guard';
 import { PaymentMethodService } from './payment-method.service';
 
 /** Saved-card management for an organization (Omise customer cards). */
 @Controller('payment-method')
+@UseGuards(BillingEnabledGuard)
 export class PaymentMethodController {
   constructor(private readonly paymentMethodService: PaymentMethodService) {}
 

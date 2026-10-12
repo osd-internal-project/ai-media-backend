@@ -23,7 +23,7 @@ const makeRepo = (): Repo => ({
 });
 
 describe('UploadPolicyService', () => {
-  let tos: Record<'createPostPolicy' | 'headObject', jest.Mock>;
+  let tos: Record<'createPostPolicy' | 'headObject' | 'deleteObject', jest.Mock>;
   let refRepo: Repo;
   let guideRepo: Repo;
   let service: UploadPolicyService;
@@ -44,6 +44,7 @@ describe('UploadPolicyService', () => {
         'content-length': '70',
         'content-type': 'image/png',
       }),
+      deleteObject: jest.fn().mockResolvedValue(undefined),
     };
     refRepo = makeRepo();
     guideRepo = makeRepo();
@@ -73,8 +74,8 @@ describe('UploadPolicyService', () => {
     expect(input).toMatchObject({
       keyPrefix: 'organize/org/proj/upload/',
       contentTypePrefix: 'image/',
-      maxBytes: 500 * 1024 * 1024,
-      expiresSec: 3600,
+      maxBytes: 20 * 1024 * 1024,
+      expiresSec: 15 * 60,
     });
     expect(input.callback.url).toBe(
       'https://sit.example/public/api/v1/worker/upload/callback',
@@ -207,5 +208,74 @@ describe('UploadPolicyService', () => {
         token,
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('policy size limit follows the media type', () => {
+    expect(issue({ ...query, mediaType: 'video' } as never).input.maxBytes).toBe(
+      500 * 1024 * 1024,
+    );
+    expect(issue({ ...query, mediaType: 'audio' } as never).input.maxBytes).toBe(
+      50 * 1024 * 1024,
+    );
+  });
+
+  const callback = (scope: string, token: string, key: string, uid = 'rc-1') =>
+    service.handleCallback({ key, uid, scope, token });
+
+  it('rejects and deletes an SVG even though it is image/*', async () => {
+    const { scope, token } = issue();
+    tos.headObject.mockResolvedValue({
+      'content-length': '70',
+      'content-type': 'image/svg+xml',
+    });
+    await expect(
+      callback(scope, token, 'organize/org/proj/upload/rc-1.svg'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(tos.deleteObject).toHaveBeenCalledWith(
+      'bucket',
+      'organize/org/proj/upload/rc-1.svg',
+    );
+    expect(refRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects and deletes an image larger than 20MB', async () => {
+    const { scope, token } = issue();
+    tos.headObject.mockResolvedValue({
+      'content-length': String(25 * 1024 * 1024),
+      'content-type': 'image/jpeg',
+    });
+    await expect(
+      callback(scope, token, 'organize/org/proj/upload/rc-1.jpg'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(tos.deleteObject).toHaveBeenCalled();
+  });
+
+  it('rejects a video uploaded with an image policy', async () => {
+    const { scope, token } = issue();
+    tos.headObject.mockResolvedValue({
+      'content-length': '70',
+      'content-type': 'video/mp4',
+    });
+    await expect(
+      callback(scope, token, 'organize/org/proj/upload/rc-1.mp4'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it.each([
+    ['another uid', 'organize/org/proj/upload/other.png'],
+    ['a nested path', 'organize/org/proj/upload/rc-1/x.png'],
+    ['a double extension', 'organize/org/proj/upload/rc-1.png.html'],
+  ])('rejects a key that points at %s', async (_label, key) => {
+    const { scope, token } = issue();
+    await expect(callback(scope, token, key)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(tos.headObject).not.toHaveBeenCalled();
+  });
+
+  it('accepts a key without an extension', async () => {
+    const { scope, token } = issue();
+    await callback(scope, token, 'organize/org/proj/upload/rc-1');
+    expect(refRepo.create).toHaveBeenCalled();
   });
 });

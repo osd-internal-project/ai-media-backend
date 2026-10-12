@@ -18,15 +18,25 @@ import {
 } from '@ai-media/share';
 import { tosConfigs } from '../configs';
 import { DirectUploadKind } from './upload-image.service';
+import {
+  MAX_BYTES_BY_MEDIA,
+  MEDIA_TYPES,
+  UploadMediaType,
+  isAllowedUpload,
+  mediaTypeOfMime,
+} from './upload-rules';
 
-/** เท่ากับ ingress proxy-body-size เดิม (500m) */
-const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
-/** policy ใช้ซ้ำได้ทั้งชั่วโมง — frontend cache ไว้ ไม่ต้องขอทุกไฟล์ */
-const POLICY_EXPIRES_SEC = 60 * 60;
+export type { UploadMediaType } from './upload-rules';
+
+/**
+ * policy ใช้ซ้ำได้ภายในอายุ (frontend cache ไว้และขอใหม่ก่อนหมด 2 นาที)
+ * — สั้นไว้เพราะ policy ที่รั่วใช้ upload/เขียนทับได้ทั้ง prefix (เดิม 1 ชม.)
+ */
+const POLICY_EXPIRES_SEC = 15 * 60;
 /** upload ที่เริ่มก่อนหมดอายุอาจ callback หลังหมดอายุเล็กน้อย */
 const CALLBACK_GRACE_MS = 15 * 60 * 1000;
-const MEDIA_TYPES = ['image', 'video', 'audio'] as const;
-export type UploadMediaType = (typeof MEDIA_TYPES)[number];
+/** ส่วนท้าย key หลัง uid: ไม่มีนามสกุล หรือนามสกุลเดียว (frontend ใช้ `${prefix}${uid}${ext}`) */
+const KEY_EXTENSION = /^(\.[^./]*)?$/;
 
 export interface UploadPolicyQuery {
   kind: DirectUploadKind;
@@ -46,6 +56,8 @@ interface UploadScope {
   userId: string;
   projectId?: string;
   promptGuideId?: string;
+  /** ชนิดที่ขอ policy มา — callback ใช้ตรวจขนาดตามชนิด (ไม่มีใน policy ที่ออกก่อน deploy) */
+  mediaType?: UploadMediaType;
   expiresAt: number;
 }
 
@@ -103,6 +115,7 @@ export class UploadPolicyService {
       userId: query.userId,
       projectId: query.projectId,
       promptGuideId: query.promptGuideId,
+      mediaType: query.mediaType,
       expiresAt: Date.now() + POLICY_EXPIRES_SEC * 1000,
     };
     const keyPrefix = this.keyPrefix(scope);
@@ -118,7 +131,7 @@ export class UploadPolicyService {
     return this.tosService.createPostPolicy({
       keyPrefix,
       contentTypePrefix: `${query.mediaType}/`,
-      maxBytes: MAX_UPLOAD_BYTES,
+      maxBytes: MAX_BYTES_BY_MEDIA[query.mediaType],
       expiresSec: POLICY_EXPIRES_SEC,
       callback: {
         url: `${publicUrl.replace(/\/$/, '')}/upload/callback`,
@@ -136,8 +149,14 @@ export class UploadPolicyService {
     const scope = this.verifyScope(body.scope, body.token);
     const key = body.key ?? '';
     const uid = body.uid ?? '';
-    if (!uid || !key.startsWith(this.keyPrefix(scope))) {
+    const prefix = this.keyPrefix(scope);
+    if (!uid || !key.startsWith(prefix)) {
       throw new ForbiddenException('Upload key is outside the signed scope');
+    }
+    // uid มาจาก client — ต้องเป็นชื่อไฟล์ของ key นี้จริง ไม่งั้นสร้าง row ที่ชี้ไฟล์อื่นได้
+    const rest = key.slice(prefix.length);
+    if (!rest.startsWith(uid) || !KEY_EXTENSION.test(rest.slice(uid.length))) {
+      throw new ForbiddenException('Upload uid does not match the object key');
     }
 
     const bucket = tosConfigs().tosBucket;
@@ -148,6 +167,20 @@ export class UploadPolicyService {
     const contentType =
       typeof rawType === 'string' ? rawType : body.mimeType ?? '';
     const size = Number(head['content-length'] ?? body.size ?? 0);
+    const mediaType = mediaTypeOfMime(contentType);
+    if (
+      !isAllowedUpload(contentType, size) ||
+      (scope.mediaType && mediaType !== scope.mediaType)
+    ) {
+      // policy ล็อกได้แค่ prefix ของ Content-Type — ไฟล์ที่ไม่อยู่ใน whitelist ต้องลบทิ้งที่นี่
+      this.logger.warn(
+        `Rejecting upload ${key}: type=${contentType} size=${size} expected=${
+          scope.mediaType ?? '-'
+        }`,
+      );
+      await this.tosService.deleteObject(bucket, key);
+      throw new ForbiddenException('Uploaded file type or size is not allowed');
+    }
 
     const name = decodeName(body.name);
     const row = {

@@ -20,6 +20,7 @@ ingress:
   websocketBackendPort: 8971
 
 env:
+  nodeOptions: "--max-old-space-size=192"
   nodeEnv: "Development"
   port: "4000"
   redisHost: "my-redis-master.redis.svc.cluster.local"
