@@ -1,7 +1,7 @@
 {
   "name": "@ai-media/chat-assistant",
   "description": "",
-  "version": "1.0.06",
+  "version": "1.0.07",
   "author": "",
   "dependencies": {
     "@ai-media/share": "0.0.2",
