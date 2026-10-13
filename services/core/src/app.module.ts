@@ -37,9 +37,12 @@ import { ContactSaleLogModule } from './contact-sale-log/contact-sale-log.module
 import { WorkflowModule } from './workflow/workflow.module';
 import { PhotoEventModule } from './photo-event/photo-event.module';
 import { ByteplusWebhookModule } from './byteplus-webhook/byteplus-webhook.module';
+import { KeycloakAuthModule } from '@ai-media/share';
 
 @Module({
   imports: [
+    // ตรวจ Keycloak token ทุก route ตาม AUTH_MODE (off | report | enforce)
+    KeycloakAuthModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [appConfigs, byteplusConfigs, communityConfigs],

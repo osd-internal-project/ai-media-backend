@@ -33,6 +33,15 @@ spec:
         - name: NODE_OPTIONS
           value: {{ .Values.env.nodeOptions | quote }}
         {{- end }}
+        # Keycloak token check — off | report | enforce (ดู docs/auth-rollout.md)
+        - name: AUTH_MODE
+          value: {{ .Values.env.authMode | default "off" | quote }}
+        - name: KEYCLOAK_ALLOWED_CLIENTS
+          value: {{ .Values.env.keycloakAllowedClients | default "" | quote }}
+        - name: KEYCLOAK_URL
+          value: {{ .Values.env.keycloakUrl | quote }}
+        - name: KEYCLOAK_REALM
+          value: {{ .Values.env.keycloakRealm | quote }}
         - name: PORT
           value: {{ .Values.env.port | quote }}
         - name: DATABASE_URL

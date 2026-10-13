@@ -12,6 +12,7 @@ import { InvoiceService } from './invoice.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { PayCardDto, PaySourceDto } from './dto/pay-invoice.dto';
 import { PurchaseService } from '../purchase/purchase.service';
+import { Public } from '@ai-media/share';
 
 @Controller('invoice')
 export class InvoiceController {
@@ -30,6 +31,8 @@ export class InvoiceController {
   // Dispatches to both handlers — each is idempotent and keyed on its own
   // omiseChargeId, so calling both safely covers invoice top-ups and new-org
   // purchase orders.
+  // Omise เรียกเข้ามา — ไม่มี token ของผู้ใช้
+  @Public()
   @Post('webhook/omise')
   @UseGuards(BillingEnabledGuard)
   async webhook(@Body() event: Record<string, unknown>) {

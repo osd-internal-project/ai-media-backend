@@ -2,8 +2,11 @@ import { Controller, Get, Param, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { PublicRateLimitGuard } from '../public-community/public-rate-limit.guard';
 import { PublicPhotoEventService } from './public-photo-event.service';
+import { Public } from '@ai-media/share';
 
 /** เรียกได้โดยไม่ต้อง login — ลิงก์ใน QR code ของ kiosk */
+// ลิงก์/QR ผลลัพธ์ Photo Event สาธารณะ
+@Public()
 @Controller('public/photo-event')
 @UseGuards(PublicRateLimitGuard)
 export class PublicPhotoEventController {

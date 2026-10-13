@@ -57,6 +57,13 @@ describe('UploadImageService direct upload', () => {
       guideRepo as unknown as PromptGuideImageRepository,
       tos as unknown as TosService,
       storageUrl as unknown as StorageUrlService,
+      // การตรวจสิทธิ์ทดสอบแยกใน upload-access.service.spec.ts
+      {
+        assertCanWrite: jest.fn(),
+        assertCanManageRef: jest.fn(),
+        assertCanManagePromptGuideImage: jest.fn(),
+        assertSameUser: jest.fn(),
+      } as never,
     );
   });
 

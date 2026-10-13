@@ -8,6 +8,7 @@ import {
 import * as path from 'path';
 import { appConfigs, tosConfigs } from '../configs';
 import {
+  AuthUser,
   PromptGuideImageRepository,
   RefImageRepository,
   StorageUrlService,
@@ -22,6 +23,7 @@ import {
   isExtensionAllowed,
   mediaTypeOfMime,
 } from './upload-rules';
+import { UploadAccessService } from './upload-access.service';
 
 const PRESIGN_PUT_EXPIRES_SEC = 15 * 60;
 /** row ที่ออก presigned URL แล้วแต่ยังไม่ confirm — cron ลบทิ้งเมื่อค้างเกิน 24 ชม. */
@@ -54,9 +56,10 @@ export class UploadImageService {
     private readonly promptGuideImageRepository: PromptGuideImageRepository,
     private readonly tosService: TosService,
     private readonly storageUrl: StorageUrlService,
+    private readonly access: UploadAccessService,
   ) {}
 
-  async deleteImage(uid: string) {
+  async deleteImage(uid: string, user?: AuthUser) {
     const bucketName = tosConfigs().tosBucket;
     const file = await this.refImageRepository.findOne({
       where: {
@@ -66,6 +69,7 @@ export class UploadImageService {
     if (!file) {
       throw new ConflictException('File not found');
     }
+    await this.access.assertCanManageRef(user, file);
     await this.refImageRepository.deleteMany({
       where: {
         uid: uid,
@@ -81,7 +85,10 @@ export class UploadImageService {
     uid: string,
     refUid: string,
     organizationId: string,
+    user?: AuthUser,
   ) {
+    this.access.assertSameUser(user, userId);
+    await this.access.assertCanWrite(user, { organizationId, projectId });
     const image = await this.promptGuideImageRepository.findOne({
       where: { uid: refUid },
     });
@@ -128,7 +135,7 @@ export class UploadImageService {
       }
     }
   }
-  async deletePromptGuideImage(uid: string) {
+  async deletePromptGuideImage(uid: string, user?: AuthUser) {
     const file = await this.promptGuideImageRepository.findOne({
       where: {
         uid: uid,
@@ -137,6 +144,7 @@ export class UploadImageService {
     if (!file) {
       throw new ConflictException('File not found');
     }
+    await this.access.assertCanManagePromptGuideImage(user, file);
     const bucketname = tosConfigs().tosBucket;
     await this.promptGuideImageRepository.deleteMany({
       where: {
@@ -151,7 +159,13 @@ export class UploadImageService {
    * ให้ browser อัปโหลดตรงเข้า TOS
    * @throws BadRequestException เมื่อชนิด/ขนาดไฟล์ไม่ผ่าน หรือข้อมูลอ้างอิงไม่ครบ
    */
-  async presignUpload(input: PresignUploadInput) {
+  async presignUpload(input: PresignUploadInput, user?: AuthUser) {
+    await this.access.assertCanWrite(user, {
+      organizationId: input.organizationId,
+      projectId: input.kind === 'ref' ? input.projectId : undefined,
+      promptGuideId:
+        input.kind === 'prompt-guide' ? input.promptGuideId : undefined,
+    });
     if (!input.uid || !input.organizationId || !input.fileName) {
       throw new BadRequestException(
         'uid, organizationId and fileName are required',
@@ -228,7 +242,7 @@ export class UploadImageService {
    * ไฟล์ที่ชนิด/ขนาดไม่ผ่านจะถูกลบทั้ง object และ row
    * @returns shape เดียวกับ `uploadImage` / `uploadPromptGuideImage`
    */
-  async confirmUpload(kind: DirectUploadKind, uid: string) {
+  async confirmUpload(kind: DirectUploadKind, uid: string, user?: AuthUser) {
     const repo =
       kind === 'ref'
         ? this.refImageRepository
@@ -241,6 +255,14 @@ export class UploadImageService {
       where: { uid, status: STATUS_UPLOADING },
     });
     if (!file) throw new NotFoundException(`No pending upload for ${uid}`);
+    if (kind === 'ref') {
+      await this.access.assertCanManageRef(user, file as { userId: string; projectId: string });
+    } else {
+      await this.access.assertCanManagePromptGuideImage(
+        user,
+        file as { userId: string; promptGuideId: number | null },
+      );
+    }
 
     const bucketname = tosConfigs().tosBucket;
     const head = await this.tosService.headObject(bucketname, file.imagePath);

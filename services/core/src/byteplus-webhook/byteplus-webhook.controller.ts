@@ -11,6 +11,7 @@ import {
 import {
   BYTEPLUS_VIDEO_CALLBACK_PATH,
   verifyByteplusCallbackSig,
+  Public,
 } from '@ai-media/share';
 import { ByteplusWebhookService } from './byteplus-webhook.service';
 
@@ -19,6 +20,8 @@ import { ByteplusWebhookService } from './byteplus-webhook.service';
  *
  * ตอบ 200 เร็วที่สุดเสมอเมื่อ sig ถูก เพื่อไม่ให้ Ark ยิงซ้ำ งานหนักทั้งหมดไปทำใน worker
  */
+// BytePlus เรียกเข้ามา — ไม่มี token ของผู้ใช้
+@Public()
 @Controller(BYTEPLUS_VIDEO_CALLBACK_PATH)
 export class ByteplusWebhookController {
   constructor(private readonly webhookService: ByteplusWebhookService) {}

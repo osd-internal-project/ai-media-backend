@@ -42,6 +42,10 @@ ingress:
     secretName: aicave-console-tls
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-prod"
+  keycloakUrl: "https://id24.aicave.ai"
+  keycloakRealm: "eportal"
   nodeOptions: "--max-old-space-size=384"
   nodeEnv: "Development"
   port: "4000"

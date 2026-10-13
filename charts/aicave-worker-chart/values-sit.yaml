@@ -20,6 +20,10 @@ ingress:
   websocketBackendPort: 8971
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-sit"
+  keycloakUrl: "https://id24.aicave.ai"
+  keycloakRealm: "eportal"
   nodeOptions: "--max-old-space-size=192"
   nodeEnv: "Development"
   port: "4000"

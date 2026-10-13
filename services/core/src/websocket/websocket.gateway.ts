@@ -20,6 +20,8 @@ import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { redisConfigs } from '../configs';
 import { LogsService } from 'src/logs/logs.service';
+import { KeycloakAuthService } from '@ai-media/share';
+import { authenticateSocket } from './socket-auth';
 
 import { JoinRoomDto, LeaveRoomDto, SendMessageDto } from './dto/chat.dto';
 import {
@@ -48,6 +50,7 @@ export class WebsocketGatewayService
     private readonly workerService: WebsocketService,
     private readonly generateService: GenerateService,
     private readonly logsService: LogsService,
+    private readonly auth: KeycloakAuthService,
   ) {
     // สร้าง Redis Subscriber แยกสำหรับรับ events จาก Worker
     const redisConf = redisConfigs();
@@ -78,6 +81,7 @@ export class WebsocketGatewayService
 
   async handleConnection(client: Socket) {
     this.logger.log(`🔌 Client connected: ${client.id}`);
+    if (!(await authenticateSocket(client, this.auth, this.logger))) return;
 
     await this.redis.hset(
       'ws:clients',

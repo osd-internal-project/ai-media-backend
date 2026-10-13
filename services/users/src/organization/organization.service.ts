@@ -300,9 +300,12 @@ export class OrganizationService {
     if (!coreApiUrl) return;
     try {
       await firstValueFrom(
-        this.httpService.post(`${coreApiUrl}/websocket/notify/invitation`, {
-          email,
-        }),
+        this.httpService.post(
+          `${coreApiUrl}/websocket/notify/invitation`,
+          { email },
+          // core ตรวจ key นี้ — endpoint อยู่หลัง ingress สาธารณะเดียวกับ API อื่น
+          { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY ?? '' } },
+        ),
       );
     } catch (error) {
       Logger.warn(

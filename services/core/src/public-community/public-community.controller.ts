@@ -20,6 +20,7 @@ import {
   VisitorDto,
 } from './dto/public-community.dto';
 import { PublicRateLimitGuard } from './public-rate-limit.guard';
+import { Public } from '@ai-media/share';
 
 /**
  * หน้า community สาธารณะ — เรียกได้โดยไม่ต้อง login
@@ -30,6 +31,8 @@ import { PublicRateLimitGuard } from './public-rate-limit.guard';
  * 1. ทุก query กรอง status = PUBLISHED แบบตายตัว และไม่รับ status จากผู้เรียก
  * 2. payload ทุกชิ้นออกผ่าน PublicCommunityService.toPublicView ที่เดียว
  */
+// หน้า community สาธารณะ — ไม่ต้อง login
+@Public()
 @Controller('public/community')
 export class PublicCommunityController {
   constructor(

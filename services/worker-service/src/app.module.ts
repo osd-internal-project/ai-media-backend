@@ -6,9 +6,12 @@ import { UploadImageModule } from './upload-image/upload-image.module';
 import { SocialPublishModule } from './social-publish/social-publish.module';
 import { RequestLoggerMiddleware } from './middleware/request-logger.middleware';
 import { TosModule, StorageModule } from '@ai-media/share';
+import { KeycloakAuthModule } from '@ai-media/share';
 
 @Module({
   imports: [
+    // ตรวจ Keycloak token ทุก route ตาม AUTH_MODE (off | report | enforce)
+    KeycloakAuthModule,
     ConfigModule.forRoot({ isGlobal: true }),
     BullModule.forRoot({
       connection: {

@@ -28,9 +28,12 @@ import { CustomerModule } from './customer/customer.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { PaymentMethodModule } from './payment-method/payment-method.module';
 import { SocialAccountModule } from './social-account/social-account.module';
+import { KeycloakAuthModule } from '@ai-media/share';
 
 @Module({
   imports: [
+    // ตรวจ Keycloak token ทุก route ตาม AUTH_MODE (off | report | enforce)
+    KeycloakAuthModule,
     PrismaModule,
     HttpModule,
     ScheduleModule.forRoot(),

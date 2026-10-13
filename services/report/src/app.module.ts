@@ -8,8 +8,9 @@ import { PublicController } from './public/public.controller';
 import { PrismaModule } from '@ai-media/share';
 import { HttpModule } from '@nestjs/axios';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { KeycloakAuthModule } from '@ai-media/share';
 @Module({
-  imports: [PrismaModule, HttpModule, DashboardModule],
+  imports: [KeycloakAuthModule, PrismaModule, HttpModule, DashboardModule],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],
 })

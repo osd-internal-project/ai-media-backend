@@ -10,7 +10,10 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { IDP_HINTS, isIdpHint } from '../keycloak/keycloak.service';
+import { Public } from '@ai-media/share';
 
+// flow login — ยังไม่มี token
+@Public()
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) { }

@@ -9,7 +9,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { SocialPlatform } from '@ai-media/share';
+import { SocialPlatform, Public } from '@ai-media/share';
 import configs from '../configs';
 import { SocialAccountService } from './social-account.service';
 import {
@@ -58,6 +58,8 @@ export class SocialAccountController {
    * (เช่น ส่ง `error=access_denied` มาแทน `code` ตอนผู้ใช้กดยกเลิก)
    * และต้อง redirect กลับหน้าเว็บเสมอ ไม่ใช่ตอบ JSON ให้ผู้ใช้เห็นดิบ ๆ
    */
+  // platform redirect กลับมา — ตรวจ state ที่เซ็นไว้แทน token
+  @Public()
   @Get('callback/:platform')
   async callback(
     @Param('platform') platform: string,

@@ -18,6 +18,8 @@ ingress:
     secretName: aicave-console-tls-uat
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-prod"
   nodeOptions: "--max-old-space-size=288"
   nodeEnv: "staging"
   port: "4000"
