@@ -50,6 +50,10 @@ model users {
   logs                 Log[]
   recentOrganizationId String?              @map("recent_organization_id") @db.VarChar(50)
   organizationMembers  OrganizationMember[]
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([token])
+  @@index([email])
 }
 
 model Project {
@@ -85,6 +89,9 @@ model Project {
   remainImageAmount     Int?                   @default(0) @map("remain_image_amount")
 
   @@map("project")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([organizationId])
 }
 
 model ProjectMember {
@@ -111,6 +118,9 @@ model ProjectMember {
 
   @@unique([projectId, userId]) // ห้ามซ้ำ
   @@map("project_member")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([userId])
 }
 
 model Gallery {
@@ -146,6 +156,11 @@ model Gallery {
   ImageUsed        Int?     @default(0) @map("image_used")
 
   @@map("gallery")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([projectId, typeGenerate, seq])
+  @@index([taskId])
+  @@index([userId])
 }
 
 model Log {
@@ -175,6 +190,11 @@ model Log {
   refFeatureId    String?  @map("ref_feature_id") @db.VarChar(100)
 
   @@map("log")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([taskId])
+  @@index([projectId, status, createdAt])
+  @@index([userId, createdAt])
 }
 
 /// บทสนทนา/แคนวาสของ Workflow หนึ่งชุด (1 โปรเจกต์มีได้หลายชุด)
@@ -560,6 +580,9 @@ model OrganizationMember {
   maxImages Int?    @default(0) @map("max_images")
 
   @@map("organization_member")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([organizationId, userId])
 }
 
 model CreditBalance {
@@ -751,6 +774,9 @@ model PackageTransaction {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("package_transactions")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([organizationId])
 }
 
 model Feature {
@@ -900,6 +926,9 @@ model ChatMessage {
 
   @@index([conversationId])
   @@map("chat_message")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([conversationId, sequence])
 }
 
 model ChatTokenUsage {
