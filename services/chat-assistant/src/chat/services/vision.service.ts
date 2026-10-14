@@ -1,19 +1,19 @@
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
-  BadRequestException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { PrismaService } from '@ai-media/share';
-import { firstValueFrom } from 'rxjs';
-import { AxiosRequestConfig } from 'axios';
-import { RetryService } from './retry.service';
+  LlmChatService,
+  LlmGatewayService,
+  LlmMessage,
+  PrismaService,
+} from '@ai-media/share';
 import { MemoryService } from './memory.service';
-import config from '../../configs';
+import { ChatModelService } from './chat-model.service';
 import {
   ImagePromptRequestDto,
   ImagePromptResponseDto,
 } from '../dto/image-prompt.dto';
+
+/** เพดาน token ของคำตอบ — คำตอบเป็น JSON ก้อนเดียว ไม่ต้องยาว */
+const VISION_MAX_TOKENS = 1024;
 
 const VISION_SYSTEM_PROMPT = `You are an expert Creative Prompt Engineer specialized in Digital Marketing and AI Image Generation.
 
@@ -46,170 +46,116 @@ Rules:
 @Injectable()
 export class VisionService {
   private readonly logger = new Logger(VisionService.name);
-  private readonly cfg = config().openai;
 
   constructor(
-    private readonly httpService: HttpService,
     private readonly prisma: PrismaService,
-    private readonly retryService: RetryService,
     private readonly memoryService: MemoryService,
+    private readonly chatModelService: ChatModelService,
+    private readonly llmChat: LlmChatService,
+    private readonly llmGateway: LlmGatewayService,
   ) {}
 
   /**
-   * Analyze an uploaded image buffer and return a structured AI image generation prompt.
+   * วิเคราะห์รูปอ้างอิงแล้วคืน prompt สำหรับ generate ภาพ
+   *
+   * ใช้ทางเดียวกับแชทปกติ (gateway + key ของ org) ต่างที่ส่ง content เป็น array
+   * ที่มีทั้งรูปและข้อความ ตามสัญญาของ OpenAI-compatible API
+   *
+   * @param file รูปที่อัปโหลดมา
+   * @param dto บริบทเพิ่มเติมและปลายทางที่จะบันทึกผล
+   * @returns prompt ที่แตกโครงสร้างแล้ว
+   * @throws BadRequestException เมื่อไฟล์ไม่รองรับ โมเดลไม่รองรับรูป หรือคำตอบไม่ใช่ JSON
    */
   async generatePromptFromImage(
     file: Express.Multer.File,
     dto: ImagePromptRequestDto,
   ): Promise<ImagePromptResponseDto> {
-    // 1. Validate file type
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+    ];
     if (!allowedMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
         `Unsupported file type: ${file.mimetype}. Allowed: jpeg, png, webp, gif`,
       );
     }
 
-    // 2. Encode image to base64 data URL
-    const base64Image = file.buffer.toString('base64');
-    const dataUrl = `data:${file.mimetype};base64,${base64Image}`;
+    if (!dto.organizationId) {
+      throw new BadRequestException(
+        'organizationId is required — it selects the LLM gateway key',
+      );
+    }
 
-    // 3. Build vision messages
+    const model = await this.chatModelService.resolve(dto.model);
+    if (!model.supportsVision) {
+      throw new BadRequestException(
+        `Model "${model.modelId}" cannot read images. Pick a vision-capable model.`,
+      );
+    }
+
+    const apiKey = await this.llmGateway.getOrCreateApiKey(dto.organizationId);
+    if (!apiKey && !model.sendConfig?.authorization) {
+      throw new BadRequestException(
+        'No LLM gateway key is available for this organization',
+      );
+    }
+
+    const dataUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
     const userText = this.buildUserText(dto.context, dto.style);
-    const model = dto.model ?? this.cfg.model;
 
-    const messages = [
-      {
-        role: 'system',
-        content: VISION_SYSTEM_PROMPT,
-      },
+    const messages: LlmMessage[] = [
+      { role: 'system', content: VISION_SYSTEM_PROMPT },
       {
         role: 'user',
         content: [
-          {
-            type: 'image_url',
-            image_url: {
-              url: dataUrl,
-              detail: 'high',
-            },
-          },
-          {
-            type: 'text',
-            text: userText,
-          },
+          { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
+          { type: 'text', text: userText },
         ],
       },
     ];
 
     this.logger.debug(
-      `Vision call: model=${model}, file=${file.originalname} (${Math.round(file.size / 1024)}KB)`,
+      `Vision call: model=${model.modelId}, file=${file.originalname} (${Math.round(
+        file.size / 1024,
+      )}KB)`,
     );
 
-    // 4. Call LLM with vision
-    let llmData: any;
-    let usedModel = model;
-
+    let result: Awaited<ReturnType<LlmChatService['complete']>>;
     try {
-      const result = await this.retryService.callWithRetry({
-        baseUrl: this.cfg.baseUrl,
-        apiKey: this.cfg.apiKey,
-        model,
-        fallbackModel: this.cfg.fallbackModel,
-        maxRetries: this.cfg.maxRetries,
-        timeoutMs: this.cfg.timeoutMs,
-        payload: {
-          messages,
-          max_tokens: 1024,
-          response_format: { type: 'json_object' },
-        },
+      result = await this.llmChat.complete({
+        apiKey: apiKey ?? '',
+        model: model.modelId,
+        messages,
+        maxTokens: VISION_MAX_TOKENS,
+        sendApi: model.sendApi ?? undefined,
+        sendConfig: model.sendConfig ?? undefined,
       });
-      llmData = result.data;
-      usedModel = result.usedModel;
-    } catch (err: any) {
-      this.logger.error(`Vision LLM call failed: ${err.message}`);
-      throw new BadRequestException(`AI vision service unavailable: ${err.message}`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Vision LLM call failed: ${detail}`);
+      throw new BadRequestException(`AI vision service unavailable: ${detail}`);
     }
 
-    // 5. Parse structured JSON response
-    const rawContent: string = llmData.choices?.[0]?.message?.content ?? '{}';
-    let parsed: any;
-
-    try {
-      parsed = JSON.parse(rawContent);
-    } catch {
-      this.logger.error(`Failed to parse vision response JSON: ${rawContent}`);
-      throw new BadRequestException('AI returned unexpected format. Please try again.');
-    }
+    const parsed = this.parseJsonResponse(result.content);
 
     const tokenUsage = {
-      promptTokens: llmData.usage?.prompt_tokens ?? 0,
-      completionTokens: llmData.usage?.completion_tokens ?? 0,
-      totalTokens: llmData.usage?.total_tokens ?? 0,
-      model: usedModel,
+      promptTokens: result.usage.promptTokens,
+      completionTokens: result.usage.completionTokens,
+      totalTokens: result.usage.totalTokens,
+      model: result.model,
     };
 
-    // 6. Optionally persist to conversation
-    let conversationId: string | undefined = dto.conversationId;
-    let messageId: string | undefined;
-
-    if (dto.userId) {
-      try {
-        // Create or reuse conversation
-        if (!conversationId) {
-          const conv = await this.prisma.chatConversation.create({
-            data: {
-              userId: dto.userId,
-              organizationId: dto.organizationId,
-              title: `Image Prompt: ${file.originalname}`,
-            },
-          });
-          conversationId = conv.id;
-        }
-
-        // Save user turn (image reference note)
-        const userSeq = await this.memoryService.nextSequence(conversationId);
-        await this.prisma.chatMessage.create({
-          data: {
-            conversationId,
-            role: 'user',
-            content: `[Image uploaded: ${file.originalname}]\n${userText}`,
-            sequence: userSeq,
-          },
-        });
-
-        // Save assistant turn (the generated prompt)
-        const assistantSeq = await this.memoryService.nextSequence(conversationId);
-        const savedMsg = await this.prisma.chatMessage.create({
-          data: {
-            conversationId,
-            role: 'assistant',
-            content: parsed.prompt ?? rawContent,
-            sequence: assistantSeq,
-            metadata: {
-              type: 'image_prompt',
-              negativePrompt: parsed.negativePrompt,
-              aspectRatio: parsed.aspectRatio,
-              breakdown: parsed.breakdown,
-            },
-          },
-        });
-        messageId = savedMsg.id;
-
-        // Save token usage
-        await this.prisma.chatTokenUsage.create({
-          data: {
-            conversationId,
-            messageId,
-            model: usedModel,
-            promptTokens: tokenUsage.promptTokens,
-            completionTokens: tokenUsage.completionTokens,
-            totalTokens: tokenUsage.totalTokens,
-          },
-        });
-      } catch (dbErr: any) {
-        this.logger.warn(`Failed to persist vision result to DB (non-blocking): ${dbErr.message}`);
-      }
-    }
+    const persisted = await this.persistResult({
+      dto,
+      file,
+      userText,
+      parsed,
+      rawContent: result.content,
+      model: result.model,
+      tokenUsage,
+    });
 
     return {
       analysis: parsed.analysis ?? '',
@@ -223,16 +169,136 @@ export class VisionService {
         colorPalette: '',
       },
       prompt: parsed.prompt ?? '',
-      negativePrompt: parsed.negativePrompt ?? 'blurry, low quality, watermark, text, logo',
+      negativePrompt:
+        parsed.negativePrompt ?? 'blurry, low quality, watermark, text, logo',
       aspectRatio: parsed.aspectRatio ?? '16:9',
       tokenUsage,
-      conversationId,
-      messageId,
+      conversationId: persisted.conversationId,
+      messageId: persisted.messageId,
     };
   }
 
+  /**
+   * แกะ JSON จากคำตอบของโมเดล
+   *
+   * บางโมเดลห่อ JSON ไว้ใน code fence แม้จะสั่งห้ามไว้แล้ว — ลอกออกก่อน parse
+   * แทนที่จะโยน error ใส่ผู้ใช้ทั้งที่คำตอบใช้ได้
+   *
+   * @param content คำตอบดิบ
+   * @returns object ที่ parse แล้ว
+   * @throws BadRequestException เมื่อ parse ไม่ได้จริง ๆ
+   */
+  private parseJsonResponse(content: string): Record<string, any> {
+    const cleaned = content
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '');
+
+    try {
+      return JSON.parse(cleaned || '{}');
+    } catch {
+      this.logger.error(`Failed to parse vision response JSON: ${content}`);
+      throw new BadRequestException(
+        'AI returned unexpected format. Please try again.',
+      );
+    }
+  }
+
+  /**
+   * บันทึกผลลงบทสนทนา (ไม่บังคับ)
+   *
+   * ล้มเหลวแล้วไม่โยนต่อ — ผู้ใช้ได้ prompt ไปแล้ว การบันทึกไม่สำเร็จไม่ควรทำให้
+   * คำขอที่สำเร็จกลายเป็น error หมายเหตุ: เมื่อบันทึกไม่สำเร็จ conversationId
+   * ที่คืนไปจะชี้ไปยังบทสนทนาที่ไม่มีข้อความอยู่ข้างใน
+   *
+   * @returns id ของบทสนทนาและข้อความที่บันทึกได้ (ถ้าบันทึกได้)
+   */
+  private async persistResult(input: {
+    dto: ImagePromptRequestDto;
+    file: Express.Multer.File;
+    userText: string;
+    parsed: Record<string, any>;
+    rawContent: string;
+    model: string;
+    tokenUsage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    };
+  }): Promise<{ conversationId?: string; messageId?: string }> {
+    const { dto, file, userText, parsed, rawContent, model, tokenUsage } = input;
+    if (!dto.userId) return { conversationId: dto.conversationId };
+
+    let conversationId = dto.conversationId;
+    try {
+      if (!conversationId) {
+        const conversation = await this.prisma.chatConversation.create({
+          data: {
+            userId: dto.userId,
+            organizationId: dto.organizationId,
+            title: `Image Prompt: ${file.originalname}`,
+          },
+        });
+        conversationId = conversation.id;
+      }
+
+      const userSeq = await this.memoryService.nextSequence(conversationId);
+      await this.prisma.chatMessage.create({
+        data: {
+          conversationId,
+          role: 'user',
+          content: `[Image uploaded: ${file.originalname}]\n${userText}`,
+          sequence: userSeq,
+        },
+      });
+
+      const assistantSeq = await this.memoryService.nextSequence(conversationId);
+      const savedMessage = await this.prisma.chatMessage.create({
+        data: {
+          conversationId,
+          role: 'assistant',
+          content: parsed.prompt ?? rawContent,
+          sequence: assistantSeq,
+          metadata: {
+            type: 'image_prompt',
+            negativePrompt: parsed.negativePrompt,
+            aspectRatio: parsed.aspectRatio,
+            breakdown: parsed.breakdown,
+          },
+        },
+      });
+
+      await this.prisma.chatTokenUsage.create({
+        data: {
+          conversationId,
+          messageId: savedMessage.id,
+          model,
+          promptTokens: tokenUsage.promptTokens,
+          completionTokens: tokenUsage.completionTokens,
+          totalTokens: tokenUsage.totalTokens,
+        },
+      });
+
+      return { conversationId, messageId: savedMessage.id };
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist vision result (non-blocking): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { conversationId };
+    }
+  }
+
+  /**
+   * ประกอบข้อความที่ส่งไปพร้อมรูป
+   *
+   * @param context บริบทเพิ่มเติมจากผู้ใช้
+   * @param style สไตล์เป้าหมาย
+   * @returns ข้อความที่จะแนบไปกับรูป
+   */
   private buildUserText(context?: string, style?: string): string {
-    const parts: string[] = ['Please analyze this image and generate an AI image prompt.'];
+    const parts = ['Please analyze this image and generate an AI image prompt.'];
     if (context) parts.push(`Additional context: ${context}`);
     if (style) parts.push(`Target style: ${style}`);
     return parts.join('\n');

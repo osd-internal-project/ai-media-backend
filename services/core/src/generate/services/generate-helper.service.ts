@@ -6,6 +6,7 @@ import {
   MasterdataModelTypeRepository,
   ProjectMemberRepository,
   ProjectRepository,
+  StorageUrlService,
   UsersRepository,
 } from '@ai-media/share';
 import {
@@ -16,7 +17,17 @@ import {
   Logger,
 } from '@nestjs/common';
 import axios from 'axios';
+interface FieldMapping {
+  to: string; // ชื่อ field ใน payload
+  from: string | string[]; // ชื่อ field จาก body (1 หรือหลาย field)
+  template?: string; // เช่น "{width}x{height}" ถ้าต้องรวมหลาย field
+  transform?: (val: unknown) => unknown; // optional custom transform
+}
 
+interface ModelConfig {
+  staticFields?: Record<string, unknown>;
+  fieldMappings: FieldMapping[];
+}
 /**
  * GenerateHelperService
  * Contains shared utility methods used by all generate sub-services.
@@ -30,9 +41,50 @@ export class GenerateHelperService {
     private readonly projectRepo: ProjectRepository,
     private readonly errorLogRepo: ErrorLogRepository,
     private readonly auditLogRepo: AuditLogRepository,
-    private readonly modeltypeRepo: MasterdataModelTypeRepository,
+    private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
+    private readonly storageUrl: StorageUrlService,
   ) {}
+
+  /**
+   * รวบรวม reference image ทั้งหมดของ request เป็น "object key" ชุดเดียว
+   *
+   * รองรับทั้งสอง shape ที่ frontend ส่งมา:
+   *  - `image[]` — first/last frame (seedance1, image, omnihuman, dreamactor)
+   *  - `files[]` — multi-reference (seedance2) ซึ่งเดิมถูกมองข้ามจนรูปอ้างอิงหายตอนรีโหลด
+   *
+   * ค่าที่คืนเป็น key เสมอ (หรือ URL เดิมถ้า caller ส่ง URL มา) เหมาะกับการเก็บลง DB
+   * ห้ามเอาไปแสดงผลตรง ๆ — ใช้ toReferenceDisplayUrls ก่อน
+   *
+   * @param body request body ที่อาจมี image และ/หรือ files
+   * @returns list ของ reference key ที่ไม่ว่าง (ไม่ซ้ำ)
+   */
+  public collectReferenceKeys(body: {
+    image?: (string | null)[];
+    files?: { type: string; url: string }[];
+  }): string[] {
+    const fromImage = body.image ?? [];
+    const fromFiles = (body.files ?? [])
+      .filter((file) => file.type === 'image')
+      .map((file) => file.url);
+    const keys = [...fromImage, ...fromFiles].filter((key): key is string =>
+      Boolean(key),
+    );
+    return [...new Set(keys)];
+  }
+
+  /**
+   * แปลง reference key เป็น URL สำหรับส่งกลับใน API response
+   *
+   * response ต้องเป็น URL เสมอ เพราะ frontend เอาไปใส่ <img src> ตรง ๆ
+   * (component *-smart-reference) — ถ้าส่ง key ออกไปจะได้รูปเสีย
+   *
+   * @param keys list ของ reference key (หรือ URL ที่ presign มาแล้ว)
+   * @returns list ของ URL สำหรับแสดงผล
+   */
+  public toReferenceDisplayUrls(keys: readonly string[]): Promise<string[]> {
+    return this.storageUrl.toDisplayUrls(keys);
+  }
 
   async validateUserAndProject(userId: string, projectId: string) {
     const user = await this.userRepo.findOne({
@@ -212,7 +264,8 @@ export class GenerateHelperService {
               `"use strict"; ${code}`,
             );
             return evalFn(
-              t, b,
+              t,
+              b,
               Math.pow,
               Math.abs,
               Math.min,
@@ -307,8 +360,8 @@ export class GenerateHelperService {
     if (!body.model) {
       throw new Error('Model not found');
     }
-    const modelDetail = await this.modeltypeRepo.findOne({
-      where: { modelType: body.model, type: body.type },
+    const modelDetail = await this.masterModelTypeRepo.findOne({
+      where: { modelType: body.model, type: body.type, isActive: true },
     });
     if (!modelDetail) {
       throw new Error('Model not found');
@@ -405,5 +458,45 @@ export class GenerateHelperService {
       'X-Date': x_date,
       Authorization: authorization,
     };
+  }
+
+  public mapBodyToPayload(
+    body: Record<string, unknown>,
+    config: ModelConfig,
+  ): Record<string, unknown> {
+    const payload: Record<string, unknown> = {};
+
+    // 1. ใส่ static fields จาก config ก่อน (stream, watermark ฯลฯ)
+    if (config.staticFields) {
+      Object.assign(payload, config.staticFields);
+    }
+
+    // 2. map แต่ละ field ตาม fieldMappings
+    for (const mapping of config.fieldMappings) {
+      const { to, from, template, transform } = mapping;
+
+      let value: unknown;
+
+      if (template) {
+        // กรณีรวมหลาย field เช่น "{width}x{height}"
+        const fields = Array.isArray(from) ? from : [from];
+        const allExist = fields.every((f) => body[f] !== undefined);
+
+        if (!allExist) continue; // ข้ามถ้า field ใด field หนึ่งไม่มี
+
+        value = template.replace(/\{(\w+)\}/g, (_, key) => String(body[key]));
+      } else {
+        // กรณี 1-to-1 mapping
+        const key = Array.isArray(from) ? from[0] : from;
+        if (body[key] === undefined) continue; // ข้ามถ้าไม่มีใน body
+
+        value = body[key];
+      }
+
+      // optional transform
+      payload[to] = transform ? transform(value) : value;
+    }
+
+    return payload;
   }
 }

@@ -18,6 +18,11 @@ ingress:
     secretName: aicave-console-tls-sit
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-sit"
+  keycloakUrl: "https://id24.aicave.ai"
+  keycloakRealm: "eportal"
+  nodeOptions: "--max-old-space-size=192"
   nodeEnv: "Development"
   port: "4002"
   pathMountdirUpload: "./uploads"
@@ -29,6 +34,8 @@ env:
   redisPort: "6379"
   emailApiUrl: "http://aicave-email-api-service.aicave-sit.svc.cluster.local:8974"
   receiveEmail: "taksapongk@osd.co.th"
+  llmGatewayUrl: "https://llmgateway.osd.co.th/api"
+  llmProjectId: "team-mr8w25rb"
 
 
 # Secrets managed via GitHub Actions secrets and passed with --set:

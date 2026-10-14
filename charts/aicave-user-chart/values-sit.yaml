@@ -18,21 +18,31 @@ ingress:
     secretName: aicave-console-tls-sit
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-sit"
+  nodeOptions: "--max-old-space-size=192"
   nodeEnv: "development"
   port: "4000"
   nodeTlsRejectUnauthorized: "0"
   pathMountdirUpload: "./uploads"
   pathDomain: "http://sit.aicave.ai"
   emailApiUrl: "http://aicave-email-api-service.aicave-sit.svc.cluster.local:8974"
+  coreApiUrl: "http://aicave-core-service.aicave-sit.svc.cluster.local:8971/api"
   frontendUrl: "https://sit.aicave.ai"
   keycloakUrl: "https://id24.aicave.ai"
   keycloakRealm: "eportal"
-  keycloakClientId: "aicave-sit"
-  keycloakRedirectUri: "https://www.aicave.ai/callback"
+  keycloakClientId: "ai-cave-sit"
+  keycloakRedirectUri: "https://sit.aicave.ai/callback"
+  keycloakIdpMicrosoftAlias: "microsoft"
+  llmGatewayUrl: "https://llmgateway.osd.co.th"
+  llmProjectId: "team-mr8w25rb"
+  omiseApiUrl: "https://api.omise.co"
+  omiseApiVersion: "2019-05-29"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
 #   secretEnv.KEYCLOAK_CLIENT_SECRET
+#   secretEnv.OMISE_SECRET_KEY
 
 resources:
   requests:

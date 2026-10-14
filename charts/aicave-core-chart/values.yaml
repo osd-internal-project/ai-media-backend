@@ -25,6 +25,7 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
     nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
     nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
     nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "32k"
@@ -40,6 +41,11 @@ ingress:
     secretName: aicave-console-tls
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-prod"
+  keycloakUrl: "https://id24.aicave.ai"
+  keycloakRealm: "eportal"
+  nodeOptions: "--max-old-space-size=384"
   nodeEnv: "Production"
   port: "4002"
   pathMountdirUpload: "./uploads"
@@ -49,6 +55,8 @@ env:
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
   redisHost: "my-redis-master"
   redisPort: "6379"
+  llmGatewayUrl: "https://llmgateway.osd.co.th"
+  llmProjectId: "team-mrcx7er7"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
@@ -56,6 +64,7 @@ env:
 #   secretEnv.BYTEPLUS_SECRET_KEY
 #   secretEnv.TOS_ACCESS_KEY
 #   secretEnv.TOS_SECRET_KEY
+#   secretEnv.LLM_ADMIN_TOKEN
 
 resources:
   requests:

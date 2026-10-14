@@ -13,11 +13,14 @@ export class MasterModelTypeService {
   }
 
   async findAll() {
-    return this.masterModelTypeRepo.findAll({ orderBy: { id: 'asc' } });
+    return this.masterModelTypeRepo.findMany({
+      where: { isActive: true },
+      orderBy: { id: 'asc' },
+    });
   }
 
   async findOne(id: number) {
-    return this.masterModelTypeRepo.findOne({ where: { id } });
+    return this.masterModelTypeRepo.findOne({ where: { id, isActive: true } });
   }
 
   async update(id: number, data: Prisma.MasterModelTypeUpdateInput) {

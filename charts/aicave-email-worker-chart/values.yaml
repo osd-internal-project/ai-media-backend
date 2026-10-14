@@ -20,6 +20,7 @@ service:
   containerPort: 5001
 
 env:
+  nodeOptions: "--max-old-space-size=384"
   nodeEnv: "Production"
   port: "5001"
   redisHost: "my-redis-master"

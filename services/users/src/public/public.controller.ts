@@ -3,7 +3,10 @@ import { join } from 'path';
 import { createReadStream } from 'fs';
 import { Response } from 'express';
 import configs from 'src/configs';
+import { Public } from '@ai-media/share';
 const PORT = configs();
+// ไฟล์สาธารณะ
+@Public()
 @Controller('public')
 export class PublicController {
   @Get('user/:id')

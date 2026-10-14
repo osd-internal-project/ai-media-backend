@@ -3,7 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { KeycloakService } from '../keycloak/keycloak.service';
+import { IdpHint, KeycloakService } from '../keycloak/keycloak.service';
 import { UsersRepository } from '@ai-media/share';
 
 @Injectable()
@@ -32,19 +32,51 @@ export class AuthService {
     return this.keycloakService.login(loginDto);
   }
 
+  /**
+   * @param idp Identity provider to route the user to.
+   * @returns The Keycloak authorization URL for that provider.
+   */
+  async getIdpLoginUrl(idp: IdpHint) {
+    return await this.keycloakService.getIdpLoginUrl(idp);
+  }
+
+  /**
+   * Exchanges an IdP authorization code and provisions the local user.
+   *
+   * @param code Authorization code from the Keycloak redirect.
+   */
+  async idpCallback(code: string) {
+    return await this.keycloakService.idpCallback(code);
+  }
+
+  /** @deprecated Use {@link getIdpLoginUrl}. */
   async getGoogleLoginUrl() {
-    return await this.keycloakService.getGoogleLoginUrl();
+    return await this.keycloakService.getIdpLoginUrl('google');
   }
 
+  /** @deprecated Use {@link idpCallback}. */
   async googleCallback(code: string) {
-    return await this.keycloakService.googleCallback(code);
+    return await this.keycloakService.idpCallback(code);
   }
 
-  async checkUserExists(email: string) {
-    const user = await this.usersRepo.findOne({
+  /**
+   * Local user backing a Keycloak SSO sign-in — the session's only source of
+   * role and organization.
+   *
+   * @param email Email claim from the Keycloak id_token.
+   */
+  async checkUser(email: string) {
+    return this.usersRepo.findOne({
       where: { email },
+      select: {
+        userId: true,
+        username: true,
+        email: true,
+        role: true,
+        status: true,
+        recentOrganizationId: true,
+      },
     });
-    return !!user;
   }
 
   async validateToken(token: string) {

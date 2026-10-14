@@ -20,4 +20,9 @@ export class AcceptInvitationDto {
     @IsOptional()
     @IsString()
     phoneNumber?: string;
+
+    /** Keycloak sub (= users.token) ของคนที่ login อยู่ — ส่งมาแล้ว email ต้องตรงกับคำเชิญ */
+    @IsOptional()
+    @IsString()
+    userId?: string;
 }

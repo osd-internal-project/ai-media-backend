@@ -1,2 +1,2 @@
-[2K[1G[2m$ rimraf dist[22m
-[2K[1G[2m$ nest build[22m
+$ rimraf dist
+$ nest build

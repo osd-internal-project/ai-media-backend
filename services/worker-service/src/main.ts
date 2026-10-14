@@ -1,16 +1,10 @@
 import { NestFactory } from '@nestjs/core';
-import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import { WorkerServiceModule } from './app.module';
 import { appConfigs } from './configs';
 import { Logger } from '@nestjs/common';
 import helmet from 'helmet';
 
 async function bootstrap() {
-  /*
-  // สร้าง Context เพื่อดึง Config ก่อน
-  const rmqUrl = appConfigs().RABBITMQ_URL;
-  */
-  // สร้าง Microservice
   (BigInt.prototype as any).toJSON = function () {
     return this.toString();
   };

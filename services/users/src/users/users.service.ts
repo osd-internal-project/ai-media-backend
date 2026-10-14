@@ -22,6 +22,7 @@ import {
   RequestChangePasswordRepository,
   OrganizationSubscriptionRepository,
   CreditBalanceRepository,
+  LlmGatewayService,
 } from '@ai-media/share';
 import { v4 as uuidv4 } from 'uuid';
 import * as dayjs from 'dayjs';
@@ -48,7 +49,26 @@ export class UsersService {
     private readonly requestChangePasswordRepo: RequestChangePasswordRepository,
     private readonly organizationSubscriptionRepo: OrganizationSubscriptionRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
+    private readonly llmGateway: LlmGatewayService,
   ) {}
+
+  /**
+   * Provisions the organization's LLM gateway API key.
+   *
+   * Deliberately non-blocking: a gateway outage must never fail account creation. When this
+   * returns null the key stays NULL and `services/core` mints it lazily on the first
+   * generation, so the only cost is a slower first generate.
+   *
+   * @param organizationId Organization UUID.
+   */
+  private async provisionLlmApiKey(organizationId: string): Promise<void> {
+    const apiKey = await this.llmGateway.getOrCreateApiKey(organizationId);
+    if (!apiKey) {
+      Logger.warn(
+        `No LLM gateway API key provisioned for organization ${organizationId}; it will be created on first generation`,
+      );
+    }
+  }
 
   async create(createUserDto: any) {
     const { password, groups, ...userData } = createUserDto;
@@ -352,6 +372,8 @@ export class UsersService {
     });
 
     if (personalOrg) {
+      await this.provisionLlmApiKey(personalOrg.organizationId);
+
       await this.organizationMemberRepo.create({
         data: {
           organizationId: personalOrg.organizationId,
@@ -600,6 +622,8 @@ export class UsersService {
     });
 
     if (personalOrg) {
+      await this.provisionLlmApiKey(personalOrg.organizationId);
+
       await this.organizationMemberRepo.create({
         data: {
           organizationId: personalOrg.organizationId,

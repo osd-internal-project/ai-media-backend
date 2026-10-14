@@ -31,3 +31,20 @@ export const tosConfigs = registerAs('tos', () => ({
   tosRegion: process.env.TOS_REGION,
   tosEndpoint: process.env.TOS_ENDPOINT,
 }));
+export const communityConfigs = registerAs('community', () => ({
+  /**
+   * origin ของ core API ที่ผู้เยี่ยมชมภายนอกเรียกถึงได้ เช่น https://api.aicave.com
+   *
+   * ใช้ประกอบ URL ของสื่อในหน้า community ที่ต้องเป็น absolute เพราะ crawler
+   * ของ Facebook/X อ่าน og:image แบบ absolute เท่านั้น
+   *
+   * ปล่อยว่างได้ — จะ fallback ไปใช้ origin ของ request แทน (เพียงพอตอน dev
+   * และหลัง ingress ที่ตั้ง x-forwarded-* ถูกต้อง)
+   */
+  publicApiBaseUrl: process.env.COMMUNITY_PUBLIC_API_BASE_URL ?? '',
+}));
+
+// llmConfigs ถูกลบออก — ไม่เคยถูก register ใน ConfigModule และไม่มีที่ไหนอ่านเลย
+// การมีอยู่ทำให้เข้าใจผิดว่าค่า gateway ตั้งที่นี่ ทั้งที่ค่าที่ใช้จริงอ่าน env ตรง ๆ
+// ใน libs/share/src/llm-gateway (LlmGatewayService.config และ LlmChatService.config)
+// ซึ่งเป็นที่เดียวที่คุยกับ gateway

@@ -18,21 +18,32 @@ ingress:
     secretName: aicave-console-tls
 
 env:
-  nodeEnv: "development"
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-prod"
+  nodeOptions: "--max-old-space-size=384"
+  nodeEnv: "Production"
   port: "4000"
-  nodeTlsRejectUnauthorized: "0"
+  # ว่าง = ไม่ใส่ env (ตรวจ cert ตามปกติ) — ต้อง override ค่า "0" ของ values.yaml
+  nodeTlsRejectUnauthorized: ""
   pathMountdirUpload: "./uploads"
   pathDomain: "http://www.aicave.ai"
   emailApiUrl: "http://aicave-email-api-service.aicave-prod.svc.cluster.local:8974"
+  coreApiUrl: "http://aicave-core-service.aicave-prod.svc.cluster.local:8971/api"
   frontendUrl: "https://www.aicave.ai"
   keycloakUrl: "https://id24.aicave.ai"
   keycloakRealm: "eportal"
-  keycloakClientId: "eportal-client-id"
+  keycloakClientId: "ai-cave-prod"
   keycloakRedirectUri: "https://www.aicave.ai/callback"
+  keycloakIdpMicrosoftAlias: "microsoft"
+  llmGatewayUrl: "https://llmgateway.osd.co.th"
+  llmProjectId: "team-mqt1b3qx"
+  omiseApiUrl: "https://api.omise.co"
+  omiseApiVersion: "2019-05-29"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
 #   secretEnv.KEYCLOAK_CLIENT_SECRET
+#   secretEnv.OMISE_SECRET_KEY
 
 resources:
   requests:

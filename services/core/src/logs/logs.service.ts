@@ -5,21 +5,12 @@ import {
   UsersRepository,
   ErrorLogRepository,
   AuditLogRepository,
-  TosService,
   ProjectMemberRepository,
+  resolveGalleryResultUrls,
+  StorageUrlService,
 } from '@ai-media/share';
 import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
-import { tosConfigs } from 'src/configs';
 import * as dayjs from 'dayjs';
-
-const REF_IMAGE_PLACEHOLDER =
-  'data:image/svg+xml;base64,' +
-  Buffer.from(
-    `<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-    <rect width="32" height="32" fill="#333"/>
-    <text x="16" y="18" text-anchor="middle" font-family="Arial" font-size="8" fill="#666">No Image</text>
-  </svg>`,
-  ).toString('base64');
 
 @Injectable()
 export class LogsService {
@@ -29,9 +20,50 @@ export class LogsService {
     private readonly userRepo: UsersRepository,
     private readonly auditLogRepo: AuditLogRepository,
     private readonly errorLogRepo: ErrorLogRepository,
-    private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
     private readonly projectMemberRepository: ProjectMemberRepository,
   ) {}
+
+  /**
+   * แปลงชื่อไฟล์ผลลัพธ์ของ gallery row เป็น URL สำหรับแสดงผล
+   *
+   * @param organizationId รหัสองค์กรของผู้เรียก
+   * @param item gallery row ที่มี projectId และ typeGenerate
+   * @param objectName ชื่อไฟล์ใน bucket (ว่างได้)
+   * @returns URL สำหรับแสดงผล หรือ '' เมื่อไม่มีไฟล์ (คง shape เดิมที่ client คาดหวัง)
+   */
+  private async resolveOutputUrl(
+    organizationId: string,
+    item: { projectId: string; typeGenerate: string },
+    objectName: string | null | undefined,
+  ): Promise<string> {
+    const url = await this.storageUrl.resolveOutputUrl(
+      organizationId,
+      item.projectId,
+      item.typeGenerate,
+      objectName,
+    );
+    return url ?? '';
+  }
+
+  /**
+   * แปลง reference image ที่เก็บไว้เป็น object key ให้เป็น URL สำหรับแสดงผล
+   *
+   * ค่าใน referenceImages เป็น key เต็ม (organize/.../upload/xxx.png) อยู่แล้ว
+   * จึงส่งเข้า resolver ตรง ๆ ห้ามเติม prefix ทับ
+   *
+   * @param referenceImagesMap map จาก taskId → list ของ reference key
+   * @param taskId taskId ของ gallery row
+   * @returns list ของ URL (ไฟล์ที่หาไม่เจอกลายเป็น placeholder)
+   */
+  private resolveReferenceImageUrls(
+    referenceImagesMap: Map<string, string[]>,
+    taskId: string,
+  ): Promise<string[]> {
+    const filenames: string[] = referenceImagesMap.get(taskId) ?? [];
+    return this.storageUrl.toVerifiedDisplayUrls(filenames);
+  }
+
   async findProjectImageByPage(
     projectId: string,
     organizationId: string,
@@ -46,8 +78,10 @@ export class LogsService {
           where: { token: userId },
         })
       : null;
-    const tasks = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const tasks = await this.galleryRepo.findMany({
       where: {
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'image',
@@ -56,7 +90,7 @@ export class LogsService {
         ...(user && { userId: user.userId }),
       },
       distinct: ['taskId'],
-      orderBy: { createdAt: 'desc' },
+      orderBy: { seq: 'desc' }, // ต้องตรงกับ cursor fristsql/lastsql
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
 
@@ -70,6 +104,7 @@ export class LogsService {
       where: {
         taskId: { in: targetTaskIds },
         typeGenerate: 'image',
+        genneratedStatus: { not: 'FAILED' },
       },
       include: { users: true },
       orderBy: { createdAt: 'desc' },
@@ -98,35 +133,36 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    const bucket = tosConfigs().tosBucket;
-    const PLACEHOLDER = REF_IMAGE_PLACEHOLDER;
-
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
-        const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
-            : Promise.resolve(''),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
-            : Promise.resolve(''),
+        // ใช้ resultUrl[] เป็นหลัก, fallback imageUrl เดี่ยวสำหรับ data เก่า
+        const objectNames = resolveGalleryResultUrls(item);
+        const [urls, thumbnailUrl] = await Promise.all([
+          Promise.all(
+            objectNames.map((name) =>
+              this.resolveOutputUrl(organizationId, item, name),
+            ),
+          ),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const ok = await this.tosService.headObject(bucket, filename);
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, filename)
-              : PLACEHOLDER;
-          }),
+        // 1 entry ต่อ 1 รูปใน resultUrl[] (data เก่า = 1 entry จาก imageUrl)
+        const entries = urls.map((imageUrl, i) => ({
+          imageUrl,
+          thumbnailUrl,
+          id: item.id,
+          status: item.status,
+          fileName: objectNames[i],
+        }));
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
-        return { item, url, thumbnailUrl, referenceImageUrls };
+        return { item, entries, referenceImageUrls };
       }),
     );
 
     const map = new Map();
-    for (const { item, url, thumbnailUrl, referenceImageUrls } of processed) {
+    for (const { item, entries, referenceImageUrls } of processed) {
       if (!map.has(item.taskId)) {
         map.set(item.taskId, {
           ...item,
@@ -134,15 +170,12 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl }],
+          imageUrls: [...entries],
         });
         delete map.get(item.taskId).imageUrl;
         delete map.get(item.taskId).thumbnailUrl;
       } else {
-        map.get(item.taskId).imageUrls.push({
-          imageUrl: url, thumbnailUrl, id: item.id, status: item.status,
-          fileName: item.imageUrl, seq: seqMap.get(item.taskId) || null,
-        });
+        map.get(item.taskId).imageUrls.push(...entries);
       }
     }
     return Array.from(map.values());
@@ -161,8 +194,10 @@ export class LogsService {
           where: { token: userId },
         })
       : null;
-    const tasks = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const tasks = await this.galleryRepo.findMany({
       where: {
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'video',
@@ -175,7 +210,7 @@ export class LogsService {
 
       // include: { users: true },
       // distinct: ['taskId'],
-      orderBy: { createdAt: 'desc' },
+      orderBy: { seq: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
     const targetTaskIds = tasks.map((t) => t.taskId);
@@ -188,6 +223,7 @@ export class LogsService {
       where: {
         taskId: { in: targetTaskIds },
         typeGenerate: 'video',
+        genneratedStatus: { not: 'FAILED' },
       },
       include: { users: true },
       orderBy: { createdAt: 'desc' },
@@ -229,38 +265,37 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    
-    const bucket = tosConfigs().tosBucket;
-    const PLACEHOLDER = REF_IMAGE_PLACEHOLDER;
 
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
-        const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
-            : Promise.resolve(''),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
-            : Promise.resolve(''),
+        // ใช้ resultUrl[] เป็นหลัก, fallback imageUrl เดี่ยวสำหรับ data เก่า
+        const objectNames = resolveGalleryResultUrls(item);
+        const [urls, thumbnailUrl] = await Promise.all([
+          Promise.all(
+            objectNames.map((name) =>
+              this.resolveOutputUrl(organizationId, item, name),
+            ),
+          ),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const refBase = `organize/${organizationId}/${item.projectId}/uploads`;
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const path = `${refBase}/${filename}`;
-            const ok = await this.tosService.headObject(bucket, path);
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, path)
-              : PLACEHOLDER;
-          }),
+        // 1 entry ต่อ 1 ไฟล์ใน resultUrl[] (data เก่า = 1 entry จาก imageUrl)
+        const entries = urls.map((imageUrl, i) => ({
+          imageUrl,
+          thumbnailUrl,
+          id: item.id,
+          status: item.status,
+          fileName: objectNames[i],
+        }));
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
-        return { item, url, thumbnailUrl, referenceImageUrls };
+        return { item, entries, referenceImageUrls };
       }),
     );
 
     const newData = new Map();
-    for (const { item, url, thumbnailUrl, referenceImageUrls } of processed) {
+    for (const { item, entries, referenceImageUrls } of processed) {
       if (!newData.has(item.taskId)) {
         newData.set(item.taskId, {
           ...item,
@@ -269,14 +304,12 @@ export class LogsService {
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl }],
+          imageUrls: [...entries],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
-        newData.get(item.taskId).imageUrls.push({
-          imageUrl: url, thumbnailUrl, id: item.id, fileName: item.imageUrl, status: item.status,
-        });
+        newData.get(item.taskId).imageUrls.push(...entries);
       }
     }
     return Array.from(newData.values());
@@ -296,8 +329,10 @@ export class LogsService {
           where: { token: userId },
         })
       : null;
-    const tasks = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const tasks = await this.galleryRepo.findMany({
       where: {
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'omnihumen',
@@ -307,7 +342,7 @@ export class LogsService {
         ...(user && { userId: user.userId }),
       },
       distinct: ['taskId'],
-      orderBy: { createdAt: 'desc' },
+      orderBy: { seq: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
     const targetTaskIds = tasks.map((t) => t.taskId);
@@ -318,6 +353,7 @@ export class LogsService {
 
     const data = await this.galleryRepo.findMany({
       where: {
+        genneratedStatus: { not: 'FAILED' },
         taskId: { in: targetTaskIds },
         typeGenerate: 'omnihumen',
       },
@@ -361,26 +397,15 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    const bucket = tosConfigs().tosBucket;
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
-            : Promise.resolve(''),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
-            : Promise.resolve(''),
+          this.resolveOutputUrl(organizationId, item, item.imageUrl),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const ok = await this.tosService.headObject(bucket, filename || '');
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, filename)
-              : REF_IMAGE_PLACEHOLDER;
-          }),
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
         return { item, url, thumbnailUrl, referenceImageUrls };
       }),
@@ -396,13 +421,25 @@ export class LogsService {
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || null,
           seq: seqMap.get(item.taskId) || null,
-          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl }],
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl,
+              id: item.id,
+              status: item.status,
+              fileName: item.imageUrl,
+            },
+          ],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
-          imageUrl: url, thumbnailUrl, id: item.id, fileName: item.imageUrl, status: item.status,
+          imageUrl: url,
+          thumbnailUrl,
+          id: item.id,
+          fileName: item.imageUrl,
+          status: item.status,
         });
       }
     }
@@ -423,8 +460,10 @@ export class LogsService {
           where: { token: userId },
         })
       : null;
-    const tasks = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const tasks = await this.galleryRepo.findMany({
       where: {
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'dreamactor',
@@ -435,7 +474,7 @@ export class LogsService {
       },
       distinct: ['taskId'],
       include: { users: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { seq: 'desc' },
       ...(skip !== undefined && take !== undefined && { skip, take }),
     });
     const targetTaskIds = tasks.map((t) => t.taskId);
@@ -447,7 +486,8 @@ export class LogsService {
     const data = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
-        typeGenerate: 'video',
+        typeGenerate: 'dreamactor',
+        genneratedStatus: { not: 'FAILED' },
       },
       include: { users: true },
       orderBy: { createdAt: 'desc' },
@@ -490,26 +530,15 @@ export class LogsService {
         seqMap.set(log.taskId, log.seq);
       }
     });
-    const bucket = tosConfigs().tosBucket;
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
-            : Promise.resolve(''),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
-            : Promise.resolve(''),
+          this.resolveOutputUrl(organizationId, item, item.imageUrl),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const ok = await this.tosService.headObject(bucket, filename || '');
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, filename)
-              : REF_IMAGE_PLACEHOLDER;
-          }),
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
         return { item, url, thumbnailUrl, referenceImageUrls };
       }),
@@ -569,6 +598,7 @@ export class LogsService {
     }
     const data = await this.galleryRepo.findMany({
       where: {
+        genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
         typeGenerate: 'video',
@@ -593,10 +623,12 @@ export class LogsService {
     //   orderBy: { createdAt: 'desc' },
     // });
 
-    const logData = await this.logrepo.findMany({
+    // อ่าน metadata จาก gallery โดยตรง (denormalize แล้ว) — เลิก join log
+    const logData = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
         typeGenerate: 'video',
+        genneratedStatus: { not: 'FAILED' },
       },
       select: {
         taskId: true,
@@ -628,28 +660,15 @@ export class LogsService {
       }
     });
 
-    const bucket = tosConfigs().tosBucket;
     const processed = await Promise.all(
       data.map(async (item) => {
-        const base = `organize/${organizationId}/${item.projectId}/${item.typeGenerate}-generate`;
         const [url, thumbnailUrl] = await Promise.all([
-          item.imageUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.imageUrl}`)
-            : Promise.resolve(''),
-          item.thumbnailUrl
-            ? this.tosService.getPreSignedUrl(bucket, `${base}/${item.thumbnailUrl}`)
-            : Promise.resolve(''),
+          this.resolveOutputUrl(organizationId, item, item.imageUrl),
+          this.resolveOutputUrl(organizationId, item, item.thumbnailUrl),
         ]);
-        const filenames: string[] = referenceImagesMap.get(item.taskId) || [];
-        const refBase = `organize/${organizationId}/${item.projectId}/uploads`;
-        const referenceImageUrls = await Promise.all(
-          filenames.map(async (filename) => {
-            const path = `${refBase}/${filename}`;
-            const ok = await this.tosService.headObject(bucket, path);
-            return ok
-              ? this.tosService.getPreSignedUrl(bucket, path)
-              : REF_IMAGE_PLACEHOLDER;
-          }),
+        const referenceImageUrls = await this.resolveReferenceImageUrls(
+          referenceImagesMap,
+          item.taskId,
         );
         return { item, url, thumbnailUrl, referenceImageUrls };
       }),
@@ -664,13 +683,25 @@ export class LogsService {
           resolution: resolutionMap.get(item.taskId) || null,
           ratio: ratioMap.get(item.taskId) || null,
           generateAudio: generateAudio.get(item.taskId) || false,
-          imageUrls: [{ imageUrl: url, thumbnailUrl, id: item.id, fileName: item.imageUrl, status: item.status }],
+          imageUrls: [
+            {
+              imageUrl: url,
+              thumbnailUrl,
+              id: item.id,
+              fileName: item.imageUrl,
+              status: item.status,
+            },
+          ],
         });
         delete newData.get(item.taskId).imageUrl;
         delete newData.get(item.taskId).thumbnailUrl;
       } else {
         newData.get(item.taskId).imageUrls.push({
-          imageUrl: url, thumbnailUrl, id: item.id, status: item.status, fileName: item.imageUrl,
+          imageUrl: url,
+          thumbnailUrl,
+          id: item.id,
+          status: item.status,
+          fileName: item.imageUrl,
         });
       }
     }

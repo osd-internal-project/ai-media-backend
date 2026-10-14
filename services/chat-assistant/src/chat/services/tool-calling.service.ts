@@ -1,8 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { PrismaService } from '@ai-media/share';
-import { LlmMessage } from './prompt-engineering.service';
-import { firstValueFrom } from 'rxjs';
+import { LlmMessage, PrismaService } from '@ai-media/share';
+
+/**
+ * ผลลัพธ์ของ tool 1 ตัว ในรูปข้อความที่ส่งกลับให้โมเดลได้
+ *
+ * แคบกว่า LlmMessage ตรงที่ content เป็น string เสมอ — ผลของ tool ถูก serialize
+ * เป็นสตริงทุกกรณีอยู่แล้ว การประกาศให้ตรงตามนั้นทำให้ผู้เรียกไม่ต้อง cast
+ */
+export interface ToolResultMessage extends LlmMessage {
+  role: 'tool';
+  content: string;
+  tool_call_id: string;
+  name: string;
+}
 
 export interface ToolDefinition {
   type: 'function';
@@ -34,10 +44,7 @@ export class ToolCallingService {
     get_current_time: async () => new Date().toISOString(),
   };
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly httpService: HttpService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Load active tool definitions from the DB (formatted for OpenAI API).
@@ -62,8 +69,8 @@ export class ToolCallingService {
    */
   async executeToolCalls(
     toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>,
-  ): Promise<LlmMessage[]> {
-    const results: LlmMessage[] = [];
+  ): Promise<ToolResultMessage[]> {
+    const results: ToolResultMessage[] = [];
 
     for (const call of toolCalls) {
       const fnName = call.function.name;

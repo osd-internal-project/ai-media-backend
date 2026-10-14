@@ -29,12 +29,24 @@ spec:
         env:
         - name: NODE_ENV
           value: {{ .Values.env.nodeEnv | quote }}
+        {{- if .Values.env.nodeOptions }}
+        - name: NODE_OPTIONS
+          value: {{ .Values.env.nodeOptions | quote }}
+        {{- end }}
         - name: PORT
           value: {{ .Values.env.port | quote }}
         - name: REDIS_HOST
           value: {{ .Values.env.redisHost | quote }}
         - name: REDIS_PORT
           value: {{ .Values.env.redisPort | quote }}
+        - name: EMAIL_HOST
+          value: {{ .Values.env.emailHost | quote }}
+        - name: EMAIL_PORT
+          value: {{ .Values.env.emailPort | quote }}
+        - name: EMAIL_SECURE
+          value: {{ .Values.env.emailSecure | quote }}
+        - name: EMAIL_FROM
+          value: {{ .Values.env.emailFrom | quote }}
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

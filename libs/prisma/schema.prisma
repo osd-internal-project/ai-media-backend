@@ -27,16 +27,16 @@ enum AuditAction {
 
 model users {
   id                   Int                  @id @default(autoincrement())
-  userId               String               @unique @default(uuid()) @db.VarChar(50)
+  userId               String               @unique @default(uuid()) @map("user_id") @db.VarChar(50)
   username             String               @unique @db.VarChar(100)
   fullname             String               @db.VarChar(200)
   email                String               @db.VarChar(200)
   tier                 String               @default("free") @db.VarChar(200)
   description          String?              @db.Text
-  phoneNumber          String               @default("phone_number") @db.VarChar(50)
+  phoneNumber          String               @default("phone_number") @map("phone_number") @db.VarChar(50)
   status               String               @default("active") @db.VarChar(50) //active, inactive, deleted, banned, invite
   lastOn               DateTime?            @map("last_on")
-  maxToken             Int?                 @default(0)
+  maxToken             Int?                 @default(0) @map("max_token")
   maxImages            Int?                 @default(0) @map("max_images")
   apiKeys              String?              @map("api_keys") @db.Text
   token                String?              @db.VarChar(50)
@@ -50,43 +50,56 @@ model users {
   logs                 Log[]
   recentOrganizationId String?              @map("recent_organization_id") @db.VarChar(50)
   organizationMembers  OrganizationMember[]
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([token])
+  @@index([email])
 }
 
 model Project {
-  id                   String          @id @default(uuid())
-  name                 String
-  description          String?
-  createdAt            DateTime        @default(now())
-  status               String?         @default("active") @db.VarChar(10)
+  id                    String                 @id @default(uuid())
+  name                  String
+  description           String?
+  createdAt             DateTime               @default(now()) @map("created_at")
+  status                String?                @default("active") @db.VarChar(10)
   // Relations
-  members              ProjectMember[]
-  galleries            Gallery[]
-  logs                 Log[]
-  organizationId       String?         @map("organization_id") @db.VarChar(50)
+  members               ProjectMember[]
+  galleries             Gallery[]
+  logs                  Log[]
+  // ความสัมพันธ์กับ Workflow (เพิ่มใหม่ แบบ additive ไม่กระทบของเดิม)
+  workflowConversations WorkflowConversation[]
+  activityShares        ActivityShare[]
+  communityPosts        CommunityPost[]
+  photoEventTemplates   PhotoEventTemplate[]
+  photoEventPhotos      PhotoEventPhoto[]
+  organizationId        String?                @map("organization_id") @db.VarChar(50)
   // ยอดจำกัด ของ Project
-  limitImageAllowance  Int             @default(0) @map("limit_image_allowance")
-  limitCreditAllowance Float           @default(0) @map("limit_credit_allowance")
+  limitImageAllowance   Int                    @default(0) @map("limit_image_allowance")
+  limitCreditAllowance  Float                  @default(0) @map("limit_credit_allowance")
   // ยอดใช้ของ Project
-  usedImageAllowance   Int             @default(0) @map("used_image_allowance")
-  usedCreditAllowance  Float           @default(0) @map("used_credit_allowance")
+  usedImageAllowance    Int                    @default(0) @map("used_image_allowance")
+  usedCreditAllowance   Float                  @default(0) @map("used_credit_allowance")
   // ยอดจัดเก็บของ Project
-  holdImageAllowance   Int             @default(0) @map("hold_image_allowance")
-  holdCreditAllowance  Float           @default(0) @map("hold_credit_allowance")
+  holdImageAllowance    Int                    @default(0) @map("hold_image_allowance")
+  holdCreditAllowance   Float                  @default(0) @map("hold_credit_allowance")
   //ตัวเก่า
-  accessTokenAmount    Int?            @default(0) @map("access_token_amount")
-  accessImageAmount    Int?            @default(0) @map("access_image_amount")
-  remainTokenAmount    Int?            @default(0) @map("remain_token_amount")
-  remainImageAmount    Int?            @default(0) @map("remain_image_amount")
+  accessTokenAmount     Int?                   @default(0) @map("access_token_amount")
+  accessImageAmount     Int?                   @default(0) @map("access_image_amount")
+  remainTokenAmount     Int?                   @default(0) @map("remain_token_amount")
+  remainImageAmount     Int?                   @default(0) @map("remain_image_amount")
 
   @@map("project")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([organizationId])
 }
 
 model ProjectMember {
   id        String   @id @default(uuid())
-  projectId String
-  userId    String
+  projectId String   @map("project_id")
+  userId    String   @map("user_id")
   role      String?
-  joinedAt  DateTime @default(now())
+  joinedAt  DateTime @default(now()) @map("joined_at")
 
   project              Project @relation(fields: [projectId], references: [id])
   users                users   @relation(fields: [userId], references: [userId])
@@ -105,55 +118,187 @@ model ProjectMember {
 
   @@unique([projectId, userId]) // ห้ามซ้ำ
   @@map("project_member")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([userId])
 }
 
 model Gallery {
   id  String @id @default(uuid())
   seq Int    @default(autoincrement()) @db.Integer
 
-  taskId           String?
-  projectId        String
-  userId           String
-  imageUrl         String?
+  taskId           String?  @map("task_id")
+  projectId        String   @map("project_id")
+  userId           String   @map("user_id")
+  imageUrl         String?  @map("image_url")
   prompt           String?
-  thumbnailUrl     String?
-  typeGenerate     String?
-  createdAt        DateTime @default(now())
+  thumbnailUrl     String?  @map("thumbnail_url")
+  typeGenerate     String?  @map("type_generate")
+  createdAt        DateTime @default(now()) @map("created_at")
   status           Boolean? @default(false)
   project          Project  @relation(fields: [projectId], references: [id])
   users            users    @relation(fields: [userId], references: [userId])
-  genneratedStatus String?  @default("PENDING") @db.VarChar(50)
+  genneratedStatus String?  @default("PENDING") @map("gennerated_status") @db.VarChar(50)
   generateConfig   Json?    @map("generate_config") @db.JsonB
   usedCredit       Float?   @default(0) @map("used_credit")
   usedImage        Int?     @default(0) @map("used_image")
+  // คอลัมน์ใหม่สำหรับแยกประเภทฟีเจอร์ — มี default + nullable เพื่อไม่ให้ insert เดิมพัง
+  featureType      String   @default("chat") @map("feature_type") @db.VarChar(50)
+  refFeatureId     String?  @map("ref_feature_id") @db.VarChar(100)
+  // คอลัมน์ที่ denormalize มาจาก log (metadata ระดับ request) — nullable/default เพื่อไม่ให้ insert เดิมพัง
+  referenceImages  String[] @default([]) @map("reference_images")
+  // เก็บ object name ของ output ทุกรูปใน generation เดียว (แทน imageUrl เดี่ยว) — default [] กัน data เก่า
+  resultUrl        String[] @default([]) @map("result_url")
+  resolution       String?
+  ratio            String?
+  generateAudio    Boolean? @default(false) @map("generate_audio")
+  tokenUsed        Float?   @default(0) @map("token_used")
+  ImageUsed        Int?     @default(0) @map("image_used")
 
   @@map("gallery")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([projectId, typeGenerate, seq])
+  @@index([taskId])
+  @@index([userId])
 }
 
 model Log {
   id              String   @id @default(uuid())
   seq             Int      @default(autoincrement()) @db.Integer
-  taskId          String?
+  taskId          String?  @map("task_id")
   status          String?
-  typeGenerate    String?
-  projectId       String
-  userId          String
+  typeGenerate    String?  @map("type_generate")
+  projectId       String   @map("project_id")
+  userId          String   @map("user_id")
   prompt          String
-  tokenUsed       Float
-  ImageUsed       Int
-  referenceImages String[] @default([])
+  tokenUsed       Float    @map("token_used")
+  ImageUsed       Int      @map("image_used")
+  referenceImages String[] @default([]) @map("reference_images")
   resolution      String?
   ratio           String?
-  generateAudio   Boolean? @default(false)
-  createdAt       DateTime @default(now())
+  generateAudio   Boolean? @default(false) @map("generate_audio")
+  createdAt       DateTime @default(now()) @map("created_at")
   generateConfig  Json?    @map("generate_config") @db.JsonB
   project         Project  @relation(fields: [projectId], references: [id])
   users           users    @relation(fields: [userId], references: [userId])
   galleryId       String?  @map("gallary_id") @db.VarChar(100)
   usedCredit      Float?   @default(0) @map("used_credit")
   usedImage       Int?     @default(0) @map("used_image")
+  // คอลัมน์ใหม่สำหรับแยกประเภทฟีเจอร์ — มี default + nullable เพื่อไม่ให้ insert เดิมพัง
+  featureType     String   @default("chat") @map("feature_type") @db.VarChar(50)
+  refFeatureId    String?  @map("ref_feature_id") @db.VarChar(100)
 
   @@map("log")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([taskId])
+  @@index([projectId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// บทสนทนา/แคนวาสของ Workflow หนึ่งชุด (1 โปรเจกต์มีได้หลายชุด)
+model WorkflowConversation {
+  id          String   @id @default(uuid())
+  projectId   String   @map("project_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  project Project         @relation(fields: [projectId], references: [id])
+  blocks  WorkflowBlock[]
+
+  @@map("workflow_conversation")
+}
+
+/// หนึ่งบล็อก = หนึ่งงาน generate ภายใน Workflow conversation
+model WorkflowBlock {
+  id                     String   @id @default(uuid())
+  workflowConversationId String   @map("workflow_conversation_id")
+  // รายการ id ของบล็อกต้นทางที่นำ output มาเป็น input
+  parentBlockIds         String[] @default([]) @map("parent_block_ids")
+  type                   String   @db.VarChar(20) // "image" | "video"
+  status                 String   @default("pending") @db.VarChar(20) // pending|processing|success|failed
+  prompt                 String
+  model                  String
+  resolution             String
+  // payload เต็มที่ส่งให้ GenerateService (ให้ตรงกับฟอร์มเดิมของ Gen Image/Video)
+  generateConfig         Json?    @map("generate_config") @db.JsonB
+  // ใช้ map บล็อก -> task ของ pipeline เดิม (สำหรับ reuse)
+  taskId                 String?  @map("task_id")
+  outputUrl              String?  @map("output_url")
+  errorMessage           String?  @map("error_message")
+  positionX              Float    @default(0) @map("position_x")
+  positionY              Float    @default(0) @map("position_y")
+  duration               Float? // วินาทีที่ใช้ในการ generate
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  conversation WorkflowConversation @relation(fields: [workflowConversationId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_block")
+}
+
+/// template (PromptGuide) ที่ project เลือกไว้แสดงบนจอ kiosk ของ Photo Event
+model PhotoEventTemplate {
+  id            String   @id @default(uuid())
+  projectId     String   @map("project_id")
+  promptGuideId Int      @map("prompt_guide_id")
+  sortOrder     Int      @default(0) @map("sort_order")
+  // ต่อท้าย textPrompt ตอน generate จาก event — null = ใช้ค่า default ใน code
+  promptTail    String?  @map("prompt_tail") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  project     Project     @relation(fields: [projectId], references: [id])
+  promptGuide PromptGuide @relation(fields: [promptGuideId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, promptGuideId])
+  @@map("photo_event_template")
+}
+
+/// รูปที่ staff นำเข้าให้แขกเลือกบนจอ kiosk
+model PhotoEventPhoto {
+  id             String   @id @default(uuid())
+  projectId      String   @map("project_id")
+  organizationId String   @map("organization_id") @db.VarChar(50)
+  userId         String   @map("user_id")
+  imagePath      String   @map("image_path")
+  imageName      String   @map("image_name")
+  imageType      String   @map("image_type") @db.VarChar(50)
+  imageSize      Int      @default(0) @map("image_size")
+  status         String   @default("active") @db.VarChar(20) // active|deleted
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  project     Project                @relation(fields: [projectId], references: [id])
+  generations PhotoEventGeneration[]
+
+  @@index([projectId, status])
+  @@map("photo_event_photo")
+}
+
+/// หนึ่งครั้งที่กด generate บน kiosk — id ใช้เป็นลิงก์ share ใน QR code
+model PhotoEventGeneration {
+  id            String   @id @default(uuid())
+  projectId     String   @map("project_id")
+  photoId       String   @map("photo_id")
+  promptGuideId Int      @map("prompt_guide_id")
+  userId        String   @map("user_id")
+  taskId        String   @unique @map("task_id")
+  status        String   @default("pending") @db.VarChar(20) // pending|processing|success|failed
+  progress      Int?
+  // storage key เต็มของรูปผลลัพธ์ (presign ใหม่ทุกครั้งที่อ่าน)
+  outputKey     String?  @map("output_key")
+  galleryId     String?  @map("gallery_id")
+  errorMessage  String?  @map("error_message")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  photo PhotoEventPhoto @relation(fields: [photoId], references: [id])
+
+  @@index([projectId])
+  @@index([photoId])
+  @@map("photo_event_generation")
 }
 
 model groups {
@@ -184,13 +329,13 @@ model role {
 model GroupRole {
   id Int @id @default(autoincrement())
 
-  groupId String @db.VarChar(50)
-  roleId  String @db.VarChar(50)
+  groupId String @map("group_id") @db.VarChar(50)
+  roleId  String @map("role_id") @db.VarChar(50)
 
   group groups @relation(fields: [groupId], references: [groupId])
   role  role   @relation(fields: [roleId], references: [roleId])
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([groupId, roleId])
   @@map("group_role")
@@ -198,29 +343,35 @@ model GroupRole {
 
 model UserGroup {
   id      Int    @id @default(autoincrement())
-  userId  String @db.VarChar(50)
-  groupId String @db.VarChar(50)
+  userId  String @map("user_id") @db.VarChar(50)
+  groupId String @map("group_id") @db.VarChar(50)
   users   users  @relation(fields: [userId], references: [userId])
   group   groups @relation(fields: [groupId], references: [groupId])
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([userId, groupId])
   @@map("user_group")
 }
 
 model MasterModelType {
-  id           Int      @unique @default(autoincrement()) @map("id")
-  modelType    String?  @map("model_type") @db.VarChar(150)
-  type         String?  @map("type") @db.VarChar(150)
-  description  String?  @map("description") @db.VarChar(150)
-  isDefault    Boolean  @default(false) @map("is_default")
-  modelDetails Json?    @map("model_details")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @default(now()) @map("updated_at")
-  optionCode   String[] @default([]) @map("option_code")
-  sendApi      String   @default("") @map("send_api") @db.Text
-  sendConfig   Json?    @map("send_config")
+  id              Int      @unique @default(autoincrement()) @map("id")
+  name            String?  @map("name") @db.VarChar(150)
+  modelType       String?  @map("model_type") @db.VarChar(150)
+  type            String?  @map("type") @db.VarChar(150)
+  description     String?  @map("description") @db.VarChar(150)
+  isDefault       Boolean  @default(false) @map("is_default")
+  modelDetails    Json?    @map("model_details")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+  optionCode      String[] @default([]) @map("option_code")
+  sendApi         String   @default("") @map("send_api") @db.Text
+  sendConfig      Json?    @map("send_config")
+  requestBodyMap  Json?    @map("request_body_map")
+  taskPollApi     String?  @map("task_poll_api") @db.Text
+  taskPollSec     Int      @default(10) @map("task_poll_sec") @db.Integer
+  taskResponseMap Json?    @map("task_response_map")
+  isActive        Boolean  @default(false) @map("is_active")
 
   @@map("master_model_type")
 }
@@ -275,19 +426,20 @@ model MasterDataConfigApi {
 }
 
 model PromptGuide {
-  id                Int              @unique @default(autoincrement()) @map("id")
-  title             String?          @map("title") @db.VarChar(150)
-  textPrompt        String?          @map("text_prompt") @db.Text
-  description       String?          @map("description") @db.Text
-  model             String?          @map("model") @db.VarChar(100)
-  status            Boolean          @map("status") @db.Boolean
-  createdAt         DateTime         @default(now()) @map("created_at")
-  updatedAt         DateTime         @default(now()) @map("updated_at")
-  promptGuideType   PromptGuideType? @relation(fields: [promptGuideTypeId], references: [id])
-  promptGuideTypeId Int?             @map("prompt_guide_type_id")
-  organizationId    String?          @map("organization_id") @db.VarChar(50)
-  generateType      String           @default("image") @map("generate_type") @db.VarChar(10) // image/video
-  promptGuideImages String[]         @default([]) @map("prompt_guide_images")
+  id                  Int                  @unique @default(autoincrement()) @map("id")
+  title               String?              @map("title") @db.VarChar(150)
+  textPrompt          String?              @map("text_prompt") @db.Text
+  description         String?              @map("description") @db.Text
+  model               String?              @map("model") @db.VarChar(100)
+  status              Boolean              @map("status") @db.Boolean
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @default(now()) @map("updated_at")
+  promptGuideType     PromptGuideType?     @relation(fields: [promptGuideTypeId], references: [id])
+  promptGuideTypeId   Int?                 @map("prompt_guide_type_id")
+  organizationId      String?              @map("organization_id") @db.VarChar(50)
+  generateType        String               @default("image") @map("generate_type") @db.VarChar(10) // image/video
+  promptGuideImages   String[]             @default([]) @map("prompt_guide_images")
+  photoEventTemplates PhotoEventTemplate[]
 
   @@map("prompt_guide")
 }
@@ -371,6 +523,16 @@ model Organization {
   creditBalance       CreditBalance?
   packageTransactions PackageTransaction[]
   brandKits           BrandKit[]
+  socialAccounts      SocialAccount[]
+  llmApiKey           String?                   @map("llm_api_key") @db.VarChar(100)
+  /// host ของ gateway ที่ออก llmApiKey ใบนี้ให้
+  ///
+  /// key ใช้ได้เฉพาะกับ host ที่ออกให้ — เก็บไว้เทียบกับ LLM_GATEWAY_URL ปัจจุบัน
+  /// เพื่อให้ระบบ mint ใหม่เองเมื่อย้าย gateway แทนที่จะส่ง key ที่ตายแล้วออกไป
+  llmGatewayHost      String?                   @map("llm_gateway_host") @db.VarChar(200)
+  llmOragnizeId       String?                   @map("llm_organization_id") @db.VarChar(100)
+  // Omise customer id — holds the org's saved cards (created on first saved-card payment)
+  omiseCustomerId     String?                   @map("omise_customer_id") @db.VarChar(100)
 
   @@map("organization")
 }
@@ -414,10 +576,13 @@ model OrganizationMember {
 
   apiKeys   String? @map("api_keys") @db.Text
   users     users   @relation(fields: [userId], references: [userId])
-  maxToken  Int?
+  maxToken  Int?    @map("max_token")
   maxImages Int?    @default(0) @map("max_images")
 
   @@map("organization_member")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([organizationId, userId])
 }
 
 model CreditBalance {
@@ -469,7 +634,7 @@ model CouponCode {
   updatedAt         DateTime          @updatedAt @map("updated_at")
   onTopCredit       Float             @default(0) @map("on_top_credit")
   couponCodeUsage   CouponCodeUsage[]
-  referenceTag      String?           @db.VarChar(100)
+  referenceTag      String?           @map("reference_tag") @db.VarChar(100)
 
   @@index([id])
   @@map("coupon_code")
@@ -581,7 +746,7 @@ model PlanPrice {
   orderIndex      Int     @default(0) @map("order_index")
   detail          Json?   @map("detail") @db.JsonB
   periodCount     Int     @default(1) @map("period_count")
-  periodUnit      String? @db.VarChar(20)
+  periodUnit      String? @map("period_unit") @db.VarChar(20)
   // priceLevel      Int     @default(0) @map("price_level") @db.Integer()
 
   // @@unique([])
@@ -592,7 +757,7 @@ model PackageTransaction {
   id                 String       @id @default(uuid()) @db.Uuid
   organizationId     String       @map("organization_id") @db.VarChar(50)
   organization       Organization @relation(fields: [organizationId], references: [organizationId])
-  amountPaid         Decimal      @db.Decimal(10, 2)
+  amountPaid         Decimal      @map("amount_paid") @db.Decimal(10, 2)
   currency           String       @default("THB")
   status             String       @default("WAIT")
   paymentMethod      String?      @map("payment_method")
@@ -609,6 +774,9 @@ model PackageTransaction {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("package_transactions")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([organizationId])
 }
 
 model Feature {
@@ -758,6 +926,9 @@ model ChatMessage {
 
   @@index([conversationId])
   @@map("chat_message")
+
+  // index ตาม source/improvements P1-5 (query จริงใน services)
+  @@index([conversationId, sequence])
 }
 
 model ChatTokenUsage {
@@ -790,6 +961,52 @@ model ChatTool {
   @@map("chat_tool")
 }
 
+/// โมเดลที่เลือกได้ในแชท AI Assistant
+///
+/// แยกจาก MasterModelType โดยตั้งใจ แม้จะถือ sendApi / sendConfig เหมือนกันแล้วก็ตาม —
+/// ตารางนั้นเป็นงาน generate แบบ async (requestBodyMap / taskPollApi / taskResponseMap)
+/// และถือ credential ของ provider ไว้ใน sendConfig.authorization โดย GET /ai-models
+/// ยังคืน sendConfig ทั้งก้อนให้ frontend อยู่ ส่วนตารางนี้ไม่มี secret เลย: key มาจาก
+/// Organization.llmApiKey เสมอ (ดู LlmGatewayService.getOrCreateApiKey)
+///
+/// modelId ต้องอยู่ใน allowlist ของ key ที่ mint ให้ org ด้วย — ดู
+/// LlmGatewayService.mintApiKey ที่รวม modelId ของตารางนี้เข้าไป
+model ChatModelConfig {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// ค่าที่ส่งเป็น field `model` ไปยัง gateway เช่น "llama3.3-70b"
+  modelId     String  @unique @map("model_id") @db.VarChar(120)
+  displayName String  @map("display_name") @db.VarChar(150)
+  description String? @map("description") @db.Text
+
+  /// พารามิเตอร์ sampling ที่ส่งไปกับทุกคำขอของโมเดลนี้
+  /// (โค้ดเดิมไม่ส่ง temperature/max_tokens เลยบน path ของแชท)
+  temperature Decimal @default(0.7) @map("temperature") @db.Decimal(3, 2)
+  maxTokens   Int     @default(1000) @map("max_tokens")
+
+  /// รองรับ input ที่เป็นรูปหรือไม่ — ใช้ gate ฟีเจอร์ image → prompt
+  supportsVision Boolean @default(false) @map("supports_vision")
+
+  /// ปลายทางเต็มของโมเดลนี้ เช่น "https://llmgateway.osd.co.th/api/v1/chat/completions"
+  /// ว่าง = ใช้ค่าจาก env (LLM_CHAT_BASE_URL / LLM_GATEWAY_URL) เหมือนเดิม
+  /// ต้องเป็น host เดียวกับ Organization.llmGatewayHost มิฉะนั้น key ของ org จะถูกปฏิเสธ
+  sendApi String @default("") @map("send_api") @db.Text
+
+  /// option ต่อโมเดล — ดู ChatSendConfig ใน libs/share/src/llm-gateway/llm-chat.types.ts
+  /// ไม่มี field authorization โดยตั้งใจ: key มาจาก org เสมอ
+  sendConfig Json? @map("send_config")
+
+  isDefault Boolean @default(false) @map("is_default")
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([isActive, sortOrder])
+  @@map("chat_model_config")
+}
+
 model ContactSaleLog {
   id          String   @id @default(uuid()) @db.Uuid
   firstName   String   @map("first_name") @db.VarChar(200)
@@ -803,4 +1020,532 @@ model ContactSaleLog {
   status      String   @default("done") @map("status") @db.VarChar(10)
 
   @@map("contact_sale_log")
+}
+
+// ─── Payment & Billing Models ─────────────────────────────────────────────────
+// ใช้ scalar FK (organizationId/userId เป็น String) แบบเดียวกับ CouponCodeUsage
+// จึงไม่ต้องแก้ไข model เดิม (Organization/users)
+
+/// ข้อมูลใบกำกับภาษีของผู้ใช้ — มีได้หลายโปรไฟล์ต่อผู้ใช้ (รองรับบริษัทหลายสาขา)
+model BillingProfile {
+  id             String  @id @default(uuid()) @db.Uuid
+  userId         String  @map("user_id") @db.VarChar(50)
+  // Nullable: a new-org purchase creates the profile before the org exists;
+  // filled in at payment confirmation once the organization is created.
+  organizationId String? @map("organization_id") @db.VarChar(50)
+  type           String  @map("type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
+
+  // Individual
+  fullName   String? @map("full_name") @db.VarChar(200)
+  nationalId String? @map("national_id") @db.VarChar(20)
+
+  // Juristic
+  companyName String? @map("company_name") @db.VarChar(200)
+  taxId       String? @map("tax_id") @db.VarChar(20) // เลขประจำตัวผู้เสียภาษี 13 หลัก
+  branchCode  String? @map("branch_code") @db.VarChar(20) // เลขที่สำนักงานใหญ่/สาขา
+  branchName  String? @map("branch_name") @db.VarChar(200)
+  contactName String? @map("contact_name") @db.VarChar(200)
+  phone       String? @map("phone") @db.VarChar(50)
+  email       String? @map("email") @db.VarChar(200)
+
+  address   String   @map("address") @db.Text
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("billing_profile")
+}
+
+/// ทะเบียนลูกค้า — สร้าง customerCode (C-000001) เฉพาะเมื่อชำระเงินสำเร็จเท่านั้น
+model Customer {
+  id             String  @id @default(uuid()) @db.Uuid
+  customerCode   String  @unique @map("customer_code") @db.VarChar(20) // C-000001
+  type           String  @map("type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
+  organizationId String  @map("organization_id") @db.VarChar(50)
+  name           String  @map("name") @db.VarChar(200) // ชื่อบุคคล/บริษัท (snapshot)
+  taxId          String? @map("tax_id") @db.VarChar(20)
+  branchCode     String? @map("branch_code") @db.VarChar(20)
+  branchName     String? @map("branch_name") @db.VarChar(200)
+  address        String  @map("address") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  invoices Invoice[]
+
+  // taxId + branchCode ซ้ำ ⇒ reuse code เดิม; taxId เดิมแต่ branch ต่าง ⇒ record ใหม่
+  @@unique([taxId, branchCode])
+  @@map("customer")
+}
+
+/// ใบแจ้งหนี้ — สร้างทันทีเมื่อผู้ใช้กดดำเนินการชำระเงิน (INV-YYYYMM000001)
+model Invoice {
+  id               String  @id @default(uuid()) @db.Uuid
+  invoiceNo        String  @unique @map("invoice_no") @db.VarChar(30) // INV-YYYYMM000001
+  // Nullable: for a new-org purchase the org is created only at payment
+  // confirmation, so a PENDING invoice carries no org id until then.
+  organizationId   String? @map("organization_id") @db.VarChar(50)
+  userId           String  @map("user_id") @db.VarChar(50)
+  billingProfileId String  @map("billing_profile_id") @db.Uuid
+  customerId       String? @map("customer_id") @db.Uuid // เติมหลังชำระเงินสำเร็จ
+
+  planId       String? @map("plan_id") @db.VarChar(50)
+  planPriceId  String? @map("plan_price_id") @db.VarChar(50)
+  planName     String  @map("plan_name") @db.VarChar(100)
+  planInterval String  @map("plan_interval") @db.VarChar(20)
+
+  // --- ข้อมูลสร้างองค์กรใหม่ (ใช้เมื่อซื้อแพ็กเกจแบบสร้าง org หลังชำระเงิน) ---
+  isNewOrganization Boolean @default(false) @map("is_new_organization") // true = สร้าง organization ตอน confirm
+  orgName           String? @map("org_name") @db.VarChar(150)
+  orgType           String? @map("org_type") @db.VarChar(50)
+  orgDescription    String? @map("org_description") @db.Text
+  // ประเภทการเปลี่ยนแปลง subscription: CREATE | RENEWAL | UPGRADE (downgrade ไม่สร้าง invoice)
+  changeType        String? @map("change_type") @db.VarChar(20)
+  // พัก Omise customer id สำหรับ new-org (org ยังไม่มีตอนจ่าย) → คัดลอกไป org ตอน confirm
+  omiseCustomerId   String? @map("omise_customer_id") @db.VarChar(100)
+
+  subTotal    Decimal @map("sub_total") @db.Decimal(10, 2) // ราคาก่อน VAT
+  vatAmount   Decimal @map("vat_amount") @db.Decimal(10, 2)
+  totalAmount Decimal @map("total_amount") @db.Decimal(10, 2)
+  currency    String  @default("THB") @map("currency") @db.VarChar(3)
+
+  status        String    @default("PENDING") @map("status") @db.VarChar(20) // PENDING | PAID | FAILED | EXPIRED | CANCELLED
+  paymentMethod String    @map("payment_method") @db.VarChar(20) // CARD | PROMPTPAY | INTERNET_BANKING
+  issuedAt      DateTime  @default(now()) @map("issued_at")
+  paidAt        DateTime? @map("paid_at")
+  expiredAt     DateTime? @map("expired_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer    Customer?    @relation(fields: [customerId], references: [id])
+  receipt     Receipt?
+  payments    Payment[]
+  whtRequests WhtRequest[]
+
+  // llmGatewayKey String? @map("llm_gateway_key") @db.VarChar(100) // บันทึก LLM Gateway Key เฉพาะใบแจ้งหนี้นี้ (ใช้กับการจ่ายเงินผ่าน LLM Gateway)
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("invoice")
+}
+
+/// ใบเสร็จรับเงิน/ใบกำกับภาษี — ออกเมื่อชำระเงินสำเร็จ (RTI-YYYYMM000001)
+model Receipt {
+  id           String   @id @default(uuid()) @db.Uuid
+  receiptNo    String   @unique @map("receipt_no") @db.VarChar(30) // RTI-YYYYMM000001
+  invoiceId    String   @unique @map("invoice_id") @db.Uuid
+  customerId   String?  @map("customer_id") @db.Uuid
+  preVatAmount Decimal  @map("pre_vat_amount") @db.Decimal(10, 2)
+  vatAmount    Decimal  @map("vat_amount") @db.Decimal(10, 2)
+  amount       Decimal  @map("amount") @db.Decimal(10, 2)
+  issuedAt     DateTime @default(now()) @map("issued_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("receipt")
+}
+
+/// บันทึกการชำระเงินผ่าน Omise (charge/source)
+model Payment {
+  id            String   @id @default(uuid()) @db.Uuid
+  invoiceId     String   @map("invoice_id") @db.Uuid
+  method        String   @map("method") @db.VarChar(20) // CARD | PROMPTPAY | INTERNET_BANKING
+  omiseChargeId String?  @map("omise_charge_id") @db.VarChar(100)
+  omiseSourceId String?  @map("omise_source_id") @db.VarChar(100)
+  authorizeUri  String?  @map("authorize_uri") @db.Text
+  qrImageUri    String?  @map("qr_image_uri") @db.Text
+  bank          String?  @map("bank") @db.VarChar(20) // BAY | BBL | KBANK | KTB | SCB
+  status        String   @default("PENDING") @map("status") @db.VarChar(20)
+  rawPayload    Json?    @map("raw_payload") @db.JsonB
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@index([omiseChargeId])
+  @@map("payment")
+}
+
+/// คำขอคืนภาษีหัก ณ ที่จ่าย — เฉพาะลูกค้านิติบุคคล
+model WhtRequest {
+  id             String @id @default(uuid()) @db.Uuid
+  invoiceId      String @map("invoice_id") @db.Uuid
+  receiptId      String @map("receipt_id") @db.Uuid
+  customerId     String @map("customer_id") @db.Uuid
+  organizationId String @map("organization_id") @db.VarChar(50)
+  userId         String @map("user_id") @db.VarChar(50)
+
+  // ข้อมูล lock (read-only) ที่ดึงจากใบเสร็จ
+  receiptNo    String   @map("receipt_no") @db.VarChar(30)
+  receiptDate  DateTime @map("receipt_date")
+  preVatAmount Decimal  @map("pre_vat_amount") @db.Decimal(10, 2)
+
+  whtPercent Int      @map("wht_percent") // 1 | 3
+  whtAmount  Decimal  @map("wht_amount") @db.Decimal(10, 2)
+  docRefNo   String   @map("doc_ref_no") @db.VarChar(100)
+  docRefDate DateTime @map("doc_ref_date")
+
+  // บัญชีธนาคารสำหรับรับเงินคืน (บังคับกรอก)
+  bankAccountName   String @map("bank_account_name") @db.VarChar(200)
+  bankName          String @map("bank_name") @db.VarChar(100)
+  bankAccountNumber String @map("bank_account_number") @db.VarChar(50)
+  bankBranchCode    String @map("bank_branch_code") @db.VarChar(50)
+
+  status    String   @default("PENDING") @map("status") @db.VarChar(20) // PENDING | RECEIVED | VERIFIED | REJECTED | REFUNDED
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  invoice    Invoice               @relation(fields: [invoiceId], references: [id])
+  statusLogs WhtRequestStatusLog[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("wht_request")
+}
+
+/// log การเปลี่ยนสถานะ WHT พร้อม admin user id + timestamp
+model WhtRequestStatusLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  whtRequestId String   @map("wht_request_id") @db.Uuid
+  fromStatus   String?  @map("from_status") @db.VarChar(20)
+  toStatus     String   @map("to_status") @db.VarChar(20)
+  adminUserId  String   @map("admin_user_id") @db.VarChar(50)
+  note         String?  @map("note") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  whtRequest WhtRequest @relation(fields: [whtRequestId], references: [id])
+
+  @@index([whtRequestId])
+  @@map("wht_request_status_log")
+}
+
+/// ตัวนับเลขที่เอกสารแบบ atomic (INV / RTI / CUSTOMER)
+model DocumentCounter {
+  id        String   @id @default(uuid()) @db.Uuid
+  docType   String   @map("doc_type") @db.VarChar(20) // INV | RTI | CUSTOMER
+  period    String   @map("period") @db.VarChar(10) // YYYYMM สำหรับ INV/RTI, GLOBAL สำหรับ CUSTOMER
+  lastValue Int      @default(0) @map("last_value")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([docType, period])
+  @@map("document_counter")
+}
+
+/// คำสั่งซื้อแพ็กเกจที่รอชำระเงิน — เก็บข้อมูล org + ภาษี + ราคา ไว้จนกว่าจะจ่ายสำเร็จ
+/// แล้วจึงสร้าง Organization + billing artifacts (org สร้างหลังจ่ายเงินเท่านั้น)
+model PendingPurchase {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.VarChar(50)
+
+  // snapshot ของแพ็กเกจที่เลือก
+  planId       String @map("plan_id") @db.VarChar(50)
+  planPriceId  String @map("plan_price_id") @db.VarChar(50)
+  planName     String @map("plan_name") @db.VarChar(100)
+  planInterval String @map("plan_interval") @db.VarChar(20)
+
+  // ข้อมูลฟอร์มองค์กร
+  orgName        String  @map("org_name") @db.VarChar(150)
+  orgDescription String? @map("org_description") @db.Text
+  orgType        String  @default("team") @map("org_type") @db.VarChar(50)
+
+  // snapshot ข้อมูลภาษี (จะถูกใช้สร้าง BillingProfile/Customer ตอน confirm)
+  billingType String  @map("billing_type") @db.VarChar(20) // INDIVIDUAL | JURISTIC
+  fullName    String? @map("full_name") @db.VarChar(200)
+  nationalId  String? @map("national_id") @db.VarChar(20)
+  companyName String? @map("company_name") @db.VarChar(200)
+  taxId       String? @map("tax_id") @db.VarChar(20)
+  branchCode  String? @map("branch_code") @db.VarChar(20)
+  branchName  String? @map("branch_name") @db.VarChar(200)
+  contactName String? @map("contact_name") @db.VarChar(200)
+  phone       String? @map("phone") @db.VarChar(50)
+  email       String? @map("email") @db.VarChar(200)
+  address     String  @map("address") @db.Text
+
+  // ยอดเงิน
+  subTotal    Decimal @map("sub_total") @db.Decimal(10, 2)
+  vatAmount   Decimal @map("vat_amount") @db.Decimal(10, 2)
+  totalAmount Decimal @map("total_amount") @db.Decimal(10, 2)
+  currency    String  @default("THB") @map("currency") @db.VarChar(3)
+
+  // การชำระเงิน
+  paymentMethod String  @map("payment_method") @db.VarChar(20) // CARD | PROMPTPAY | INTERNET_BANKING
+  omiseChargeId String? @map("omise_charge_id") @db.VarChar(100)
+  omiseSourceId String? @map("omise_source_id") @db.VarChar(100)
+  authorizeUri  String? @map("authorize_uri") @db.Text
+  qrImageUri    String? @map("qr_image_uri") @db.Text
+  bank          String? @map("bank") @db.VarChar(20)
+
+  // วงจรชีวิต
+  status                String    @default("PENDING") @map("status") @db.VarChar(20) // PENDING | PAID | FAILED | EXPIRED
+  createdOrganizationId String?   @map("created_organization_id") @db.VarChar(50)
+  invoiceId             String?   @map("invoice_id") @db.Uuid
+  expiredAt             DateTime? @map("expired_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([status])
+  @@index([omiseChargeId])
+  @@map("pending_purchase")
+}
+
+// ============================================================================
+// Public Social — งาน share ผลงานจาก gallery ออกสู่ social platform
+// ============================================================================
+
+/// บัญชี social ที่ org เชื่อมต่อไว้ผ่าน OAuth (1 row = 1 page/channel/account)
+/// token เก็บแบบเข้ารหัส AES-256-GCM เสมอ (ดู libs/share/src/utils/crypto.util.ts)
+model SocialAccount {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.VarChar(50)
+  organization   Organization @relation(fields: [organizationId], references: [organizationId])
+
+  platform    String  @map("platform") @db.VarChar(20) // FACEBOOK | INSTAGRAM | TIKTOK | YOUTUBE
+  /// id ฝั่ง provider — FB Page id / IG user id / TikTok open_id / YouTube channel id
+  externalId  String  @map("external_id") @db.VarChar(100)
+  displayName String  @map("display_name") @db.VarChar(200)
+  avatarUrl   String? @map("avatar_url") @db.VarChar(500)
+
+  /// ciphertext เสมอ ห้ามเก็บ plaintext
+  accessToken    String    @map("access_token") @db.Text
+  refreshToken   String?   @map("refresh_token") @db.Text
+  tokenExpiresAt DateTime? @map("token_expires_at") @db.Timestamptz(6)
+  scopes         String[]  @default([]) @map("scopes")
+
+  status            String @default("ACTIVE") @map("status") @db.VarChar(20) // ACTIVE | EXPIRED | REVOKED
+  connectedByUserId String @map("connected_by_user_id") @db.VarChar(50)
+  /// OAUTH = ได้มาจาก consent flow, MANUAL = แอดมินวาง token เอง
+  /// MANUAL ต่างที่ตอนถอดบัญชีจะไม่ยิง revoke ไปหา provider เพราะ token อาจถูกใช้ที่อื่นอยู่
+  connectionType    String @default("OAUTH") @map("connection_type") @db.VarChar(20)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  targets ActivityShareTarget[]
+
+  @@unique([organizationId, platform, externalId])
+  @@index([organizationId])
+  @@index([status])
+  @@map("social_account")
+}
+
+/// งาน share 1 งาน = สื่อที่เลือก + caption + platform ปลายทาง + สถานะอนุมัติ
+model ActivityShare {
+  id             String @id @default(uuid()) @db.Uuid
+  organizationId String @map("organization_id") @db.VarChar(50)
+  /// project.id เป็น text (ไม่ใช่ uuid type) — ชนิดต้องตรงกันไม่งั้น FK สร้างไม่ได้
+  projectId      String @map("project_id")
+
+  project         Project @relation(fields: [projectId], references: [id])
+  createdByUserId String  @map("created_by_user_id") @db.VarChar(50)
+
+  caption  String   @default("") @map("caption") @db.Text
+  hashtags String[] @default([]) @map("hashtags")
+  linkUrl  String?  @map("link_url") @db.VarChar(500)
+
+  /// snapshot ของ gallery item ที่เลือก ณ ตอนสร้างงาน — ไม่ join เพราะ gallery ถูกลบได้
+  /// [{ galleryId, resultKey, thumbnailKey, typeGenerate, order }]
+  mediaItems Json @default("[]") @map("media_items") @db.JsonB
+
+  status String @default("NEW") @map("status") @db.VarChar(20) // NEW | APPROVED | REJECTED | PENDING | PUBLISHING | SUCCESS | FAILED
+
+  reviewedByUserId String?   @map("reviewed_by_user_id") @db.VarChar(50)
+  reviewedAt       DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNote       String?   @map("review_note") @db.Text
+
+  /// เผื่อ scheduled post ในอนาคต — ยังไม่ใช้ตอนนี้
+  scheduledAt DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  sentAt      DateTime? @map("sent_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  targets ActivityShareTarget[]
+  logs    ActivityShareLog[]
+
+  @@index([organizationId, status])
+  @@index([projectId])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("activity_share")
+}
+
+/// ปลายทาง 1 platform ของงาน share — สำเร็จ/ล้มเหลวแยกกันได้
+model ActivityShareTarget {
+  id              String @id @default(uuid()) @db.Uuid
+  activityShareId String @map("activity_share_id") @db.Uuid
+  socialAccountId String @map("social_account_id") @db.Uuid
+
+  activityShare ActivityShare @relation(fields: [activityShareId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id])
+
+  /// denormalize ไว้เพื่อให้ row ยังอ่านออกแม้ social account ถูกถอดออกภายหลัง
+  platform String @map("platform") @db.VarChar(20)
+  status   String @default("PENDING") @map("status") @db.VarChar(20) // PENDING | PUBLISHING | SUCCESS | FAILED
+
+  remotePostId String? @map("remote_post_id") @db.VarChar(200)
+  remoteUrl    String? @map("remote_url") @db.VarChar(500)
+  errorCode    String? @map("error_code") @db.VarChar(50)
+  errorMessage String? @map("error_message") @db.Text
+  attemptCount Int     @default(0) @map("attempt_count")
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  logs ActivityShareLog[]
+
+  @@unique([activityShareId, socialAccountId])
+  @@index([activityShareId])
+  @@index([status])
+  @@map("activity_share_target")
+}
+
+/// log การเปลี่ยนสถานะ/แก้ไขงาน share พร้อมผู้กระทำ + timestamp — append-only ห้าม update/delete
+model ActivityShareLog {
+  id                    String  @id @default(uuid()) @db.Uuid
+  activityShareId       String  @map("activity_share_id") @db.Uuid
+  /// ใส่เมื่อ event เกิดกับ platform ใด platform หนึ่งโดยเฉพาะ
+  activityShareTargetId String? @map("activity_share_target_id") @db.Uuid
+
+  activityShare       ActivityShare        @relation(fields: [activityShareId], references: [id], onDelete: Cascade)
+  activityShareTarget ActivityShareTarget? @relation(fields: [activityShareTargetId], references: [id], onDelete: Cascade)
+
+  action     String  @map("action") @db.VarChar(30) // CREATE | UPDATE | SUBMIT | APPROVE | REJECT | SEND | PUBLISH_START | PUBLISH_SUCCESS | PUBLISH_FAIL | RETRY | CANCEL
+  fromStatus String? @map("from_status") @db.VarChar(20)
+  toStatus   String  @map("to_status") @db.VarChar(20)
+
+  /// null เมื่อผู้กระทำคือ worker
+  actionUserId String? @map("action_user_id") @db.VarChar(50)
+  actorType    String  @default("USER") @map("actor_type") @db.VarChar(20) // USER | SYSTEM
+
+  note     String? @map("note") @db.Text
+  /// field diff ตอน UPDATE หรือ error payload จาก provider
+  metadata Json?   @map("metadata") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([activityShareId, createdAt])
+  @@index([action])
+  @@map("activity_share_log")
+}
+
+// ============================================================================
+// Communication — เผยแพร่ผลงานจาก gallery ขึ้นหน้า community สาธารณะของ AI CAVE
+// ต่างจาก Public Social ตรงที่ปลายทางคือเว็บของเราเอง ไม่ใช่ platform ภายนอก
+// ============================================================================
+
+/// โพสต์ 1 ใบบนหน้า community — เห็นได้โดยไม่ต้อง login เมื่อสถานะเป็น PUBLISHED
+model CommunityPost {
+  id   String @id @default(uuid()) @db.Uuid
+  /// key ของ URL สาธารณะ /community/[slug] — kebab ของ title + nanoid 8 ตัว
+  /// nanoid ท้าย slug กัน 2 อย่างพร้อมกัน: ชื่อชนกัน และการเดา URL ไล่ทีละใบ
+  slug String @unique @map("slug") @db.VarChar(180)
+
+  organizationId String @map("organization_id") @db.VarChar(50)
+  /// project.id เป็น text (ไม่ใช่ uuid type) — ชนิดต้องตรงกันไม่งั้น FK สร้างไม่ได้
+  projectId      String @map("project_id")
+
+  project         Project @relation(fields: [projectId], references: [id])
+  createdByUserId String  @map("created_by_user_id") @db.VarChar(50)
+
+  title    String   @default("") @map("title") @db.VarChar(200)
+  caption  String   @default("") @map("caption") @db.Text
+  hashtags String[] @default([]) @map("hashtags")
+  linkUrl  String?  @map("link_url") @db.VarChar(500)
+
+  /// snapshot ของ gallery item ที่เลือก ณ ตอนสร้างโพสต์ — รูปแบบเดียวกับ activity_share
+  /// [{ galleryId, resultKey, thumbnailKey, typeGenerate, order }]
+  /// เก็บ object key ไม่ใช่ URL และไม่ join gallery เพราะ gallery ถูกลบได้
+  mediaItems Json @default("[]") @map("media_items") @db.JsonB
+
+  /// prompt คือทรัพย์สินทางปัญญาของผู้ใช้ — เก็บและเปิดเผยเฉพาะเมื่อเจ้าของเลือกเอง
+  showPrompt     Boolean @default(false) @map("show_prompt")
+  promptSnapshot String? @map("prompt_snapshot") @db.Text
+
+  /// denormalize ชื่อผู้เขียน/องค์กร ไว้ให้หน้า public ไม่ต้อง join users หรือ organization
+  /// (และไม่เปลี่ยนตามหลัง เมื่อผู้ใช้เปลี่ยนชื่อหรือออกจาก org)
+  authorDisplayName       String @default("") @map("author_display_name") @db.VarChar(200)
+  organizationDisplayName String @default("") @map("organization_display_name") @db.VarChar(200)
+
+  status String @default("NEW") @map("status") @db.VarChar(20) // NEW | APPROVED | REJECTED | SCHEDULED | PUBLISHED | UNPUBLISHED
+
+  reviewedByUserId String?   @map("reviewed_by_user_id") @db.VarChar(50)
+  reviewedAt       DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNote       String?   @map("review_note") @db.Text
+
+  scheduledAt   DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  unpublishedAt DateTime? @map("unpublished_at") @db.Timestamptz(6)
+
+  /// counter แบบ denormalize — หน้า feed เรียงตามนี้ได้โดยไม่ต้อง aggregate
+  viewCount Int @default(0) @map("view_count")
+  likeCount Int @default(0) @map("like_count")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  logs      CommunityPostLog[]
+  reactions CommunityPostReaction[]
+
+  /// query เดียวของหน้า feed สาธารณะ: status=PUBLISHED เรียงตาม publishedAt
+  @@index([status, publishedAt])
+  @@index([organizationId, status])
+  @@index([projectId])
+  @@index([createdByUserId])
+  /// cron หยิบโพสต์ที่ถึงกำหนดเผยแพร่
+  @@index([status, scheduledAt])
+  @@map("community_post")
+}
+
+/// log การเปลี่ยนสถานะ/แก้ไขโพสต์ พร้อมผู้กระทำ + timestamp — append-only ห้าม update/delete
+model CommunityPostLog {
+  id     String @id @default(uuid()) @db.Uuid
+  postId String @map("post_id") @db.Uuid
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  action     String  @map("action") @db.VarChar(30) // CREATE | UPDATE | APPROVE | REJECT | SCHEDULE | UNSCHEDULE | PUBLISH | UNPUBLISH | REPUBLISH | DELETE
+  fromStatus String? @map("from_status") @db.VarChar(20)
+  toStatus   String  @map("to_status") @db.VarChar(20)
+
+  /// null เมื่อผู้กระทำคือ cron ที่เผยแพร่ตามเวลาที่ตั้งไว้
+  actionUserId String? @map("action_user_id") @db.VarChar(50)
+  actorType    String  @default("USER") @map("actor_type") @db.VarChar(20) // USER | SYSTEM
+
+  note     String? @map("note") @db.Text
+  /// field diff ตอน UPDATE
+  metadata Json?   @map("metadata") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([postId, createdAt])
+  @@index([action])
+  @@map("community_post_log")
+}
+
+/// การกดถูกใจจากผู้เยี่ยมชมที่ไม่ได้ login
+///
+/// มีไว้ทำให้การกดไลก์เป็น idempotent อย่างเดียว (unique constraint กันกดซ้ำ)
+/// ส่วน path ที่ใช้อ่านจริงคือ community_post.like_count
+model CommunityPostReaction {
+  id     String @id @default(uuid()) @db.Uuid
+  postId String @map("post_id") @db.Uuid
+
+  post CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 ของ visitor id ใน cookie — ไม่เก็บค่าดิบและไม่เก็บ IP
+  visitorHash String @map("visitor_hash") @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([postId, visitorHash])
+  @@index([postId])
+  @@map("community_post_reaction")
 }

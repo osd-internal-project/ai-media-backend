@@ -1,8 +1,13 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 
 import { JwtService } from '@nestjs/jwt';
+// secret เดิมถูก hardcode ไว้ใน repo (ถือว่ารั่วแล้ว) — ไม่ได้ใช้ตรวจ request; ตัวตรวจจริงคือ KeycloakAuthGuard
 const jwtConfig = {
-  secret: 'osdsupersecertkey',
+  get secret(): string {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET is not set');
+    return secret;
+  },
   expires: 60 * 60,
   refreshExpires: 70 * 70 * 24 * 7,
 };

@@ -5,7 +5,6 @@ import helmet from 'helmet';
 import config from './configs';
 import { ChatAssistantMainModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import * as cors from 'cors';
 
 const PORT = config().port;
 
@@ -19,8 +18,15 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api');
-  app.enableCors({ origin: '*' });
-  app.use(cors());
+
+  // จำกัด origin ที่เรียกได้ — เดิมเป็น '*' ซึ่งแปลว่าเว็บใดก็ยิงมาได้จากเบราว์เซอร์
+  // ของผู้ใช้ ตอนนี้คำขอผูกกับ key ของ org ยิ่งต้องคุมให้แคบ
+  // ปล่อยว่าง = อนุญาตทุก origin (ไว้ใช้ตอน dev เท่านั้น)
+  const { allowedOrigins } = config().cors;
+  app.enableCors({
+    origin: allowedOrigins.length > 0 ? allowedOrigins : true,
+    credentials: true,
+  });
   app.use(helmet({ contentSecurityPolicy: false }));
 
   const prismaService = app.get(PrismaService);
@@ -30,16 +36,19 @@ async function bootstrap() {
     new ValidationPipe({ whitelist: true, transform: true }),
   );
 
-  const options = new DocumentBuilder()
-    .setTitle('Chat Assistant API')
-    .setDescription('AI Chat Assistant — Chat, Streaming, Vision Prompt Generation')
-    .setVersion('1.0')
-    .addTag('Chat')
-    .addTag('Conversations')
-    .build();
+  // Swagger เปิดเฉพาะนอก prod — chart prod ใช้ "Production" จึงเทียบแบบไม่สนตัวพิมพ์
+  if (process.env.NODE_ENV?.toLowerCase() !== 'production') {
+    const options = new DocumentBuilder()
+      .setTitle('Chat Assistant API')
+      .setDescription('AI Chat Assistant — Chat, Streaming, Vision Prompt Generation')
+      .setVersion('1.0')
+      .addTag('Chat')
+      .addTag('Conversations')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, options);
-  SwaggerModule.setup('api/docs', app, document);
+    const document = SwaggerModule.createDocument(app, options);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   await app.listen(PORT);
   console.log(`Chat Assistant service started on port: ${PORT}`);

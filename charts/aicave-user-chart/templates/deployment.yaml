@@ -29,10 +29,30 @@ spec:
         env:
         - name: NODE_ENV
           value: {{ .Values.env.nodeEnv | quote }}
+        {{- if .Values.env.nodeOptions }}
+        - name: NODE_OPTIONS
+          value: {{ .Values.env.nodeOptions | quote }}
+        {{- end }}
+        # Keycloak token check — off | report | enforce (ดู docs/auth-rollout.md)
+        - name: AUTH_MODE
+          value: {{ .Values.env.authMode | default "off" | quote }}
+        - name: KEYCLOAK_ALLOWED_CLIENTS
+          value: {{ .Values.env.keycloakAllowedClients | default "" | quote }}
+        - name: INTERNAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: INTERNAL_API_KEY
+              # ยังไม่มีใน secret ก็ start ได้ — core ยอมเฉพาะตอนยังไม่ enforce
+              optional: true
         - name: PORT
           value: {{ .Values.env.port | quote }}
+        {{- if .Values.env.nodeTlsRejectUnauthorized }}
         - name: NODE_TLS_REJECT_UNAUTHORIZED
           value: {{ .Values.env.nodeTlsRejectUnauthorized | quote }}
+        {{- end }}
+        - name: BILLING_ENABLED
+          value: {{ .Values.env.billingEnabled | default "false" | quote }}
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
@@ -44,6 +64,8 @@ spec:
           value: {{ .Values.env.pathDomain | quote }}
         - name: EMAIL_API_URL
           value: {{ .Values.env.emailApiUrl | quote }}
+        - name: CORE_API_URL
+          value: {{ .Values.env.coreApiUrl | quote }}
         - name: FRONTEND_URL
           value: {{ .Values.env.frontendUrl | quote }}
         - name: KEYCLOAK_URL
@@ -59,6 +81,26 @@ spec:
               key: KEYCLOAK_CLIENT_SECRET
         - name: KEYCLOAK_REDIRECT_URI
           value: {{ .Values.env.keycloakRedirectUri | quote }}
+        - name: KEYCLOAK_IDP_MICROSOFT_ALIAS
+          value: {{ .Values.env.keycloakIdpMicrosoftAlias | quote }}
+        - name: LLM_GATEWAY_URL
+          value: {{ .Values.env.llmGatewayUrl | quote }}
+        - name: LLM_PROJECT_ID
+          value: {{ .Values.env.llmProjectId | quote }}
+        - name: LLM_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: LLM_ADMIN_TOKEN
+        - name: OMISE_API_URL
+          value: {{ .Values.env.omiseApiUrl | quote }}
+        - name: OMISE_API_VERSION
+          value: {{ .Values.env.omiseApiVersion | quote }}
+        - name: OMISE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: OMISE_SECRET_KEY
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

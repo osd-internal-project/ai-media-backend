@@ -21,9 +21,19 @@ import { PackageTransactionModule } from './package-transaction/package-transact
 import { CreditBalanceModule } from './credit-balance/credit-balance.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CouponCodeModule } from './coupon-code/coupon-code.module';
+import { BillingProfileModule } from './billing-profile/billing-profile.module';
+import { InvoiceModule } from './invoice/invoice.module';
+import { WhtRequestModule } from './wht-request/wht-request.module';
+import { CustomerModule } from './customer/customer.module';
+import { PurchaseModule } from './purchase/purchase.module';
+import { PaymentMethodModule } from './payment-method/payment-method.module';
+import { SocialAccountModule } from './social-account/social-account.module';
+import { KeycloakAuthModule } from '@ai-media/share';
 
 @Module({
   imports: [
+    // ตรวจ Keycloak token ทุก route ตาม AUTH_MODE (off | report | enforce)
+    KeycloakAuthModule,
     PrismaModule,
     HttpModule,
     ScheduleModule.forRoot(),
@@ -40,6 +50,13 @@ import { CouponCodeModule } from './coupon-code/coupon-code.module';
     PackageTransactionModule,
     CreditBalanceModule,
     CouponCodeModule,
+    BillingProfileModule,
+    InvoiceModule,
+    WhtRequestModule,
+    CustomerModule,
+    PurchaseModule,
+    PaymentMethodModule,
+    SocialAccountModule,
   ],
   controllers: [InventoryController, PublicController],
   providers: [InventoryService],

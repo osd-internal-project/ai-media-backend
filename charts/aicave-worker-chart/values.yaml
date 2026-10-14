@@ -25,7 +25,8 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    # ไฟล์ upload ตรงเข้า TOS แล้ว worker รับแค่ JSON/FormData เล็ก ๆ
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
     nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
     nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
     nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "32k"
@@ -41,6 +42,11 @@ ingress:
     secretName: aicave-console-tls
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-prod"
+  keycloakUrl: "https://id24.aicave.ai"
+  keycloakRealm: "eportal"
+  nodeOptions: "--max-old-space-size=384"
   nodeEnv: "Development"
   port: "4000"
   redisHost: "my-redis-master.aicave-prod.svc.cluster.local"
@@ -49,6 +55,11 @@ env:
   tosBucket: "ai-cave"
   tosRegion: "ap-southeast-3"
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
+  # TOS เรียก upload callback ที่ <workerPublicUrl>/upload/callback (ingress rewrite → /api)
+  workerPublicUrl: "https://sit.aicave.ai/public/api/v1/worker"
+  # Ark เรียก <byteplusCallbackBaseUrl>/webhooks/byteplus/video/:taskId ที่ core (ingress rewrite → /api)
+  # SIT รับ callback จากข้างนอกไม่ได้ → ว่าง = ไม่ส่ง callback_url (video จบด้วย poll-check)
+  byteplusCallbackBaseUrl: ""
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL

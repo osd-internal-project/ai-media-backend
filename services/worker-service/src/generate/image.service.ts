@@ -1,10 +1,15 @@
+/** Extract a value from a nested object using a dot-notation path (e.g. "data.task_id") */
+function getByPath(obj: unknown, path: string): unknown {
+  return path.split('.').reduce((cur: any, key) => cur?.[key], obj);
+}
+
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import * as https from 'https';
 import * as path from 'path';
 import {
@@ -12,34 +17,51 @@ import {
   GalleryRepository,
   LogRepository,
   QUEUE_NAME_IMAGE,
+  MAX_CONCURRENT_TASKS_PER_TYPE,
   RefImageRepository,
+  StorageUrlService,
   TosService,
+  buildOutputKey,
+  isAbsoluteUrl,
   ProjectRepository,
   ProjectMemberRepository,
   CreditBalanceRepository,
   MasterdataModelTypeRepository,
-  MAX_CONCURRENT_TASKS_PER_TYPE,
+  MasterModelTypeDto,
+  describeTosError,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
+
+interface TaskResponseMap {
+  taskIdPath: string;
+  statusPath: string;
+  doneValue: string;
+  resultPath: string;
+}
 
 interface ImageProcessJob {
   taskId: string;
   clientId: string;
   body: RequestImageGenerateDto;
   userId: string;
-  dataImage: { url: string; size: string }[];
-  usage: {
-    generated_images: number;
-    output_tokens: number;
-    total_tokens: number;
+  // Fields forwarded from modelDetail so the worker can call the API itself
+  sendApi: string;
+  sendConfig: {
+    type: string;
+    configType: string;
+    authorization: string;
+    stream?: boolean;
+    watermark?: boolean;
+    [k: string]: unknown;
   };
+  taskPollApi?: string | null;
+  taskPollSec?: number;
+  taskResponseMap?: TaskResponseMap | null;
 }
 
 @Injectable()
-@Processor(QUEUE_NAME_IMAGE, {
-  concurrency: MAX_CONCURRENT_TASKS_PER_TYPE,
-})
+@Processor(QUEUE_NAME_IMAGE, { concurrency: MAX_CONCURRENT_TASKS_PER_TYPE })
 export class ImageProcessor extends WorkerHost {
   private readonly logger = new Logger(ImageProcessor.name);
   private agent: https.Agent;
@@ -51,6 +73,7 @@ export class ImageProcessor extends WorkerHost {
     private readonly logrepo: LogRepository,
     private readonly refImageRepository: RefImageRepository,
     private readonly tosService: TosService,
+    private readonly storageUrl: StorageUrlService,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
@@ -88,24 +111,98 @@ export class ImageProcessor extends WorkerHost {
   }
 
   async process(job: any): Promise<any> {
-    const { taskId, clientId, body, userId, dataImage, usage } =
+    //
+    const { taskId, clientId, body, userId, sendApi, sendConfig } =
       job.data as ImageProcessJob;
+    // Per-org LLM gateway key set by the producer (falls back to the model token).
+    const authorization: string | null =
+      (job.data as any).authorization ?? sendConfig?.authorization ?? null;
 
     this.logger.log(`👨‍🍳 Processing job: ${job.id}, Task: ${taskId}`);
     const redisImageCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
 
     try {
-      const totalImages = dataImage.length;
       const uploadedImages: string[] = [];
       const bytepluseUrl = [];
       const model = await this.masterModelTypeRepo.findOne({
-        where: { modelType: body.model },
+        where: { modelType: body.model, isActive: true },
       });
       const credit = await this.generateHelperService.getUsedCredit(
         0,
         body,
         model,
       );
+
+      // 0. Call the external API here so queue concurrency limits simultaneous API calls.
+      // Backward-compat: if old core put dataImage in job data, use it directly.
+      let dataImage: { url: string; size: string }[];
+      let usage: {
+        generated_images?: number;
+        output_tokens?: number;
+        total_tokens?: number;
+      };
+      if ((job.data as any).dataImage?.length > 0) {
+        dataImage = (job.data as any).dataImage;
+        usage = (job.data as any).usage ?? {};
+      } else {
+        const axiosConfig: AxiosRequestConfig = {
+          headers: {
+            'Content-Type': sendConfig.configType,
+            Authorization: `Bearer ${authorization}`,
+          },
+          httpsAgent: this.agent,
+        };
+
+        // const refImages = body.image?.length
+        //   ? await Promise.all(
+        //       body.image.map((img) =>
+        //         this.tosService.getPreSignedUrl(tosConfigs().tosBucket, img),
+        //       ),
+        //     )
+        //   : null;
+
+        const payload = await this.buildPayload(body, sendConfig);
+        // ไม่ log axiosConfig — headers มี Authorization ของ LLM gateway
+        console.log('API Payload:', sendApi, payload);
+        let apiRes: any;
+        try {
+          apiRes = await axios.post(sendApi, payload, axiosConfig);
+          console.log('API Response:', apiRes.data);
+          if (apiRes) {
+            await this.generateHelperService.logAudit(
+              userId,
+              'CREATE',
+              body,
+              taskId,
+            );
+          }
+        } catch (error: any) {
+          // Surface the real API rejection reason. Log the verbose detail
+          // (payload + response) server-side for debugging, but throw only the
+          // clean message. The outer catch owns all failure reporting (error
+          // event, task status, credit refund, DB rows) — don't duplicate it here.
+          const apiStatus = error.response?.status;
+          const apiBody = error.response?.data;
+          const apiMessage =
+            apiBody?.error?.message ?? apiBody?.message ?? error.message;
+          this.logger.error(
+            `❌ Image API call failed: API ${apiStatus}: ${apiMessage} | payload=${JSON.stringify(
+              payload,
+            )} | response=${JSON.stringify(apiBody)}`,
+          );
+
+          throw new UnrecoverableError(apiMessage);
+        }
+
+        dataImage = apiRes.data.data;
+        usage = apiRes.data.usage ?? {};
+
+        // Patch totalImages into Redis now that the API has responded
+        await this.updateTaskStatus(taskId, { totalImages: dataImage.length });
+      }
+
+      const totalImages = dataImage.length;
+
       // 1. ส่ง event "started" ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:started', {
         taskId,
@@ -140,19 +237,20 @@ export class ImageProcessor extends WorkerHost {
           type: 'image',
         });
 
-        // Download image
-        const imgRes = await axios.get(imageData.url, {
-          responseType: 'arraybuffer',
-          httpsAgent: this.agent,
-          timeout: 60000,
-        });
-
-        const buffer = Buffer.from(imgRes.data);
-        const uuidName = uuidv4();
-        const ext = 'jpg';
-        const objectName = `${uuidName}.${ext}`;
-
-        this.logger.debug(`📦 Buffer size: ${buffer.length} bytes`);
+        const objectName = `${uuidv4()}.jpg`;
+        const bucketname = tosConfigs().tosBucket;
+        const imagePath = buildOutputKey(
+          body.organizationId,
+          body.projectId,
+          'image',
+          objectName,
+        );
+        await this.storeOutputImage(
+          bucketname,
+          imagePath,
+          imageData.url,
+          `${index + 1}/${totalImages}`,
+        );
 
         // ส่ง progress: uploading
         await this.publishToCore(clientId, 'worker:progress', {
@@ -165,38 +263,7 @@ export class ImageProcessor extends WorkerHost {
           type: 'image',
         });
 
-        // Upload to MinIO
-        const bucketname = tosConfigs().tosBucket;
-        const imagePath = `organize/${body.organizationId}/${body.projectId}/image-generate/${objectName}`;
-        await this.tosService.putObject(bucketname, imagePath, buffer);
-
         uploadedImages.push(objectName);
-
-        // Save to Gallery
-        await this.galleryRepo.create({
-          data: {
-            taskId,
-            projectId: body.projectId,
-            userId,
-            prompt: body.prompt,
-            imageUrl: objectName,
-            typeGenerate: 'image',
-            genneratedStatus: 'SUCCESS',
-            status: false,
-            usedCredit: credit.credit,
-            generateConfig: this.buildGenerateConfig({
-              ratio: body.ratio,
-              width: body.width,
-              height: body.height,
-              prompt: body.prompt,
-              duration: 0,
-              modelName: body.model,
-              imageCount: body.maxImages,
-              resolution: body.resolution,
-              generateAudio: false,
-            }),
-          },
-        });
 
         // อัพเดท job progress
         await job.updateProgress({
@@ -217,6 +284,42 @@ export class ImageProcessor extends WorkerHost {
           type: 'image',
         });
       }
+
+      // Save to Gallery — 1 record ต่อ 1 generation, เก็บ object name ทุกรูปใน resultUrl[]
+      // imageUrl เก็บรูปแรกไว้เพื่อ backward-compat กับ reader ที่ยังอ่าน imageUrl
+      await this.galleryRepo.create({
+        data: {
+          taskId,
+          projectId: body.projectId,
+          userId,
+          prompt: body.prompt,
+          imageUrl: uploadedImages[0] ?? '',
+          resultUrl: uploadedImages,
+          typeGenerate: 'image',
+          genneratedStatus: 'SUCCESS',
+          status: false,
+          usedCredit: credit.credit,
+          // denormalize metadata จาก log ลง gallery (dual-write)
+          usedImage: usage.generated_images || 0,
+          tokenUsed: usage.total_tokens || 0,
+          ImageUsed: usage.generated_images || 0,
+          resolution: body.resolution,
+          ratio: body.ratio,
+          generateAudio: false,
+          referenceImages: body.image.length > 0 ? body.image : [],
+          generateConfig: this.buildGenerateConfig({
+            ratio: body.ratio,
+            width: body.width,
+            height: body.height,
+            prompt: body.prompt,
+            duration: 0,
+            modelName: body.model,
+            imageCount: body.maxImages,
+            resolution: body.resolution,
+            generateAudio: false,
+          }),
+        },
+      });
 
       // ส่
       // 3. Save Log
@@ -264,7 +367,7 @@ export class ImageProcessor extends WorkerHost {
           redisImageCacheKey,
           usedCredit.toString(),
           'EX',
-          24 * 60 * 60,
+          60 * 60,
         );
       }
       // 4. อัพเดทสถานะเป็น completed
@@ -276,7 +379,7 @@ export class ImageProcessor extends WorkerHost {
       });
 
       // 5. ส่ง event "complete" ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:complete', {
+      await this.publishToCore(clientId, 'worker:image-complete', {
         taskId,
         success: true,
         imageCount: uploadedImages.length,
@@ -289,6 +392,7 @@ export class ImageProcessor extends WorkerHost {
           userId,
           prompt: body.prompt,
           imageUrl: bytepluseUrl,
+          resultUrl: uploadedImages,
           typeGenerate: 'image',
           genneratedStatus: 'SUCCESS',
           status: true,
@@ -306,17 +410,26 @@ export class ImageProcessor extends WorkerHost {
         },
       });
       if (body.image.length > 0) {
-        body.image.map((image) => {
-          const imageName = path.parse(image).name;
-          this.refImageRepository.update({
-            where: {
-              uid: imageName,
-            },
-            data: {
-              status: 'completed',
-            },
-          });
-        });
+        await Promise.all(
+          body.image
+            // ข้าม reference ที่เป็น URL (เช่น output ของ workflow ที่ presign ตั้งแต่ submit)
+            // เพราะไม่มี refImage record และจะทำให้ update พังด้วย "Record not found"
+            .filter((image) => !isAbsoluteUrl(image))
+            .map((image) => {
+              const imageName = path.parse(image).name;
+              // ใช้ updateMany เพื่อไม่ throw ถ้าไม่พบ record (กัน worker crash)
+              return this.refImageRepository
+                .updateMany({
+                  where: { uid: imageName },
+                  data: { status: 'completed' },
+                })
+                .catch((err) =>
+                  this.logger.warn(
+                    `refImage update skipped (${imageName}): ${err?.message}`,
+                  ),
+                );
+            }),
+        );
       }
 
       this.logger.log(
@@ -333,6 +446,7 @@ export class ImageProcessor extends WorkerHost {
           userId,
           prompt: body.prompt,
           imageUrl: bytepluseUrl,
+          resultUrl: uploadedImages,
           typeGenerate: 'image',
           genneratedStatus: 'SUCCESS',
           status: true,
@@ -350,6 +464,13 @@ export class ImageProcessor extends WorkerHost {
         },
       };
     } catch (error: any) {
+      await this.generateHelperService.logError(
+        userId,
+        error.message,
+        error.stack,
+        body,
+      );
+
       this.logger.error(
         `❌ Job ${job.id} failed: ${(error as Error).message}`,
         error.stack,
@@ -361,20 +482,28 @@ export class ImageProcessor extends WorkerHost {
         failedAt: new Date().toISOString(),
         error: error.message,
       });
+      const creditForFailure = await this.generateHelperService.getUsedCredit(
+        0,
+        body,
+        await this.masterModelTypeRepo.findOne({
+          where: { modelType: body.model, isActive: true },
+        }),
+      );
       await this.generateHelperService.updateUsedCreditFail(
         userId,
         body.organizationId,
         body.projectId,
-        'image',
-        body.maxImages,
+        'credit',
+        creditForFailure?.credit ?? 0,
       );
       // ส่ง error event ไปยัง Core Service
-      await this.publishToCore(clientId, 'worker:generate:error', {
+      await this.publishToCore(clientId, 'worker:image-error', {
         taskId,
         error: error.message,
         timestamp: new Date().toISOString(),
         projectId: body.projectId,
         type: 'image',
+        message: error.message,
       });
       await this.galleryRepo.create({
         data: {
@@ -383,9 +512,17 @@ export class ImageProcessor extends WorkerHost {
           userId,
           prompt: body.prompt,
           imageUrl: '',
+          resultUrl: [],
           typeGenerate: 'image',
           genneratedStatus: 'FAILED',
           status: false,
+          // denormalize metadata จาก log ลง gallery (dual-write)
+          tokenUsed: 0,
+          ImageUsed: 0,
+          resolution: body.resolution,
+          ratio: body.ratio,
+          generateAudio: false,
+          referenceImages: body.image.length > 0 ? body.image : [],
           generateConfig: this.buildGenerateConfig({
             ratio: body.ratio,
             width: body.width,
@@ -433,13 +570,43 @@ export class ImageProcessor extends WorkerHost {
   }
 
   /**
+   * เก็บรูปผลลัพธ์ลง TOS: ให้ TOS ดึงจาก URL ของ provider เอง (`fetchObject`) — ล้ม = throw ให้งาน fail
+   */
+  private async storeOutputImage(
+    bucket: string,
+    key: string,
+    sourceUrl: string,
+    label: string,
+  ): Promise<void> {
+    const startedAt = Date.now();
+    try {
+      await this.tosService.fetchObject(bucket, key, sourceUrl);
+    } catch (error) {
+      this.logger.error(
+        `❌ [fetchObject] image ${label} failed after ${
+          Date.now() - startedAt
+        }ms — ${describeTosError(error)}`,
+      );
+      throw error;
+    }
+    this.logger.log(
+      `🚀 [fetchObject] image ${label} stored by TOS directly (${
+        Date.now() - startedAt
+      }ms) → ${key}`,
+    );
+  }
+
+  /**
    * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
    */
+
   private async publishToCore(clientId: string, event: string, payload: any) {
-    console.log(`worker:${event.split(':')[1] || 'event'}`);
+    // Use the last segment so 'worker:generate:error' → channel 'worker:error' (not 'worker:generate')
+    const parts = event.split(':');
+    const channel = `worker:${parts[parts.length - 1] || 'event'}`;
     try {
       await this.redisPublisher.publish(
-        `worker:${event.split(':')[1] || 'event'}`,
+        channel,
         JSON.stringify({
           clientId,
           event,
@@ -464,7 +631,7 @@ export class ImageProcessor extends WorkerHost {
         `task:${taskId}`,
         JSON.stringify(updatedTask),
         'EX',
-        24 * 60 * 60,
+        60 * 60,
       );
     }
   }
@@ -495,5 +662,57 @@ export class ImageProcessor extends WorkerHost {
 
   async onModuleDestroy() {
     await this.redisPublisher.quit();
+  }
+
+  // map ชื่อ model (prefix) → payload builder function
+  private async buildPayload(body: RequestImageGenerateDto, sendConfig: any) {
+    const builder = this.payloadBuilders[sendConfig?.type];
+    if (!builder) {
+      // ไม่มี builder = config ใน master_model_type ผิด retry ไปก็ไม่หาย
+      throw new UnrecoverableError(
+        `Unsupported image sendConfig.type: "${sendConfig?.type}"`,
+      );
+    }
+    return builder(body, sendConfig);
+  }
+  private readonly payloadBuilders: Record<
+    string,
+    (body: RequestImageGenerateDto, modelDetail: any) => Promise<any>
+  > = {
+    seedream1: this.buildSeedream1Payload.bind(this),
+  };
+
+  private async buildSeedream1Payload(
+    body: RequestImageGenerateDto,
+    modelDetail: any,
+  ) {
+    Logger.debug(
+      `Building payload for seedream1 with body: ${JSON.stringify(body)}`,
+    );
+    // toProviderUrl มี guard ในตัว: ค่าที่เป็น URL อยู่แล้ว (reference จาก workflow)
+    // ส่งต่อตรง ๆ ส่วน object key จึงค่อย presign — และ throw ถ้า presign ไม่ผ่าน
+    const refKeys = (body.image ?? []).filter((ref): ref is string =>
+      Boolean(ref),
+    );
+    const images = refKeys.length
+      ? await this.storageUrl.toProviderUrls(refKeys)
+      : null;
+    return {
+      model: body.model,
+      prompt:
+        body.maxImages > 1
+          ? `create ${body.maxImages} images ${body.prompt}`
+          : body.prompt,
+      response_format: 'url',
+      ratio: body.ratio,
+      size: `${body.width}x${body.height}`,
+      stream: modelDetail.sendConfig?.stream ?? false,
+      watermark: modelDetail.sendConfig?.watermark ?? false,
+      sequential_image_generation: body.sequentialImageGeneration,
+      ...(images && images.length > 0 && { image: images }),
+      ...(body.maxImages && {
+        sequential_image_generation_options: { max_images: body.maxImages },
+      }),
+    };
   }
 }

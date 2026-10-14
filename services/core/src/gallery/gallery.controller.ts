@@ -35,13 +35,10 @@ export class GalleryController {
     @Query() query: any,
     @Res() res: Response,
   ) {
-    const { file, name ,type} = await this.galleryService.downloadFile(id, query);
-    // console.log(name);
-    res.set({
-      'Content-Disposition': `inline; filename="${name}"`,
-      'Content-Type':type,
-    });
-    res.send(file);
+    const { url } = await this.galleryService.downloadFile(id, query);
+    // Redirect straight to the presigned TOS URL — the file downloads from
+    // object storage, so no media bytes are proxied through this pod.
+    res.redirect(302, url);
   }
 
   @Get(':projectId')

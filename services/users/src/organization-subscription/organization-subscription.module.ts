@@ -8,9 +8,10 @@ import {
   PackageTransactionRepository,
   PrismaModule,
 } from '@ai-media/share';
+import { OmiseModule } from '../omise/omise.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, OmiseModule],
   controllers: [OrganizationSubscriptionController],
   providers: [
     OrganizationSubscriptionService,

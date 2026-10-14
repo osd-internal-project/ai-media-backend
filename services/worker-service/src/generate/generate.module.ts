@@ -9,17 +9,20 @@ import {
   QUEUE_NAME_OMNIHUMEN,
   QUEUE_NAME_VDO,
   TosModule,
+  StorageModule,
 } from '@ai-media/share';
 import { PrismaModule } from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { OmnihumenProcessor } from './omnihumen.service';
 import { DreamactorProcessor } from './dreamactor.service';
 import { GenerateHelperService } from './generate-helper.service';
+import { VideoStorageService } from './video-storage.service';
 
 @Module({
   imports: [
     PrismaModule,
     TosModule,
+    StorageModule,
     RedisModule.forRoot({
       type: 'single',
       url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
@@ -49,6 +52,7 @@ import { GenerateHelperService } from './generate-helper.service';
     OmnihumenProcessor,
     DreamactorProcessor,
     GenerateHelperService,
+    VideoStorageService,
   ], // อย่าลืมใส่ Processor
   exports: [
     ImageProcessor,

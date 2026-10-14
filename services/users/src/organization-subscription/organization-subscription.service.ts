@@ -8,19 +8,22 @@ import {
   PlanRepository,
   PrismaService,
 } from '@ai-media/share';
+import { OrganizationSubscription } from '@prisma/client';
 import * as dayjs from 'dayjs';
+import configs from '../configs';
+import { OmiseService } from '../omise/omise.service';
 
 @Injectable()
 export class OrganizationSubscriptionService {
   constructor(
     private readonly organizationSubscriptionRepo: OrganizationSubscriptionRepository,
-    // private readonly packageTransactionRepo: PackageTransactionRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly planRepo: PlanRepository,
     private readonly planPriceRepo: PlanPriceRepository,
     private readonly prisma: PrismaService,
     private readonly organizationRepo: OrganizationRepository,
     private readonly packageTransactionRepo: PackageTransactionRepository,
+    private readonly omiseService: OmiseService,
   ) {}
 
   findOne(id: string) {
@@ -221,6 +224,37 @@ export class OrganizationSubscriptionService {
     }
   }
   // cron job
+  /** ต่อรอบโดยไม่เก็บเงิน (เดิมเป็น branch ของ plan ฟรี) — reset เครดิตตาม allowance + เลื่อนวันของรอบ */
+  private async rollCycleWithoutCharge(
+    sub: Pick<
+      OrganizationSubscription,
+      'id' | 'organizationId' | 'periodCount' | 'creditAllowance' | 'imageAllowance'
+    >,
+    now: dayjs.Dayjs,
+  ): Promise<void> {
+    const startDate = now.add(1, 'day');
+    const endDate = dayjs(startDate).add(1, 'month').subtract(1, 'day');
+    const nextBillingDate = dayjs(startDate)
+      .add(sub.periodCount || 1, 'month')
+      .subtract(1, 'day');
+    await this.creditBalanceRepo.update({
+      where: { organizationId: sub.organizationId },
+      data: {
+        currentCycleBalance: sub.creditAllowance,
+        currentCycleImage: sub.imageAllowance,
+      },
+    });
+    await this.organizationSubscriptionRepo.update({
+      where: { id: sub.id },
+      data: {
+        currentPeriodStart: startDate.toDate(),
+        currentPeriodEnd: endDate.toDate(),
+        nextBillingDate: nextBillingDate.toDate(),
+        periodCurrent: 1,
+      },
+    });
+  }
+
   async changeCycleSubscription() {
     Logger.log('Running subscription renewal check...');
     const now = dayjs();
@@ -238,22 +272,26 @@ export class OrganizationSubscriptionService {
 
       for (const sub of subscriptions) {
         try {
-          // check auto renew
+          // Free plan (price 0): perpetual, never charged. Roll the cycle forward
+          // for free — refresh credits + advance dates — and keep it active.
+          if (Number(sub.price) === 0) {
+            await this.rollCycleWithoutCharge(sub, now);
+            continue;
+          }
+
+          // Auto-renew off (paid plan cancelled / lapsing) → do NOT renew here.
+          // Cancellation expiry is handled by the pending_cancel branch below at
+          // currentPeriodEnd; a bare autoRenew-off paid sub simply won't renew.
           if (!sub.autoRenew) {
-            //if auto renew is false, cancel the subscription
-            await this.organizationSubscriptionRepo.update({
-              where: { id: sub.id },
-              data: {
-                status: 'canceled',
-              },
-            });
-            await this.creditBalanceRepo.update({
-              where: { organizationId: sub.organizationId },
-              data: {
-                currentCycleBalance: 0,
-                currentCycleImage: 0,
-              },
-            });
+            continue;
+          }
+
+          // ปิด billing (org ถูกสร้างโดย admin): autoRenew คือ switch ต่อรอบให้เองโดยไม่ตัดเงิน
+          if (!configs().billingEnabled) {
+            await this.rollCycleWithoutCharge(sub, now);
+            Logger.log(
+              `Sub ${sub.id} renewed without charge (billing disabled, autoRenew on)`,
+            );
             continue;
           }
 
@@ -266,7 +304,45 @@ export class OrganizationSubscriptionService {
             where: { id: sub.nextPlanPriceId },
           });
 
-          const planDetails = plan.detailJson as any; 
+          // Execute the actual renewal payment before provisioning. Only orgs
+          // with a saved card (Omise customer) can be auto-charged; PromptPay /
+          // bank-transfer subs have no card → they must renew manually, so we
+          // move them to `past_due` instead of renewing them for free.
+          const org = await this.organizationRepo.findOne({
+            where: { organizationId: sub.organizationId },
+          });
+          if (!org?.omiseCustomerId) {
+            await this.organizationSubscriptionRepo.update({
+              where: { id: sub.id },
+              data: { status: 'past_due' },
+            });
+            Logger.warn(
+              `Sub ${sub.id} has no saved card → past_due (manual renewal required)`,
+            );
+            continue;
+          }
+          let charge: { id: string; status: string } | null = null;
+          try {
+            charge = await this.omiseService.chargeCustomerCard({
+              amountBaht: Number(planPrice.price),
+              customerId: org.omiseCustomerId,
+              description: `Auto-renewal ${plan.name}`,
+              invoiceNo: `RENEW-${sub.id}-${now.format('YYYYMMDD')}`,
+            });
+          } catch (err) {
+            Logger.error(
+              `Auto-renew charge failed for org ${sub.organizationId}: ${err.message}`,
+            );
+          }
+          if (!charge || charge.status !== 'successful') {
+            await this.organizationSubscriptionRepo.update({
+              where: { id: sub.id },
+              data: { status: 'past_due' },
+            });
+            continue;
+          }
+
+          const planDetails = plan.detailJson as any;
           const periodCount = planPrice.periodCount || 1;
           const startDate = now.add(1, 'day');
           const endDate = dayjs(startDate).add(
@@ -328,7 +404,7 @@ export class OrganizationSubscriptionService {
           await this.organizationRepo.update({
             where: { organizationId: newSub.organizationId },
             data: {
-              status: false,
+              status: true,
               maxUserAccess: maxUserAccess,
             },
           });
@@ -394,5 +470,51 @@ export class OrganizationSubscriptionService {
     } catch (error) {
       Logger.error(`Error fetching subscriptions: ${error.message}`);
     }
+
+    // Cancellation: subscriptions flagged `pending_cancel` stay active with their
+    // credits until the current cycle ends; once currentPeriodEnd has passed,
+    // revoke access (status → expired, credits → 0).
+    try {
+      const cancelling = await this.organizationSubscriptionRepo.findMany({
+        where: {
+          status: 'pending_cancel',
+          currentPeriodEnd: { lte: now.endOf('day').toDate() },
+        },
+      });
+      for (const sub of cancelling) {
+        try {
+          await this.organizationSubscriptionRepo.update({
+            where: { id: sub.id },
+            data: { status: 'expired' },
+          });
+          await this.creditBalanceRepo.update({
+            where: { organizationId: sub.organizationId },
+            data: { currentCycleBalance: 0, currentCycleImage: 0 },
+          });
+        } catch (error) {
+          Logger.error(
+            `Error expiring cancelled subscription ${sub.id}: ${error.message}`,
+          );
+        }
+      }
+    } catch (error) {
+      Logger.error(`Error processing cancellations: ${error.message}`);
+    }
+  }
+
+  /**
+   * Cancel a subscription (spec workflow 5): keep it active with current credits
+   * until the end of the current cycle, then the daily cron expires it. Sets
+   * autoRenew off + status `pending_cancel`.
+   */
+  async cancelSubscription(organizationId: string) {
+    const sub = await this.organizationSubscriptionRepo.findOne({
+      where: { organizationId },
+    });
+    if (!sub) throw new NotFoundException('Subscription not found');
+    return this.organizationSubscriptionRepo.update({
+      where: { id: sub.id },
+      data: { autoRenew: false, status: 'pending_cancel' },
+    });
   }
 }

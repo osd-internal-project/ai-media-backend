@@ -19,6 +19,8 @@ import {
   CreditBalanceRepository,
   MasterdataModelTypeRepository,
   MasterModelTypeDto,
+  ErrorLogRepository,
+  AuditLogRepository,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
 
@@ -26,7 +28,8 @@ import { tosConfigs } from 'src/configs';
 export class GenerateHelperService {
   constructor(
     private readonly galleryRepo: GalleryRepository,
-    private readonly logrepo: LogRepository,
+    private readonly auditLogRepo: AuditLogRepository,
+    private readonly errorLogRepo: ErrorLogRepository,
     private readonly refImageRepository: RefImageRepository,
     private readonly tosService: TosService,
     private readonly creditBalanceRepo: CreditBalanceRepository,
@@ -42,7 +45,7 @@ export class GenerateHelperService {
     projectId: string,
     unitType: 'image' | 'credit',
     amount: number,
-  ):Promise<any> {
+  ): Promise<any> {
     try {
       await this.projectMemberRepo.updateMany({
         where: { userId: userId, projectId: projectId },
@@ -136,7 +139,7 @@ export class GenerateHelperService {
       });
     } catch (err) {
       Logger.error(`Failed to update used credit: ${err}`);
-      return  undefined;
+      return undefined;
     }
   }
 
@@ -233,7 +236,7 @@ export class GenerateHelperService {
   //   }
   // }
 
-   async getUsedCredit(
+  async getUsedCredit(
     token: number,
     body: any,
     model?: MasterModelTypeDto,
@@ -269,7 +272,8 @@ export class GenerateHelperService {
               `"use strict"; ${code}`,
             );
             return evalFn(
-              t, b,
+              t,
+              b,
               Math.pow,
               Math.abs,
               Math.min,
@@ -360,4 +364,46 @@ export class GenerateHelperService {
     }
   }
 
+  async logAudit(
+    userId: string,
+    action: string,
+    details: any,
+    entityId: string,
+  ) {
+    try {
+      await this.auditLogRepo.create({
+        data: {
+          userId,
+          action: 'CREATE',
+          entityName: 'GenerateImage',
+          entityId,
+          newValues: details,
+        } as any,
+      });
+    } catch (e) {
+      Logger.error(`Failed to create audit log: ${e}`);
+    }
+  }
+
+  async logError(
+    userId: string,
+    message: string,
+    stack: string,
+    context?: any,
+  ) {
+    try {
+      await this.errorLogRepo.create({
+        data: {
+          serviceName: 'GenerateImageService',
+          severity: 'ERROR',
+          message,
+          stackTrace: stack,
+          context: context,
+          userId,
+        } as any,
+      });
+    } catch (e) {
+      Logger.error(`Failed to create error log: ${e}`);
+    }
+  }
 }

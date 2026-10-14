@@ -1,0 +1,19 @@
+2026-08-13T03:09:47.392587Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/.turbo"), AnchoredSystemPathBuf("libs/share/dist"), AnchoredSystemPathBuf("libs/share/.turbo/turbo-build.log")}
+2026-08-13T03:09:47.392607Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-08-13T03:09:49.847526Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/dist")}
+2026-08-13T03:09:49.847570Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-08-13T03:09:49.847685Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-08-13T05:25:07.031818Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("docs/social-setup"), AnchoredSystemPathBuf("docs/social-setup/README.md"), AnchoredSystemPathBuf("docs/social-setup/README.md.tmp.67676.5332bd8835bc")}
+2026-08-13T05:25:07.034106Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-08-13T05:26:19.829630Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("docs/social-setup/facebook-instagram.md"), AnchoredSystemPathBuf("docs/social-setup/facebook-instagram.md.tmp.67676.3951ba141e32")}
+2026-08-13T05:26:19.830636Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-08-13T05:27:23.623635Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("docs/social-setup/tiktok.md"), AnchoredSystemPathBuf("docs/social-setup/tiktok.md.tmp.67676.32bffaea1adc")}
+2026-08-13T05:27:23.624332Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-08-13T05:28:31.228304Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("docs/social-setup/youtube.md"), AnchoredSystemPathBuf("docs/social-setup/youtube.md.tmp.67676.519dbd70f32f")}
+2026-08-13T05:28:31.230606Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-08-13T05:45:42.741142Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("docs/social-setup/troubleshooting.md"), AnchoredSystemPathBuf("docs/social-setup/troubleshooting.md.tmp.67676.80d68a34afe9")}
+2026-08-13T05:45:42.742421Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-08-13T05:45:55.524403Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("PUBLIC_SOCIAL_SETUP.md"), AnchoredSystemPathBuf("PUBLIC_SOCIAL_SETUP.md.tmp.67676.0ed115178493")}
+2026-08-13T05:45:55.524439Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-08-13T05:56:05.849398Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("docs/social-setup/troubleshooting.md.tmp.67676.40aedbd721b4"), AnchoredSystemPathBuf("docs/social-setup/troubleshooting.md")}
+2026-08-13T05:56:05.858916Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))

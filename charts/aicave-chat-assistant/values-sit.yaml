@@ -16,20 +16,25 @@ ingress:
     secretName: aicave-console-tls-sit
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-sit"
+  keycloakUrl: "https://id24.aicave.ai"
+  keycloakRealm: "eportal"
+  nodeOptions: "--max-old-space-size=192"
   nodeEnv: "Development"
   port: "4004"
-  openaiBaseUrl: "https://api.openai.com/v1"
-  openaiModel: "gpt-5-nano"
-  openaiFullbackModel: "gpt-4.1-nano"
-  openaiMaxRetries: "3"
-  openaiTimeoutMs: "60000"
-  moderationEnabled: "true"
+  # LLM gateway — the per-request credential is each organization's own
+  # minted key, so there is no shared model API key here any more.
+  llmGatewayUrl: "https://llmgateway.osd.co.th"
+  llmProjectId: "team-mrcx7er7"
+  llmChatTimeoutMs: "60000"
+  corsAllowedOrigins: "https://sit.aicave.ai"
   memoryMaxMessages: "20"
   memoryMaxTokenBudget: "8000"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
-#   secretEnv.OPENAI_API_KEY
+#   secretEnv.LLM_ADMIN_TOKEN
 
 resources:
   requests:

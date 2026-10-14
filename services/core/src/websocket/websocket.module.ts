@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { WebsocketGatewayService } from './websocket.gateway';
 import { WebsocketService } from './websocket.service';
+import { WebsocketController } from './websocket.controller';
 import { GenerateModule } from 'src/generate/generate.module';
 import {
   PrismaModule,
@@ -10,6 +11,7 @@ import {
   QUEUE_NAME_OMNIHUMEN,
   QUEUE_NAME_DREAMACTOR,
   TosModule,
+  StorageModule,
 } from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { LogsService } from 'src/logs/logs.service';
@@ -18,6 +20,7 @@ import { LogsService } from 'src/logs/logs.service';
   imports: [
     PrismaModule,
     TosModule,
+    StorageModule,
     GenerateModule,
     RedisModule.forRoot({
       type: 'single',
@@ -44,15 +47,8 @@ import { LogsService } from 'src/logs/logs.service';
       name: 'tasks',
     }),
   ],
-  providers: [
-    WebsocketGatewayService,
-    WebsocketService,
-    LogsService,
-  ],
-  exports: [
-    WebsocketGatewayService,
-    WebsocketService,
-    LogsService,
-  ],
+  controllers: [WebsocketController],
+  providers: [WebsocketGatewayService, WebsocketService, LogsService],
+  exports: [WebsocketGatewayService, WebsocketService, LogsService],
 })
 export class WebsocketModule {}

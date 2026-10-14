@@ -9,10 +9,16 @@ image:
   tag: "1.0.1"
 
 env:
+  nodeOptions: "--max-old-space-size=192"
   nodeEnv: "Development"
   port: "5000"
   redisHost: "my-redis-master.redis.svc.cluster.local"
   redisPort: "6379"
+  # SMTP relay (Office 365 direct-send, unauthenticated). Reachable directly from the cluster.
+  emailHost: "103.197.245.8"
+  emailPort: "25"
+  emailSecure: "false"
+  emailFrom: '"AI Cave Support" <aicavesupport@osd.co.th>'
 
 resources:
   requests:

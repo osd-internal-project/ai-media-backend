@@ -29,6 +29,19 @@ spec:
         env:
         - name: NODE_ENV
           value: {{ .Values.env.nodeEnv | quote }}
+        {{- if .Values.env.nodeOptions }}
+        - name: NODE_OPTIONS
+          value: {{ .Values.env.nodeOptions | quote }}
+        {{- end }}
+        # Keycloak token check — off | report | enforce (ดู docs/auth-rollout.md)
+        - name: AUTH_MODE
+          value: {{ .Values.env.authMode | default "off" | quote }}
+        - name: KEYCLOAK_ALLOWED_CLIENTS
+          value: {{ .Values.env.keycloakAllowedClients | default "" | quote }}
+        - name: KEYCLOAK_URL
+          value: {{ .Values.env.keycloakUrl | quote }}
+        - name: KEYCLOAK_REALM
+          value: {{ .Values.env.keycloakRealm | quote }}
         - name: PORT
           value: {{ .Values.env.port | quote }}
         - name: DATABASE_URL
@@ -58,6 +71,17 @@ spec:
           value: {{ .Values.env.tosRegion | quote }}
         - name: TOS_ENDPOINT
           value: {{ .Values.env.tosEndpoint | quote }}
+        - name: WORKER_PUBLIC_URL
+          value: {{ .Values.env.workerPublicUrl | quote }}
+        - name: BYTEPLUS_CALLBACK_BASE_URL
+          value: {{ .Values.env.byteplusCallbackBaseUrl | quote }}
+        - name: BYTEPLUS_CALLBACK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: BYTEPLUS_CALLBACK_SECRET
+              # ไม่มี key นี้ = ไม่ส่ง callback_url (ใช้ poll-check อย่างเดียว) ไม่ทำให้ pod start ไม่ขึ้น
+              optional: true
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

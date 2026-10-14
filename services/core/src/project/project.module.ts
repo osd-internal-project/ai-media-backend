@@ -7,5 +7,6 @@ import { PrismaModule } from '@ai-media/share';
   imports: [PrismaModule],
   controllers: [ProjectController],
   providers: [ProjectService],
+  exports: [ProjectService],
 })
 export class ProjectModule {}

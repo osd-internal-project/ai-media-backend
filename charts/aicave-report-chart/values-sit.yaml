@@ -18,6 +18,11 @@ ingress:
     secretName: aicave-console-tls-sit
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-sit"
+  keycloakUrl: "https://id24.aicave.ai"
+  keycloakRealm: "eportal"
+  nodeOptions: "--max-old-space-size=192"
   nodeEnv: "Development"
   port: "4001"
   pathMountdirUpload: "./uploads"

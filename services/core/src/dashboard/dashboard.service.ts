@@ -9,6 +9,7 @@ import {
   UsersRepository,
 } from '@ai-media/share';
 import { PrismaService } from '@ai-media/share';
+import { Prisma } from '@prisma/client';
 import * as dayjs from 'dayjs';
 
 @Injectable()
@@ -23,18 +24,21 @@ export class DashboardService {
   ) {}
   async summaryOrganization(organizationId: string, query: any) {
     const { createdAt } = query || {};
-    const sql = ` select o.id as "organizationId", o.name as "organizationName",
+    // ค่าจาก request ต้องเป็น parameter เสมอ — เดิมต่อ string เข้า $queryRawUnsafe (SQL injection)
+    const sql = Prisma.sql` select o.id as "organizationId", o.name as "organizationName",
       (COALESCE(sub.image_allowance, 0) + COALESCE(cb.on_top_image, 0))::int as "packageImageAmount",
       (COALESCE(sub.credit_allowance, 0) + COALESCE(cb.on_top_balance, 0))::int as "packageTokenAmount", 
       (COALESCE(cb.current_cycle_image, 0) + COALESCE(cb.on_top_image, 0))::int as "remainImageAmount",
       (COALESCE(cb.current_cycle_balance, 0) + COALESCE(cb.on_top_balance, 0))::int as "remainTokenAmount" from organization o 
     left join organization_subscriptions sub on o.organization_id = sub.organization_id
     left join credit_balances cb on o.organization_id = cb.organization_id
-     where ${
-       organizationId ? `o.organization_id  = '${organizationId}'` : ''
+     ${
+       organizationId
+         ? Prisma.sql`where o.organization_id = ${organizationId}`
+         : Prisma.empty
      } `;
     // console.log(sql);
-    const result: any = await this.prismaService.$queryRawUnsafe(sql);
+    const result: any = await this.prismaService.$queryRaw(sql);
     if (result && result.length > 0) {
       return result[0];
     }
@@ -166,7 +170,7 @@ export class DashboardService {
   }
   async summaryUser(organizationId: string, query: any) {
     const { projectId, createdAt } = query || {};
-    const sql = `
+    const sql = Prisma.sql`
 select
 	om.user_id,
 	om.role,fullname,username,
@@ -180,32 +184,32 @@ from
 		u.fullname,
 		u.username
 	from
-		organization_member om left join users u on u."userId" = om.user_id 
+		organization_member om left join users u on u."user_id" = om.user_id
 	where
-		organization_id = '${organizationId}' ) om
+		organization_id = ${organizationId} ) om
 left join 
 	(
 	select
-		log."userId"  as user_id ,
-		SUM(CASE WHEN log."typeGenerate" = 'image' THEN log.used_image ELSE 0 END) as used_image,
-		SUM(CASE WHEN log."typeGenerate" != 'image' THEN log.used_credit ELSE 0 END) as used_credit
+		log."user_id"  as user_id ,
+		SUM(CASE WHEN log."type_generate" = 'image' THEN log.used_image ELSE 0 END) as used_image,
+		SUM(CASE WHEN log."type_generate" != 'image' THEN log.used_credit ELSE 0 END) as used_credit
 	from
 		log
 	left join project on
-		log."projectId" = project.id where log.status='success' and project.organization_id = '${organizationId}' ${
-      projectId ? `and log."projectId" = '${projectId}'` : ''
+		log."project_id" = project.id where log.status='success' and project.organization_id = ${organizationId} ${
+      projectId ? Prisma.sql`and log."project_id" = ${projectId}` : Prisma.empty
     } ${
       createdAt
-        ? `and log."createdAt" between '${dayjs(createdAt)
+        ? Prisma.sql`and log."created_at" between ${dayjs(createdAt)
             .startOf('month')
-            .toISOString()}' and '${dayjs(createdAt)
+            .toISOString()}::timestamp and ${dayjs(createdAt)
             .endOf('month')
-            .toISOString()}'`
-        : ''
-    } group by log."userId" ) lg on
+            .toISOString()}::timestamp`
+        : Prisma.empty
+    } group by log."user_id" ) lg on
 	om.user_id = lg.user_id order by fullname`;
     // console.log(sql);
-    const result = await this.prismaService.$queryRawUnsafe(sql);
+    const result = await this.prismaService.$queryRaw(sql);
 
     return result || [];
   }

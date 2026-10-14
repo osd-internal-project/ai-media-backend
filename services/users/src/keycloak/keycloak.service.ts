@@ -16,6 +16,20 @@ import * as https from 'https';
 import * as jwt from "jsonwebtoken";
 import { UsersService } from 'src/users/users.service';
 
+/** Identity providers brokered through Keycloak. */
+export const IDP_HINTS = ['google', 'microsoft'] as const;
+
+export type IdpHint = (typeof IDP_HINTS)[number];
+
+/**
+ * Narrows an arbitrary route segment to a supported identity provider.
+ *
+ * @param value Raw `:idp` path parameter.
+ * @returns True when the value names a provider we broker.
+ */
+export const isIdpHint = (value: unknown): value is IdpHint =>
+  typeof value === 'string' && (IDP_HINTS as readonly string[]).includes(value);
+
 @Injectable()
 export class KeycloakService {
   constructor(
@@ -392,20 +406,49 @@ export class KeycloakService {
     return data;
   }
 
-  async getGoogleLoginUrl() {
+  /**
+   * Builds the Keycloak authorization URL for a brokered identity provider.
+   *
+   * Only the `kc_idp_hint` parameter distinguishes providers — everything else (client,
+   * realm, redirect URI) is shared, which is why the callback needs no provider argument.
+   *
+   * @param idp Which identity provider to route the user to.
+   * @returns The full authorization URL to redirect the browser to.
+   */
+  async getIdpLoginUrl(idp: IdpHint) {
     const config = configs().keycloak;
     const rootUrl = `${config.url}/realms/${config.realm}/protocol/openid-connect/auth`;
     const params = new URLSearchParams({
       client_id: config.clientId,
       redirect_uri: `${config.redirectUri}`,
       response_type: 'code',
-      kc_idp_hint: 'google',
+      kc_idp_hint: config.idpAliases[idp],
       scope: 'openid email profile',
     });
-    return `${rootUrl}?${params.toString()}`
+    return `${rootUrl}?${params.toString()}`;
   }
 
-  async googleCallback(code: string) {
+  /**
+   * @deprecated Use {@link getIdpLoginUrl}. Retained so already-deployed frontends keep
+   *   working during rollout.
+   */
+  async getGoogleLoginUrl() {
+    return this.getIdpLoginUrl('google');
+  }
+
+  /**
+   * Exchanges an authorization code for tokens and provisions the local user.
+   *
+   * Provider-agnostic by construction: the code exchange, the id_token decode and the
+   * email-based lookup are identical for every brokered provider. Keycloak redirects back
+   * to a single registered URI carrying only `?code`, so the frontend cannot tell us which
+   * provider was used — and does not need to.
+   *
+   * @param code The authorization code from the Keycloak redirect.
+   * @returns Tokens plus the local user's identifiers, or the raw tokens if no matching
+   *   Keycloak user could be found.
+   */
+  async idpCallback(code: string) {
     const config = configs().keycloak;
     const params = new URLSearchParams();
     params.append("client_id", config.clientId);
@@ -460,5 +503,13 @@ export class KeycloakService {
     }
 
     return tokens;
+  }
+
+  /**
+   * @deprecated Use {@link idpCallback}. Retained so already-deployed frontends keep
+   *   working during rollout.
+   */
+  async googleCallback(code: string) {
+    return this.idpCallback(code);
   }
 }

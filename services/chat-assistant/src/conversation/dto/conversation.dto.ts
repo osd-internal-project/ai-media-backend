@@ -1,4 +1,10 @@
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateConversationDto {
@@ -43,6 +49,13 @@ export class CreateConversationDto {
 }
 
 export class UpdateConversationDto {
+  @ApiProperty({
+    description: 'Caller user ID. Must own the conversation.',
+  })
+  @IsString()
+  @MinLength(1)
+  userId: string;
+
   @ApiPropertyOptional({ description: 'Conversation title' })
   @IsString()
   @MaxLength(300)
@@ -53,7 +66,8 @@ export class UpdateConversationDto {
     description: 'Conversation status',
     enum: ['active', 'archived'],
   })
-  @IsString()
+  // จำกัดค่าให้ตรงกับที่ประกาศไว้ — เดิมเป็น @IsString() เฉย ๆ จึงรับค่าอะไรก็ได้
+  @IsIn(['active', 'archived'])
   @IsOptional()
   status?: 'active' | 'archived';
 

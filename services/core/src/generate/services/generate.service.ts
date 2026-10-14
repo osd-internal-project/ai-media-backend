@@ -50,7 +50,7 @@ export class GenerateService {
     private readonly userRepo: UsersRepository,
     private readonly errorLogRepo: ErrorLogRepository,
     private readonly auditLogRepo: AuditLogRepository,
-    private readonly modeltypeRepo: MasterdataModelTypeRepository,
+    private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly generateImageService: GenerateImageService,
     private readonly generateVideoService: GenerateVideoService,

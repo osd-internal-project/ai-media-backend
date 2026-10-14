@@ -1,27 +1,29 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
-import { PrismaModule } from '@ai-media/share';
+import { LlmGatewayModule, PrismaModule } from '@ai-media/share';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { PromptEngineeringService } from './services/prompt-engineering.service';
 import { MemoryService } from './services/memory.service';
 import { ToolCallingService } from './services/tool-calling.service';
-import { RetryService } from './services/retry.service';
-import { ModerationService } from './services/moderation.service';
+import { ChatModelService } from './services/chat-model.service';
 import { VisionService } from './services/vision.service';
 
+/**
+ * HttpModule ยังอยู่เพราะ VisionService ใช้ — ส่วน path ของแชทย้ายไปใช้
+ * LlmChatService จาก LlmGatewayModule แล้ว
+ */
 @Module({
-  imports: [PrismaModule, HttpModule],
+  imports: [PrismaModule, HttpModule, LlmGatewayModule],
   controllers: [ChatController],
   providers: [
     ChatService,
     PromptEngineeringService,
     MemoryService,
     ToolCallingService,
-    RetryService,
-    ModerationService,
+    ChatModelService,
     VisionService,
   ],
-  exports: [ChatService, VisionService],
+  exports: [ChatService, VisionService, ChatModelService],
 })
 export class ChatModule {}

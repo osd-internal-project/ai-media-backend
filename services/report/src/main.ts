@@ -22,15 +22,18 @@ async function bootstrap() {
   prismaService.enableShutdownHooks(app as any);
   app.useGlobalPipes(new ValidationPipe());
 
-  const options = new DocumentBuilder()
-    .setTitle('Namecard API')
-    .setDescription('The Namecard API description')
-    .setVersion('1.0')
-    .addTag('Namecard')
-    .build();
+  // Swagger เปิดเฉพาะนอก prod — chart prod ใช้ "Production" จึงเทียบแบบไม่สนตัวพิมพ์
+  if (process.env.NODE_ENV?.toLowerCase() !== 'production') {
+    const options = new DocumentBuilder()
+      .setTitle('Namecard API')
+      .setDescription('The Namecard API description')
+      .setVersion('1.0')
+      .addTag('Namecard')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, options);
-  SwaggerModule.setup('api', app, document);
+    const document = SwaggerModule.createDocument(app, options);
+    SwaggerModule.setup('api', app, document);
+  }
 
   await app.listen(PORT);
   console.log(`service start on port : ${PORT}`);

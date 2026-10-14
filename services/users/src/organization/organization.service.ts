@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   Logger,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApproveInviteUserDto } from './dto/approve-invite-user.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
@@ -19,6 +20,7 @@ import {
   OrganizationSubscriptionRepository,
   CreditBalanceRepository,
   PackageTransactionRepository,
+  LlmGatewayService,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
@@ -43,6 +45,7 @@ export class OrganizationService {
     private readonly packageTransactionRepo: PackageTransactionRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly organizationSubscriptionRepo: OrganizationSubscriptionRepository,
+    private readonly llmGateway: LlmGatewayService,
   ) {}
 
   create(createOrganizationDto: Prisma.OrganizationCreateInput) {
@@ -110,6 +113,17 @@ export class OrganizationService {
         accessCodes: plan?.accessCodes || [],
       },
     });
+    // Non-blocking: a gateway outage must not fail organization creation. When this yields
+    // no key, services/core mints one lazily on the first generation.
+    const llmApiKey = await this.llmGateway.getOrCreateApiKey(
+      organization.organizationId,
+    );
+    if (!llmApiKey) {
+      Logger.warn(
+        `No LLM gateway API key provisioned for organization ${organization.organizationId}; it will be created on first generation`,
+      );
+    }
+
     const packageTransaction = await this.packageTransactionRepo.create({
       data: {
         organizationId: organization.organizationId,
@@ -251,7 +265,55 @@ export class OrganizationService {
       }/accept-invite?token=${token}`,
     );
 
+    void this.notifyInvitationChanged(dto.email);
+
     return { message: 'Invitation sent', token };
+  }
+
+  /** คำเชิญที่ยังรอตอบของ email นี้ — ใช้แสดงกระดิ่ง noti */
+  async findPendingInvitations(email: string) {
+    if (!email) return [];
+    const invites = await this.invitationRepo.findMany({
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        status: 'PENDING',
+        expiresAt: { gt: new Date() },
+      },
+      include: { organization: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return invites.map((invite) => ({
+      id: invite.id,
+      token: invite.token,
+      organizationId: invite.organizationId,
+      organizationName: (invite as { organization?: { name: string } })
+        .organization?.name,
+      role: invite.role,
+      expiresAt: invite.expiresAt,
+      createdAt: invite.createdAt,
+    }));
+  }
+
+  /** ปลุก socket ของผู้ถูกเชิญผ่าน core — พังได้โดยไม่กระทบการเชิญ */
+  private async notifyInvitationChanged(email: string) {
+    const coreApiUrl = configs().coreApiUrl;
+    if (!coreApiUrl) return;
+    try {
+      await firstValueFrom(
+        this.httpService.post(
+          `${coreApiUrl}/websocket/notify/invitation`,
+          { email },
+          // core ตรวจ key นี้ — endpoint อยู่หลัง ingress สาธารณะเดียวกับ API อื่น
+          { headers: { 'x-internal-key': process.env.INTERNAL_API_KEY ?? '' } },
+        ),
+      );
+    } catch (error) {
+      Logger.warn(
+        `Invitation notify failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
   findInvitationsByOrganizationId(organizationId: string) {
     return this.invitationRepo.findMany({
@@ -312,12 +374,16 @@ export class OrganizationService {
     }
 
     let userId: string;
-    const existingUser = await this.usersRepo.findOne({
-      where: { email: invite.email },
-    });
+    const existingUser = dto.userId
+      ? await this.findSessionInvitee(dto.userId, invite.email)
+      : await this.usersRepo.findOne({ where: { email: invite.email } });
 
     if (existingUser) {
       userId = existingUser.userId;
+      await this.usersRepo.update({
+        where: { userId },
+        data: { recentOrganizationId: invite.organizationId },
+      });
     } else {
       if (!dto.username || !dto.password || !dto.fullname) {
         throw new ConflictException(
@@ -408,14 +474,19 @@ export class OrganizationService {
       }
     }
 
-    // Create Organization Member
-    await this.organizationMemberRepo.create({
-      data: {
-        organizationId: invite.organizationId,
-        userId: userId,
-        role: invite.role,
-      },
+    // กด accept ซ้ำ/เป็นสมาชิกอยู่แล้วต้องไม่สร้างแถวซ้ำ
+    const existingMember = await this.organizationMemberRepo.findOne({
+      where: { organizationId: invite.organizationId, userId },
     });
+    if (!existingMember) {
+      await this.organizationMemberRepo.create({
+        data: {
+          organizationId: invite.organizationId,
+          userId: userId,
+          role: invite.role,
+        },
+      });
+    }
 
     // Update Invitation Status
     await this.invitationRepo.update({
@@ -423,10 +494,25 @@ export class OrganizationService {
       data: { status: 'ACCEPTED' },
     });
 
+    void this.notifyInvitationChanged(invite.email);
+
     return {
       message: 'Invitation accepted',
       organizationId: invite.organizationId,
     };
+  }
+
+  /** user ที่ login อยู่ต้องเป็นเจ้าของ email ที่ถูกเชิญ */
+  private async findSessionInvitee(sessionUserId: string, inviteEmail: string) {
+    const user = await this.usersRepo.findOne({
+      where: { token: sessionUserId },
+    });
+    if (!user || user.email?.toLowerCase() !== inviteEmail.toLowerCase()) {
+      throw new ForbiddenException(
+        'This invitation was sent to a different email address',
+      );
+    }
+    return user;
   }
   async findAccessCodeByOrganizationId(organizationId: string) {
     const organization = await this.organizationRepo.findOne({

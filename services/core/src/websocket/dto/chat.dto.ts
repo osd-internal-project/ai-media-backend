@@ -1,11 +1,11 @@
 export class JoinRoomDto {
     projectId: string;
-    type?: 'video' | 'image' | 'omnihumen' | 'dreamactor';
+    type?: 'video' | 'image' | 'omnihumen' | 'dreamactor' | 'photo-event';
 }
 
 export class LeaveRoomDto {
     projectId: string;
-    type?: 'video' | 'image' | 'omnihumen' | 'dreamactor';
+    type?: 'video' | 'image' | 'omnihumen' | 'dreamactor' | 'photo-event';
 }
 
 export class SendMessageDto {

@@ -20,8 +20,15 @@ import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { redisConfigs } from '../configs';
 import { LogsService } from 'src/logs/logs.service';
+import { KeycloakAuthService } from '@ai-media/share';
+import { authenticateSocket } from './socket-auth';
 
 import { JoinRoomDto, LeaveRoomDto, SendMessageDto } from './dto/chat.dto';
+import {
+  INVITATION_CHANGED_EVENT,
+  INVITATION_NOTIFY_CHANNEL,
+  invitationRoom,
+} from './invitation-notify';
 
 @WebSocketGateway({
   path: '/websockets',
@@ -43,6 +50,7 @@ export class WebsocketGatewayService
     private readonly workerService: WebsocketService,
     private readonly generateService: GenerateService,
     private readonly logsService: LogsService,
+    private readonly auth: KeycloakAuthService,
   ) {
     // สร้าง Redis Subscriber แยกสำหรับรับ events จาก Worker
     const redisConf = redisConfigs();
@@ -73,6 +81,7 @@ export class WebsocketGatewayService
 
   async handleConnection(client: Socket) {
     this.logger.log(`🔌 Client connected: ${client.id}`);
+    if (!(await authenticateSocket(client, this.auth, this.logger))) return;
 
     await this.redis.hset(
       'ws:clients',
@@ -98,8 +107,8 @@ export class WebsocketGatewayService
       'worker:started',
       'worker:progress',
       'worker:image-complete',
-      'worker:error',
-      'worker:complete',
+      'worker:image-error',
+      'worker:image-complete',
       'worker:video-started',
       'worker:video-progress',
       'worker:video-url-success',
@@ -118,10 +127,15 @@ export class WebsocketGatewayService
       'worker:dreamactor-upload-success',
       'worker:dreamactor-complete',
       'worker:dreamactor-error',
+      INVITATION_NOTIFY_CHANNEL,
     );
 
     // รับ messages จาก Worker
     this.redisSubscriber.on('message', async (channel, message) => {
+      if (channel === INVITATION_NOTIFY_CHANNEL) {
+        this.emitInvitationChanged(message);
+        return;
+      }
       try {
         const data = JSON.parse(message);
         const { clientId, event, payload } = data;
@@ -131,11 +145,14 @@ export class WebsocketGatewayService
         // Check format for room broadcast
         if (payload && payload.projectId && payload.type) {
           const roomName = `${payload.projectId}:${payload.type}`;
-          this.server.to(roomName).emit(event, payload);
-          // Also emit to specific client if needed/redundant but safe
-          // if (clientId) {
-          //   this.server.to(clientId).emit(event, payload);
-          // }
+          // Target the room AND the originating client in a SINGLE emit so a
+          // client that is in both (the normal case) receives the event exactly
+          // once. Socket.IO de-duplicates recipients across rooms within one
+          // emit call; two separate emits would deliver it twice.
+          const target = clientId
+            ? this.server.to(roomName).to(clientId)
+            : this.server.to(roomName);
+          target.emit(event, payload);
         } else {
           // Fallback: ส่ง event ไปยัง client ที่เกี่ยวข้องแบบเดิม
           if (clientId) {
@@ -518,6 +535,7 @@ export class WebsocketGatewayService
     },
     @ConnectedSocket() client: Socket,
   ) {
+    Logger.debug('Received chat:get-used-credit with data:', data);
     const projectId = data.projectId;
     const organizationId = data.organizationId;
     const token = data.userId;
@@ -525,6 +543,13 @@ export class WebsocketGatewayService
 
     const usedCreditKey = `${organizationId}/${projectId}/credit_used_${token}`;
     const totalCreditKey = `${organizationId}/${projectId}/credit_total_${token}`;
+    Logger.debug(
+      `Fetching used credit for ${data.type} - Project: ${projectId}, Org: ${organizationId}, User: ${token}`,
+    );
+    Logger.debug(
+      `Used Credit Redis Key: ${usedCreditKey}, Total Credit Redis Key: ${totalCreditKey}`,
+    );
+
     try {
       // const redisUsedCredit = await this.redis.get(usedCreditKey);
       // const redisTotalCredit = await this.redis.get(totalCreditKey);
@@ -540,6 +565,7 @@ export class WebsocketGatewayService
         token,
         data.type,
       );
+      Logger.debug(`{ usedCredit, totalCredit }:`, { usedCredit, totalCredit });
       await this.redis.set(usedCreditKey, usedCredit, 'EX', 60 * 60);
       await this.redis.set(totalCreditKey, totalCredit, 'EX', 60 * 60);
       client.emit('chat:used-credit', {
@@ -585,6 +611,26 @@ export class WebsocketGatewayService
   }
 
   // Group Chat Handlers
+
+  /** client ที่ login อยู่เข้าห้องของ email ตัวเองเพื่อรับ noti คำเชิญ */
+  @SubscribeMessage('join-invitations')
+  async handleJoinInvitations(
+    @MessageBody() data: { email?: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (typeof data?.email !== 'string' || !data.email.includes('@')) return;
+    await client.join(invitationRoom(data.email));
+  }
+
+  private emitInvitationChanged(message: string) {
+    try {
+      const { email } = JSON.parse(message) as { email?: unknown };
+      if (typeof email !== 'string') return;
+      this.server.to(invitationRoom(email)).emit(INVITATION_CHANGED_EVENT, {});
+    } catch (error) {
+      this.logger.error('Invalid invitation notify message', error);
+    }
+  }
 
   @SubscribeMessage('join-room')
   async handleJoinRoom(
@@ -674,6 +720,19 @@ export class WebsocketGatewayService
 
   async broadcast(event: string, data: any) {
     this.server.emit(event, data);
+  }
+
+  /**
+   * ส่ง event เข้าห้องที่ระบุ (ใช้ socket.io server ตัวเดียวกับที่ client เชื่อมต่อ)
+   * เพิ่มเพื่อให้ฟีเจอร์ Workflow broadcast เข้าห้อง `${projectId}:workflow` ได้
+   * โดยไม่ต้องมี gateway แยก (ไม่กระทบ handler เดิม)
+   */
+  emitToRoom(room: string, event: string, data: any): void {
+    if (!this.server) {
+      this.logger.warn(`Socket server not ready, skip emit ${event}`);
+      return;
+    }
+    this.server.to(room).emit(event, data);
   }
 
   async getConnectedClients(): Promise<string[]> {

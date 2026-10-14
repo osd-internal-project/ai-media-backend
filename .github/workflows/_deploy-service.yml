@@ -113,7 +113,9 @@ jobs:
             --set secretEnv.SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }} \
             --set secretEnv.KEYCLOAK_CLIENT_SECRET=${{ secrets.KEYCLOAK_CLIENT_SECRET }} \
             --set secretEnv.OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-            --set secretEnv.KEYCLOAK_CLIENT_SECRET=${{ secrets.KEYCLOAK_CLIENT_SECRET }} \
+            --set secretEnv.OMISE_SECRET_KEY=${{ secrets.OMISE_SECRET_KEY }} \
+            --set secretEnv.LLM_ADMIN_TOKEN=${{ secrets.LLM_ADMIN_TOKEN }} \
+            --set secretEnv.INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }} \
             --namespace ${{ inputs.namespace }}-${DEPLOY_ENV} \
             --wait \
             --timeout 5m \

@@ -20,6 +20,11 @@ ingress:
   websocketBackendPort: 8971
 
 env:
+  authMode: "report"
+  keycloakAllowedClients: "ai-cave-prod"
+  keycloakUrl: "https://id24.aicave.ai"
+  keycloakRealm: "eportal"
+  nodeOptions: "--max-old-space-size=384"
   nodeEnv: "Production"
   port: "4000"
   redisHost: "my-redis-master.aicave-prod.svc.cluster.local"
@@ -28,6 +33,10 @@ env:
   tosBucket: "ai-cave"
   tosRegion: "ap-southeast-3"
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
+  # TOS เรียก upload callback ที่ <workerPublicUrl>/upload/callback (ingress rewrite → /api)
+  workerPublicUrl: "https://www.aicave.ai/public/api/v1/worker"
+  # Ark เรียก <byteplusCallbackBaseUrl>/webhooks/byteplus/video/:taskId ที่ core (ingress rewrite → /api)
+  byteplusCallbackBaseUrl: "https://www.aicave.ai/public/api/v1/core"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
