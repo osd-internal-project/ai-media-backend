@@ -38,8 +38,19 @@ env:
   llmProjectId: "team-mrcx7er7"
 
 
+otel:
+  # OTLP HTTP endpoint (Tempo/Alloy) — ว่าง = ปิด telemetry
+  endpoint: ""
+  serviceName: "aicave-core"
+  # Tempo ไม่รับ metrics — ใช้ "otlp" เมื่อมี Alloy/collector
+  metricsExporter: "none"
+  environment: "uat"
+  samplerRatio: "0.5"
+  disabled: false
+
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
+#   secretEnv.OTEL_EXPORTER_OTLP_HEADERS (optional, เช่น "Authorization=Basic xxx")
 #   secretEnv.BYTEPLUS_ACCESS_KEY
 #   secretEnv.BYTEPLUS_SECRET_KEY
 #   secretEnv.TOS_ACCESS_KEY

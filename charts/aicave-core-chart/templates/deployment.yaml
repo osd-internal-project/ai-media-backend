@@ -110,6 +110,39 @@ spec:
             secretKeyRef:
               name: {{ .Values.appName }}-secret
               key: LLM_ADMIN_TOKEN
+        # OpenTelemetry → Grafana Alloy — ไม่ตั้ง otel.endpoint = ไม่ส่ง telemetry (tracing.ts เป็น no-op)
+        {{- if .Values.otel.endpoint }}
+        - name: OTEL_SERVICE_NAME
+          value: {{ .Values.otel.serviceName | default .Values.appName | quote }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.otel.endpoint | quote }}
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+        - name: OTEL_TRACES_EXPORTER
+          value: "otlp"
+        # Tempo รับแค่ traces — เปิด "otlp" เมื่อ endpoint เป็น Alloy/collector ที่ส่งต่อ metrics ได้
+        - name: OTEL_METRICS_EXPORTER
+          value: {{ .Values.otel.metricsExporter | default "none" | quote }}
+        - name: OTEL_LOGS_EXPORTER
+          value: "none"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: {{ printf "deployment.environment=%s,service.namespace=aicave" .Values.otel.environment | quote }}
+        - name: OTEL_TRACES_SAMPLER
+          value: "parentbased_traceidratio"
+        - name: OTEL_TRACES_SAMPLER_ARG
+          value: {{ .Values.otel.samplerRatio | quote }}
+        - name: OTEL_BSP_MAX_QUEUE_SIZE
+          value: "1024"
+        - name: OTEL_SDK_DISABLED
+          value: {{ .Values.otel.disabled | default false | quote }}
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: OTEL_EXPORTER_OTLP_HEADERS
+              # ต้องมีเฉพาะเมื่อ collector บังคับ auth
+              optional: true
+        {{- end }}
         resources:
           requests:
             memory: {{ .Values.resources.requests.memory | quote }}

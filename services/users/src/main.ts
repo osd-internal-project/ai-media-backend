@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { PrismaService, assertEncryptionKeyReady } from '@ai-media/share';
 import helmet from 'helmet';
 import config from './configs';
@@ -25,7 +26,11 @@ async function bootstrap() {
     return this.toString();
   };
   assertSocialConfigReady();
-  const app = await NestFactory.create(InventoryMainModule);
+  const app = await NestFactory.create<NestExpressApplication>(
+    InventoryMainModule,
+  );
+  // bulk import ส่งได้ถึง 1000 แถวต่อ request (~300kb) — default 100kb ไม่พอ
+  app.useBodyParser('json', { limit: '2mb' });
   app.setGlobalPrefix('api');
   app.enableCors();
   app.enableCors({ origin: '*' });

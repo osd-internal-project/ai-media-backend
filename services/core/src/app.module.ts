@@ -38,9 +38,14 @@ import { WorkflowModule } from './workflow/workflow.module';
 import { PhotoEventModule } from './photo-event/photo-event.module';
 import { ByteplusWebhookModule } from './byteplus-webhook/byteplus-webhook.module';
 import { KeycloakAuthModule } from '@ai-media/share';
+import { OpenTelemetryModule } from 'nestjs-otel';
 
 @Module({
   imports: [
+    // ให้ใช้ @Span() / MetricService ได้; HTTP metrics มาจาก instrumentation-http ใน tracing.ts แล้ว
+    OpenTelemetryModule.forRoot({
+      metrics: { hostMetrics: false, apiMetrics: { enable: false } },
+    }),
     // ตรวจ Keycloak token ทุก route ตาม AUTH_MODE (off | report | enforce)
     KeycloakAuthModule,
     ConfigModule.forRoot({

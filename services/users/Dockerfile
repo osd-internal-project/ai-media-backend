@@ -1,4 +1,4 @@
-FROM node:16.17.1-alpine3.16 AS base
+FROM node:22.23.3-alpine3.24 AS base
 RUN apk upgrade --update-cache && \
     apk add --no-cache openssl musl tzdata python3 make g++ && \
     rm -rf /var/cache/apk/*

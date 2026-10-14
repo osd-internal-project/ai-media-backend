@@ -13,10 +13,19 @@ import { ApproveInviteUserDto } from './dto/approve-invite-user.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { Prisma } from '@prisma/client';
+import { AuthUser, CurrentUser } from '@ai-media/share';
+import { OrganizationBulkMemberService } from './organization-bulk-member.service';
+import {
+  BulkAddMembersDto,
+  BulkCreateChunkDto,
+} from './dto/bulk-add-members.dto';
 
 @Controller('organization')
 export class OrganizationController {
-  constructor(private readonly organizationService: OrganizationService) {}
+  constructor(
+    private readonly organizationService: OrganizationService,
+    private readonly bulkMemberService: OrganizationBulkMemberService,
+  ) {}
 
   @Post()
   create(@Body() createOrganizationDto: Prisma.OrganizationCreateInput) {
@@ -63,6 +72,32 @@ export class OrganizationController {
   acceptInvitation(@Body() acceptInvitationDto: AcceptInvitationDto) {
     return this.organizationService.acceptInvitation(acceptInvitationDto);
   }
+  @Get(':organizationId/bulk-members/projects')
+  findBulkMemberProjects(
+    @Param('organizationId') organizationId: string,
+    @CurrentUser() authUser: AuthUser | undefined,
+  ) {
+    return this.bulkMemberService.listProjects(organizationId, authUser);
+  }
+
+  @Post(':organizationId/bulk-members/validate')
+  validateBulkMembers(
+    @Param('organizationId') organizationId: string,
+    @Body() dto: BulkAddMembersDto,
+    @CurrentUser() authUser: AuthUser | undefined,
+  ) {
+    return this.bulkMemberService.validate(organizationId, dto, authUser);
+  }
+
+  @Post(':organizationId/bulk-members')
+  createBulkMembers(
+    @Param('organizationId') organizationId: string,
+    @Body() dto: BulkCreateChunkDto,
+    @CurrentUser() authUser: AuthUser | undefined,
+  ) {
+    return this.bulkMemberService.createChunk(organizationId, dto, authUser);
+  }
+
   @Get('access-code/:organizationId')
   findAccessCodeByOrganizationId(
     @Param('organizationId') organizationId: string,

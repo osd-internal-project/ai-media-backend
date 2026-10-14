@@ -1,3 +1,5 @@
+// ต้อง import ก่อน @nestjs/* และ express — instrumentation patch ได้เฉพาะ module ที่ยังไม่ถูกโหลด
+import './tracing';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { PrismaService } from '@ai-media/share';

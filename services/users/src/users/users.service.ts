@@ -32,6 +32,7 @@ import { KeycloakService } from 'src/keycloak/keycloak.service';
 import { firstValueFrom } from 'rxjs';
 import { HttpService } from '@nestjs/axios';
 import crypto from 'crypto';
+import { checkPasswordPolicy } from './password-policy';
 
 @Injectable()
 export class UsersService {
@@ -713,55 +714,7 @@ export class UsersService {
   }
 
   private validatePasswordPolicy(password: string, policy: string) {
-    if (!policy) return;
-
-    const rules = policy.split(' and ');
-
-    for (const rule of rules) {
-      if (rule.startsWith('length')) {
-        const length = parseInt(rule.match(/\d+/)[0]);
-        if (password.length < length) {
-          throw new BadRequestException(
-            `Password must be at least ${length} characters long`,
-          );
-        }
-      } else if (rule.startsWith('upperCase')) {
-        const count = parseInt(rule.match(/\d+/)[0]);
-        const upperCaseCount = (password.match(/[A-Z]/g) || []).length;
-        if (upperCaseCount < count) {
-          throw new BadRequestException(
-            `Password must contain at least ${count} uppercase characters`,
-          );
-        }
-      } else if (rule.startsWith('lowerCase')) {
-        const count = parseInt(rule.match(/\d+/)[0]);
-        const lowerCaseCount = (password.match(/[a-z]/g) || []).length;
-        if (lowerCaseCount < count) {
-          throw new BadRequestException(
-            `Password must contain at least ${count} lowercase characters`,
-          );
-        }
-      } else if (rule.startsWith('digits')) {
-        const count = parseInt(rule.match(/\d+/)[0]);
-        const digitsCount = (password.match(/\d/g) || []).length;
-        if (digitsCount < count) {
-          throw new BadRequestException(
-            `Password must contain at least ${count} digits`,
-          );
-        }
-      } else if (rule.startsWith('specialChars')) {
-        const count = parseInt(rule.match(/\d+/)[0]);
-        const specialCharsCount = (password.match(/[^A-Za-z0-9]/g) || [])
-          .length;
-        if (specialCharsCount < count) {
-          throw new BadRequestException(
-            `Password must contain at least ${count} special characters`,
-          );
-        }
-      } else if (rule.startsWith('notUsername')) {
-        // Note: Username check might require passing username to this function
-        // Skipping for now as simple policy check is requested
-      }
-    }
+    const error = checkPasswordPolicy(password, policy);
+    if (error) throw new BadRequestException(error);
   }
 }
