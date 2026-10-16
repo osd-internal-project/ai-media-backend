@@ -9,10 +9,12 @@ import * as path from 'path';
 import { appConfigs, tosConfigs } from '../configs';
 import {
   AuthUser,
+  GalleryRepository,
   PromptGuideImageRepository,
   RefImageRepository,
   StorageUrlService,
   TosService,
+  buildOutputKey,
   buildPromptGuideKey,
   buildUploadKey,
 } from '@ai-media/share';
@@ -28,8 +30,21 @@ import { UploadAccessService } from './upload-access.service';
 const PRESIGN_PUT_EXPIRES_SEC = 15 * 60;
 /** row ที่ออก presigned URL แล้วแต่ยังไม่ confirm — cron ลบทิ้งเมื่อค้างเกิน 24 ชม. */
 const STATUS_UPLOADING = 'uploading';
+/** Gallery row ของไฟล์จาก video editor ที่ยังไม่ confirm — status=false จึงยังไม่โผล่ใน Library */
+const GALLERY_UPLOADING = 'UPLOADING';
+const EDITOR_FEATURE_TYPE = 'editor';
+const EDITOR_EXPORT_MIME = 'video/mp4';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type DirectUploadKind = 'ref' | 'prompt-guide';
+/** `editor-export` = MP4 ที่ export จาก video editor ใน browser แล้วบันทึกเข้า Library */
+export type DirectUploadKind = 'ref' | 'prompt-guide' | 'editor-export';
+
+/** object key เก็บใน generateConfig เพราะ Gallery ไม่มี organizationId ให้ประกอบ key ใหม่ */
+function editorObjectKey(generateConfig: unknown): string | null {
+  if (typeof generateConfig !== 'object' || generateConfig === null) return null;
+  const key = (generateConfig as { objectKey?: unknown }).objectKey;
+  return typeof key === 'string' && key.length > 0 ? key : null;
+}
 
 export interface PresignUploadInput {
   kind: DirectUploadKind;
@@ -57,6 +72,7 @@ export class UploadImageService {
     private readonly tosService: TosService,
     private readonly storageUrl: StorageUrlService,
     private readonly access: UploadAccessService,
+    private readonly galleryRepository: GalleryRepository,
   ) {}
 
   async deleteImage(uid: string, user?: AuthUser) {
@@ -162,7 +178,10 @@ export class UploadImageService {
   async presignUpload(input: PresignUploadInput, user?: AuthUser) {
     await this.access.assertCanWrite(user, {
       organizationId: input.organizationId,
-      projectId: input.kind === 'ref' ? input.projectId : undefined,
+      projectId:
+        input.kind === 'ref' || input.kind === 'editor-export'
+          ? input.projectId
+          : undefined,
       promptGuideId:
         input.kind === 'prompt-guide' ? input.promptGuideId : undefined,
     });
@@ -184,6 +203,9 @@ export class UploadImageService {
       );
     }
     const ext = path.extname(input.fileName);
+    if (input.kind === 'editor-export') {
+      return this.presignEditorExport(input, ext, user);
+    }
     // presigned PUT ผูก Content-Type ไม่ได้ — อย่างน้อยนามสกุลของ key ต้องตรงกับชนิดที่ประกาศ
     if (!isExtensionAllowed(input.contentType, ext)) {
       throw new BadRequestException(
@@ -243,6 +265,7 @@ export class UploadImageService {
    * @returns shape เดียวกับ `uploadImage` / `uploadPromptGuideImage`
    */
   async confirmUpload(kind: DirectUploadKind, uid: string, user?: AuthUser) {
+    if (kind === 'editor-export') return this.confirmEditorExport(uid, user);
     const repo =
       kind === 'ref'
         ? this.refImageRepository
@@ -295,10 +318,122 @@ export class UploadImageService {
     };
   }
 
+  /**
+   * จอง Gallery row (ยังไม่แสดงใน Library) แล้วคืน presigned PUT ไปยัง key output ของ video
+   * — key เดียวกับที่ core ใช้ resolve URL ของ Gallery (`buildOutputKey`)
+   */
+  private async presignEditorExport(
+    input: PresignUploadInput,
+    ext: string,
+    user?: AuthUser,
+  ) {
+    this.access.assertSameUser(user, input.userId);
+    if (!input.projectId) throw new BadRequestException('projectId is required');
+    // uid กลายเป็น Gallery.id (uuid)
+    if (!UUID_RE.test(input.uid)) throw new BadRequestException('uid must be a UUID');
+    if (input.contentType !== EDITOR_EXPORT_MIME || ext.toLowerCase() !== '.mp4') {
+      throw new BadRequestException('Editor exports must be MP4 (video/mp4)');
+    }
+    const objectName = `${input.uid}.mp4`;
+    const imagePath = buildOutputKey(
+      input.organizationId,
+      input.projectId,
+      'video',
+      objectName,
+    );
+    await this.galleryRepository.create({
+      data: {
+        id: input.uid,
+        projectId: input.projectId,
+        // FK ไป users.userId — ใช้ของ token เมื่อมี เพราะ row เก่าบางที่เก็บ sub
+        userId: user?.userId ?? input.userId,
+        imageUrl: objectName,
+        resultUrl: [objectName],
+        prompt: input.fileName,
+        typeGenerate: 'video',
+        featureType: EDITOR_FEATURE_TYPE,
+        genneratedStatus: GALLERY_UPLOADING,
+        status: false,
+        usedCredit: 0,
+        generateConfig: { source: 'video-editor', objectKey: imagePath },
+      },
+    });
+    this.logger.log(`Editor export reserved ${imagePath} (${input.size} bytes)`);
+    return {
+      uid: input.uid,
+      imagePath,
+      uploadUrl: this.tosService.getPreSignedPutUrl(
+        tosConfigs().tosBucket,
+        imagePath,
+        PRESIGN_PUT_EXPIRES_SEC,
+      ),
+      expiresIn: PRESIGN_PUT_EXPIRES_SEC,
+    };
+  }
+
+  /** ตรวจ MP4 ใน TOS แล้วเปิดให้เห็นใน Library; ไฟล์ที่ไม่ผ่านถูกลบทั้ง object และ row */
+  private async confirmEditorExport(uid: string, user?: AuthUser) {
+    const row = await this.galleryRepository.findOne({
+      where: { id: uid, featureType: EDITOR_FEATURE_TYPE, genneratedStatus: GALLERY_UPLOADING },
+    });
+    if (!row) throw new NotFoundException(`No pending upload for ${uid}`);
+    await this.access.assertCanManageRef(user, row);
+    const objectKey = editorObjectKey(row.generateConfig);
+    if (!objectKey) throw new BadRequestException('Upload record is incomplete');
+
+    const bucketname = tosConfigs().tosBucket;
+    const head = await this.tosService.headObject(bucketname, objectKey);
+    if (!head) throw new BadRequestException('File has not been uploaded yet');
+    const size = Number(head['content-length']);
+    const rawType = head['content-type'];
+    const contentType = typeof rawType === 'string' ? rawType.split(';')[0].trim() : undefined;
+    if (contentType !== EDITOR_EXPORT_MIME || !isAllowedUpload(contentType, size)) {
+      this.logger.warn(
+        `Rejecting editor export ${objectKey}: type=${contentType} size=${size}`,
+      );
+      await this.tosService.deleteObject(bucketname, objectKey);
+      await this.galleryRepository.deleteMany({ where: { id: uid } });
+      throw new BadRequestException('Uploaded file type or size is not allowed');
+    }
+
+    await this.galleryRepository.updateMany({
+      where: { id: uid },
+      data: { genneratedStatus: 'SUCCESS', status: true },
+    });
+    this.logger.log(`Editor export saved to library ${objectKey} (${size} bytes)`);
+    return {
+      uid,
+      name: row.prompt ?? `${uid}.mp4`,
+      url: await this.storageUrl.toDisplayUrl(objectKey),
+      imagePath: objectKey,
+      status: 'saved',
+    };
+  }
+
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async handleCron() {
     await this.deleteWaitingRefImage();
     await this.deleteWaitingPromptGuideImage();
+    await this.deleteStaleEditorExports();
+  }
+
+  /** export ที่ขอ presign แล้วไม่ confirm ภายใน 24 ชม. (ปิดหน้า / upload ล้ม) */
+  async deleteStaleEditorExports() {
+    const rows = await this.galleryRepository.findMany({
+      where: {
+        featureType: EDITOR_FEATURE_TYPE,
+        genneratedStatus: GALLERY_UPLOADING,
+        createdAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+    });
+    Logger.log(`Found ${rows.length} stale editor exports to delete`);
+    for (const row of rows) {
+      const objectKey = editorObjectKey(row.generateConfig);
+      if (objectKey) {
+        await this.tosService.deleteObject(tosConfigs().tosBucket, objectKey);
+      }
+      await this.galleryRepository.deleteMany({ where: { id: row.id } });
+    }
   }
   async deleteWaitingRefImage() {
     const files = await this.refImageRepository.findMany({

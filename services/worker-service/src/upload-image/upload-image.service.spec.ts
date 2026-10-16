@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
+  GalleryRepository,
   PromptGuideImageRepository,
   RefImageRepository,
   StorageUrlService,
@@ -27,6 +28,11 @@ const makeRepo = (): RepoMock => ({
 describe('UploadImageService direct upload', () => {
   let refRepo: RepoMock;
   let guideRepo: RepoMock;
+  let galleryRepo: RepoMock & { findMany: jest.Mock };
+  let access: Record<
+    'assertCanWrite' | 'assertCanManageRef' | 'assertCanManagePromptGuideImage' | 'assertSameUser',
+    jest.Mock
+  >;
   let tos: Record<'getPreSignedPutUrl' | 'headObject' | 'deleteObject', jest.Mock>;
   let service: UploadImageService;
 
@@ -46,6 +52,13 @@ describe('UploadImageService direct upload', () => {
   beforeEach(() => {
     refRepo = makeRepo();
     guideRepo = makeRepo();
+    galleryRepo = { ...makeRepo(), findMany: jest.fn().mockResolvedValue([]) };
+    access = {
+      assertCanWrite: jest.fn(),
+      assertCanManageRef: jest.fn(),
+      assertCanManagePromptGuideImage: jest.fn(),
+      assertSameUser: jest.fn(),
+    };
     tos = {
       getPreSignedPutUrl: jest.fn().mockReturnValue('https://put'),
       headObject: jest.fn(),
@@ -58,12 +71,8 @@ describe('UploadImageService direct upload', () => {
       tos as unknown as TosService,
       storageUrl as unknown as StorageUrlService,
       // การตรวจสิทธิ์ทดสอบแยกใน upload-access.service.spec.ts
-      {
-        assertCanWrite: jest.fn(),
-        assertCanManageRef: jest.fn(),
-        assertCanManagePromptGuideImage: jest.fn(),
-        assertSameUser: jest.fn(),
-      } as never,
+      access as never,
+      galleryRepo as unknown as GalleryRepository,
     );
   });
 
@@ -187,5 +196,106 @@ describe('UploadImageService direct upload', () => {
     );
     expect(tos.deleteObject).toHaveBeenCalled();
     expect(refRepo.deleteMany).toHaveBeenCalled();
+  });
+
+  describe('editor-export', () => {
+    const uid = '3f2b8c1e-7a4d-4e2b-9c1a-5d6e7f8a9b0c';
+    const exportInput: PresignUploadInput = {
+      ...base,
+      kind: 'editor-export',
+      uid,
+      generateType: 'video',
+      fileName: 'trip.mp4',
+      contentType: 'video/mp4',
+      size: 20 * 1024 * 1024,
+    };
+    const key = `organize/org/proj/video-generate/${uid}.mp4`;
+    const pendingRow = {
+      id: uid,
+      userId: 'u1',
+      projectId: 'proj',
+      prompt: 'trip.mp4',
+      generateConfig: { source: 'video-editor', objectKey: key },
+    };
+
+    it('presign reserves a hidden gallery row at the video output key', async () => {
+      const res = await service.presignUpload(exportInput);
+      expect(res).toMatchObject({ uid, imagePath: key, uploadUrl: 'https://put' });
+      expect(access.assertCanWrite).toHaveBeenCalledWith(undefined, {
+        organizationId: 'org',
+        projectId: 'proj',
+        promptGuideId: undefined,
+      });
+      expect(galleryRepo.create.mock.calls[0][0].data).toMatchObject({
+        id: uid,
+        projectId: 'proj',
+        imageUrl: `${uid}.mp4`,
+        resultUrl: [`${uid}.mp4`],
+        typeGenerate: 'video',
+        featureType: 'editor',
+        genneratedStatus: 'UPLOADING',
+        status: false,
+      });
+      expect(refRepo.create).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a non-UUID uid', { uid: 'abc' }],
+      ['WebM', { contentType: 'video/webm', fileName: 'trip.webm' }],
+      ['a non-mp4 extension', { fileName: 'trip.m4v' }],
+      ['missing projectId', { projectId: undefined }],
+    ])('presign rejects %s', async (_label, patch) => {
+      await expect(service.presignUpload({ ...exportInput, ...patch })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(galleryRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('confirm shows the video in the library', async () => {
+      galleryRepo.findOne.mockResolvedValue(pendingRow);
+      tos.headObject.mockResolvedValue({ 'content-length': '2048', 'content-type': 'video/mp4' });
+      const res = await service.confirmUpload('editor-export', uid);
+      expect(tos.headObject).toHaveBeenCalledWith('bucket', key);
+      expect(galleryRepo.updateMany).toHaveBeenCalledWith({
+        where: { id: uid },
+        data: { genneratedStatus: 'SUCCESS', status: true },
+      });
+      expect(res).toMatchObject({ uid, imagePath: key, url: 'https://get', status: 'saved' });
+    });
+
+    it('confirm checks project access on the reserved row', async () => {
+      galleryRepo.findOne.mockResolvedValue(pendingRow);
+      tos.headObject.mockResolvedValue({ 'content-length': '2048', 'content-type': 'video/mp4' });
+      await service.confirmUpload('editor-export', uid);
+      expect(access.assertCanManageRef).toHaveBeenCalledWith(undefined, pendingRow);
+    });
+
+    it('confirm deletes object and row when TOS holds something other than MP4', async () => {
+      galleryRepo.findOne.mockResolvedValue(pendingRow);
+      tos.headObject.mockResolvedValue({ 'content-length': '10', 'content-type': 'text/html' });
+      await expect(service.confirmUpload('editor-export', uid)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(tos.deleteObject).toHaveBeenCalledWith('bucket', key);
+      expect(galleryRepo.deleteMany).toHaveBeenCalledWith({ where: { id: uid } });
+    });
+
+    it('confirm without a pending row is 404', async () => {
+      galleryRepo.findOne.mockResolvedValue(null);
+      await expect(service.confirmUpload('editor-export', uid)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('cron removes exports that were never confirmed', async () => {
+      galleryRepo.findMany.mockResolvedValue([pendingRow]);
+      await service.deleteStaleEditorExports();
+      expect(galleryRepo.findMany.mock.calls[0][0].where).toMatchObject({
+        featureType: 'editor',
+        genneratedStatus: 'UPLOADING',
+      });
+      expect(tos.deleteObject).toHaveBeenCalledWith('bucket', key);
+      expect(galleryRepo.deleteMany).toHaveBeenCalledWith({ where: { id: uid } });
+    });
   });
 });
