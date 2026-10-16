@@ -4,6 +4,7 @@ import {
   COMMUNITY_SCHEDULE_BATCH_SIZE,
   COMMUNITY_SCHEDULE_GRACE_MINUTES,
 } from '@ai-media/share';
+import { Span } from 'nestjs-otel';
 import { CommunityPostService } from './community-post.service';
 
 /**
@@ -26,6 +27,7 @@ export class CommunityScheduleCron {
   constructor(private readonly communityPostService: CommunityPostService) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
+  @Span()
   async publishDuePosts(): Promise<void> {
     try {
       const { published, skipped } =

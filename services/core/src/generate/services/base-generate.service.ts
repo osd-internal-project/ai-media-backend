@@ -1,15 +1,19 @@
 import {
   GalleryRepository,
+  injectTraceContext,
   LlmGatewayService,
   LogRepository,
   MasterdataModelTypeRepository,
   MasterModelTypeDto,
   OrganizationRepository,
+  setActiveSpanAttributes,
+  TRACE_CARRIER_KEY,
 } from '@ai-media/share';
 import { Logger } from '@nestjs/common';
 import { AxiosRequestConfig } from 'axios';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
+import { Span } from 'nestjs-otel';
 import { GenerateHelperService } from './generate-helper.service';
 
 export interface CreditQuotaResult {
@@ -88,7 +92,7 @@ export abstract class BaseGenerateService {
     authorization: string | null,
   ): any;
 
-  /** Gallery row data; return null to skip gallery creation (image pattern) */
+  /** Gallery row data; return null to skip gallery creation */
   protected abstract buildGalleryData(
     taskId: string,
     body: any,
@@ -192,6 +196,7 @@ export abstract class BaseGenerateService {
    * Default credit quota check — used by video, omni, and dreamactor.
    * Image overrides checkCreditQuota completely due to extra project/org checks.
    */
+  @Span()
   protected async defaultCheckCreditQuota(
     _userId: string,
     body: any,
@@ -250,12 +255,18 @@ export abstract class BaseGenerateService {
 
   // ── Template method ───────────────────────────────────────────────────────────
 
+  @Span()
   async createGenerationTask(
     body: any,
     clientId: string,
   ): Promise<{ status: number; data: any }> {
     let taskId: string = body.taskId;
     let holdCredit = 0;
+    setActiveSpanAttributes({
+      'task.id': String(taskId),
+      'generate.type': this.modelType,
+      'generate.model': String(body.model),
+    });
     const cacheKey = `${body.organizationId}/${
       body.projectId
     }/${this.getCreditCacheKeyPrefix()}_${body.userId}`;
@@ -356,15 +367,19 @@ export abstract class BaseGenerateService {
 
       const job = await this.queue.add(
         this.modelType,
-        this.buildQueueJobData(
-          taskId,
-          clientId,
-          body,
-          user.userId,
-          apiRes,
-          modelDetail,
-          authorization,
-        ),
+        {
+          ...this.buildQueueJobData(
+            taskId,
+            clientId,
+            body,
+            user.userId,
+            apiRes,
+            modelDetail,
+            authorization,
+          ),
+          // ให้ worker ต่อ trace เดียวกับ request นี้
+          [TRACE_CARRIER_KEY]: injectTraceContext(),
+        },
         {
           jobId: taskId,
           attempts: 3,

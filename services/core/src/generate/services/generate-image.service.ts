@@ -20,6 +20,7 @@ import {
   CreditQuotaResult,
 } from './base-generate.service';
 import { GenerateHelperService } from './generate-helper.service';
+import { Span } from 'nestjs-otel';
 
 @Injectable()
 export class GenerateImageService extends BaseGenerateService {
@@ -62,6 +63,7 @@ export class GenerateImageService extends BaseGenerateService {
   }
 
   /** Cancel the hold that was reserved inside checkCreditQuota on error */
+  @Span()
   protected async onErrorCancelHold(
     body: any,
     holdCredit: number,
@@ -82,6 +84,7 @@ export class GenerateImageService extends BaseGenerateService {
    * Image has extra project-level and org-level credit checks.
    * Also reserves the hold here (not in the main flow).
    */
+  @Span()
   protected async checkCreditQuota(
     userId: string,
     body: RequestImageGenerateDto,
@@ -223,10 +226,48 @@ export class GenerateImageService extends BaseGenerateService {
     };
   }
 
-  /** Image worker handles gallery/log creation — skip them here */
-  protected buildGalleryData(): any {
-    return null;
+  /**
+   * สร้าง gallery PENDING ตั้งแต่ submit — refresh ระหว่างรอจะยังเห็น task (worker update เป็น SUCCESS/FAILED)
+   * usedCredit = hold ไว้ให้ sweeper ของ worker คืนได้ถ้างานค้าง
+   */
+  protected buildGalleryData(
+    taskId: string,
+    body: RequestImageGenerateDto,
+    user: any,
+    creditResult: CreditQuotaResult,
+  ): object {
+    return {
+      taskId,
+      projectId: body.projectId,
+      userId: user.userId,
+      prompt: body.prompt,
+      imageUrl: '',
+      resultUrl: [],
+      typeGenerate: 'image',
+      genneratedStatus: 'PENDING',
+      status: false,
+      usedCredit: creditResult.incrementCredit,
+      tokenUsed: 0,
+      ImageUsed: 0,
+      resolution: body.resolution,
+      ratio: body.ratio,
+      generateAudio: false,
+      // ค่าเดียวกับที่ worker เก็บ (body.image) เพื่อให้ reader เดิมอ่านเหมือนเดิม
+      referenceImages: body.image?.length > 0 ? body.image : [],
+      generateConfig: this.generateHelperService.buildGenerateConfig({
+        ratio: body.ratio,
+        width: body.width,
+        height: body.height,
+        prompt: body.prompt,
+        duration: 0,
+        modelName: body.model,
+        imageCount: body.maxImages,
+        resolution: body.resolution,
+        generateAudio: false,
+      }),
+    };
   }
+  /** Image worker handles log creation — skip it here */
   protected buildLogData(): any {
     return null;
   }

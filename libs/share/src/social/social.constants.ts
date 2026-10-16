@@ -3,6 +3,8 @@
  * ใช้ร่วมกันระหว่าง core (สร้าง/อนุมัติงาน) และ worker-service (ยิงขึ้น platform)
  */
 
+import type { TraceCarrier } from '../utils/trace-context.util';
+
 export const SOCIAL_PLATFORMS = [
   'FACEBOOK',
   'INSTAGRAM',
@@ -151,4 +153,6 @@ export interface SocialPublishJobData {
   readonly activityShareId: string;
   /** จำกัดเฉพาะ target ที่ระบุ (ใช้ตอน retry) — ว่าง = ทำทุก target ที่ยัง PENDING */
   readonly targetIds?: string[];
+  /** W3C trace context จาก core — ให้ worker ต่อ trace เดียวกัน */
+  readonly _otel?: TraceCarrier;
 }

@@ -43,6 +43,16 @@ env:
 #   secretEnv.TOS_ACCESS_KEY
 #   secretEnv.TOS_SECRET_KEY
 
+otel:
+  # OTLP HTTP endpoint (Tempo/Alloy) — ว่าง = ปิด telemetry
+  endpoint: ""
+  serviceName: "aicave-worker"
+  # Tempo ไม่รับ metrics — ใช้ "otlp" เมื่อมี Alloy/collector
+  metricsExporter: "none"
+  environment: "uat"
+  samplerRatio: "0.5"
+  disabled: false
+
 resources:
   requests:
     memory: "128Mi"

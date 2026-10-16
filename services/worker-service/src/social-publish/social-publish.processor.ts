@@ -16,7 +16,9 @@ import {
   SocialTokenService,
   StorageUrlService,
   VIDEO_GENERATE_TYPES,
+  TraceJob,
 } from '@ai-media/share';
+import { Span } from 'nestjs-otel';
 import { PublisherRegistry } from './publishers/publisher.registry';
 
 /** target ที่กำลังจะเผยแพร่ */
@@ -55,6 +57,7 @@ export class SocialPublishProcessor extends WorkerHost {
    * @param job job ที่มี activityShareId (+ targetIds ตอน retry)
    * @returns สรุปจำนวนสำเร็จ/ล้มเหลว
    */
+  @TraceJob()
   async process(job: any): Promise<any> {
     // ใช้ `any` ตาม processor ตัวอื่นในเซอร์วิสนี้ เพราะ bullmq ถูกติดตั้งสองชุด
     // (root + workspace) ทำให้ type `Job` ของสองชุดไม่ assignable กัน
@@ -115,6 +118,7 @@ export class SocialPublishProcessor extends WorkerHost {
    * @param content เนื้อหาที่จะโพสต์
    * @returns true เมื่อสำเร็จ
    */
+  @Span()
   private async publishTarget(
     activityShareId: string,
     target: TargetRow,
@@ -204,6 +208,7 @@ export class SocialPublishProcessor extends WorkerHost {
    *
    * @param activityShareId id ของงาน
    */
+  @Span()
   private async finalizeShareStatus(activityShareId: string): Promise<void> {
     const targets = await this.targetRepo.findMany({
       where: { activityShareId },
@@ -235,6 +240,7 @@ export class SocialPublishProcessor extends WorkerHost {
    * @param toStatus สถานะใหม่
    * @param action action ที่จะบันทึก
    */
+  @Span()
   private async transitionShare(
     activityShareId: string,
     fromStatus: string,
@@ -262,6 +268,7 @@ export class SocialPublishProcessor extends WorkerHost {
    * @param rawMediaItems ค่า media_items ดิบจาก DB
    * @returns สื่อที่ resolve เป็น URL แล้ว เรียงตาม order
    */
+  @Span()
   private async resolveMedia(
     rawMediaItems: Prisma.JsonValue,
   ): Promise<ResolvedMedia[]> {

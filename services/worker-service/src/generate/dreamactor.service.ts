@@ -10,7 +10,11 @@ import {
   RequestDreamactorGenerateDto,
   StorageUrlService,
   TosService,
+  TraceJob,
+  TRACE_CARRIER_KEY,
+  injectTraceContext,
 } from '@ai-media/share';
+import { Span } from 'nestjs-otel';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
 import { OnWorkerEvent } from '@nestjs/bullmq';
@@ -115,6 +119,7 @@ export class DreamactorProcessor extends WorkerHost {
   }
 
   // `any` ตาม video.service — bullmq มี 2 สำเนา (root + worker) ทำให้ Job ของ WorkerHost ไม่ตรงกับที่ import
+  @TraceJob()
   async process(job: any, token?: string): Promise<unknown> {
     const data = job.data as DreamactorProcessJob;
     const { taskId, clientId, body, userId } = data;
@@ -204,6 +209,7 @@ export class DreamactorProcessor extends WorkerHost {
    * ส่งงานให้ provider ครั้งเดียวต่อ job — retry/stalled ที่มี `providerTaskId` แล้วจะ poll ต่อ ไม่ส่งซ้ำ
    * (`dreamactorTaskId` จาก core อาจเป็นแค่ placeholder จึงใช้แยกไม่ได้)
    */
+  @Span()
   private async submitOnce(
     job: Job,
   ): Promise<{ providerTaskId: string; submittedAt: number }> {
@@ -273,6 +279,7 @@ export class DreamactorProcessor extends WorkerHost {
    * poll ทุก 10s จน provider ตอบ done/failed — GET ล้มชั่วคราวไม่ fail งาน
    * @throws เมื่อเกิน DREAMACTOR_POLL_TIMEOUT_MS หรือ done แต่ไม่มี video_url
    */
+  @Span()
   private async pollUntilTerminal(
     data: DreamactorProcessJob,
     providerTaskId: string,
@@ -355,6 +362,7 @@ export class DreamactorProcessor extends WorkerHost {
    * ปิดงานครั้งเดียวต่อ taskId (lock เดียวกันทั้ง success/fail) — กันตัด/คืนเครดิตซ้ำเมื่อ job ถูก retry/stalled
    * @returns error ที่ทำให้งานจบแบบ failed หรือ null เมื่อสำเร็จ/ปิดไปแล้ว
    */
+  @Span()
   private async finalizeOnce(
     data: DreamactorProcessJob,
     outcome: { videoUrl: string } | { error: Error },
@@ -393,6 +401,7 @@ export class DreamactorProcessor extends WorkerHost {
   }
 
   /** success path เดิมจาก loop polling — เขียน DB ก่อนแจ้ง front ว่า upload สำเร็จ (เดิมไม่ตัดเครดิตตอนสำเร็จ — คงไว้) */
+  @Span()
   private async completeTask(
     data: DreamactorProcessJob,
     videoUrl: string,
@@ -466,6 +475,7 @@ export class DreamactorProcessor extends WorkerHost {
   }
 
   /** fail path เดียว (provider failed / timeout / throw) — สถานะ failed, แจ้ง front, คืนเครดิต, gallery FAILED */
+  @Span()
   private async failTask(data: DreamactorProcessJob, error: Error) {
     const { taskId, clientId, body, userId } = data;
     await this.generateHelperService.logError(
@@ -541,6 +551,7 @@ export class DreamactorProcessor extends WorkerHost {
   /**
    * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
    */
+  @Span()
   private async publishToCore(clientId: string, event: string, payload: any) {
     const parts = event.split(':');
     const channel = `worker:${parts[parts.length - 1] || 'event'}`;
@@ -552,6 +563,8 @@ export class DreamactorProcessor extends WorkerHost {
           event,
           payload,
           timestamp: new Date().toISOString(),
+          // core ต่อ trace จากตรงนี้ (WebsocketGateway.onWorkerMessage)
+          [TRACE_CARRIER_KEY]: injectTraceContext(),
         }),
       );
     } catch (error: any) {
@@ -562,6 +575,7 @@ export class DreamactorProcessor extends WorkerHost {
   /**
    * อัพเดทสถานะของ task ใน Redis
    */
+  @Span()
   private async updateTaskStatus(taskId: string, updates: any) {
     const taskData = await this.redis.get(`task:${taskId}`);
     if (taskData) {
@@ -639,6 +653,7 @@ export class DreamactorProcessor extends WorkerHost {
     dreamactor: this.buildDreamacterPayload.bind(this),
   };
 
+  @Span()
   private async buildDreamacterPayload(
     body: RequestDreamactorGenerateDto,
     modelDetail: any,

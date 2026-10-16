@@ -3,9 +3,13 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import {
   BYTEPLUS_TERMINAL_STATUSES,
+  injectTraceContext,
   QUEUE_NAME_VDO,
+  setActiveSpanAttributes,
+  TRACE_CARRIER_KEY,
   VIDEO_JOB_FINALIZE,
 } from '@ai-media/share';
+import { Span } from 'nestjs-otel';
 
 export interface VideoFinalizeJobData {
   taskId: string;
@@ -24,28 +28,41 @@ export class ByteplusWebhookService {
    * ใช้ body แค่ id/status เป็นสัญญาณ — worker จะ GET สถานะจริงจาก provider เองก่อนปิดงาน
    * jobId คงที่ต่อ taskId จึงกัน callback ซ้ำ (BullMQ ไม่ add job ที่ id ซ้ำ)
    */
+  @Span()
   async handleVideoCallback(
     taskId: string,
     body: unknown,
     headers: Record<string, string>,
   ): Promise<void> {
     const { id, status } = this.readStatus(body);
+    setActiveSpanAttributes({
+      'task.id': taskId,
+      'provider.task_id': id ?? '',
+      'provider.status': status ?? '',
+    });
     // log เต็มไว้ดูรูปแบบจริงของ Ark (Phase 0 ยังไม่ได้ยืนยัน header/retry)
+    // ตัด "error":null ออก — panel "Error logs" ใน Grafana หาคำว่า error จากข้อความ
     this.logger.log(
       `BytePlus callback task=${taskId} provider=${id} status=${status} headers=${JSON.stringify(
         headers,
-      )} body=${JSON.stringify(body)}`,
+      )} body=${JSON.stringify(body, (k, v: unknown) =>
+        k === 'error' && v === null ? undefined : v,
+      )}`,
     );
 
     if (!status || !this.isTerminal(status)) return;
 
     const data: VideoFinalizeJobData = { taskId, providerTaskId: id };
-    await this.videoQueue.add(VIDEO_JOB_FINALIZE, data, {
-      jobId: `${VIDEO_JOB_FINALIZE}-${taskId}`,
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 5_000 },
-      removeOnComplete: { age: 24 * 60 * 60 },
-    });
+    await this.videoQueue.add(
+      VIDEO_JOB_FINALIZE,
+      { ...data, [TRACE_CARRIER_KEY]: injectTraceContext() },
+      {
+        jobId: `${VIDEO_JOB_FINALIZE}-${taskId}`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: { age: 24 * 60 * 60 },
+      },
+    );
   }
 
   private readStatus(body: unknown): {

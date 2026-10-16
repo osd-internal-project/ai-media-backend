@@ -20,7 +20,12 @@ import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { redisConfigs } from '../configs';
 import { LogsService } from 'src/logs/logs.service';
-import { KeycloakAuthService } from '@ai-media/share';
+import {
+  KeycloakAuthService,
+  readTraceCarrier,
+  withExtractedContext,
+} from '@ai-media/share';
+import { Span } from 'nestjs-otel';
 import { authenticateSocket } from './socket-auth';
 
 import { JoinRoomDto, LeaveRoomDto, SendMessageDto } from './dto/chat.dto';
@@ -139,29 +144,43 @@ export class WebsocketGatewayService
       try {
         const data = JSON.parse(message);
         const { clientId, event, payload } = data;
-        this.logger.log(`📨 Received from worker [${channel}]:`, event);
-        // this.logger.debug(`📨 Received from worker [${channel}]:`, payload);
+        // ต่อ trace จาก worker (publishToCore แนบ _otel มา)
+        await withExtractedContext(
+          readTraceCarrier(data),
+          'WebsocketGateway.onWorkerMessage',
+          async () => {
+            this.logger.log(`📨 Received from worker [${channel}]:`, event);
+            // this.logger.debug(`📨 Received from worker [${channel}]:`, payload);
 
-        // Check format for room broadcast
-        if (payload && payload.projectId && payload.type) {
-          const roomName = `${payload.projectId}:${payload.type}`;
-          // Target the room AND the originating client in a SINGLE emit so a
-          // client that is in both (the normal case) receives the event exactly
-          // once. Socket.IO de-duplicates recipients across rooms within one
-          // emit call; two separate emits would deliver it twice.
-          const target = clientId
-            ? this.server.to(roomName).to(clientId)
-            : this.server.to(roomName);
-          target.emit(event, payload);
-        } else {
-          // Fallback: ส่ง event ไปยัง client ที่เกี่ยวข้องแบบเดิม
-          if (clientId) {
-            this.server.to(clientId).emit(event, payload);
-          } else {
-            // Broadcast ถ้าไม่มี clientId และไม่มี room info
-            this.server.emit(event, payload);
-          }
-        }
+            // Check format for room broadcast
+            if (payload && payload.projectId && payload.type) {
+              const roomName = `${payload.projectId}:${payload.type}`;
+              // Target the room AND the originating client in a SINGLE emit so a
+              // client that is in both (the normal case) receives the event exactly
+              // once. Socket.IO de-duplicates recipients across rooms within one
+              // emit call; two separate emits would deliver it twice.
+              const target = clientId
+                ? this.server.to(roomName).to(clientId)
+                : this.server.to(roomName);
+              target.emit(event, payload);
+            } else {
+              // Fallback: ส่ง event ไปยัง client ที่เกี่ยวข้องแบบเดิม
+              if (clientId) {
+                this.server.to(clientId).emit(event, payload);
+              } else {
+                // Broadcast ถ้าไม่มี clientId และไม่มี room info
+                this.server.emit(event, payload);
+              }
+            }
+          },
+          {
+            attributes: {
+              'messaging.destination.name': channel,
+              'ws.event': String(event),
+              ...(payload?.taskId ? { 'task.id': String(payload.taskId) } : {}),
+            },
+          },
+        );
       } catch (error) {
         this.logger.error('Error processing worker message:', error);
       }
@@ -189,6 +208,7 @@ export class WebsocketGatewayService
   }
 
   @SubscribeMessage('generate')
+  @Span()
   async handleGenerate(
     @MessageBody() data: RequestImageGenerateDto,
     @ConnectedSocket() client: Socket,
@@ -257,6 +277,7 @@ export class WebsocketGatewayService
   }
 
   @SubscribeMessage('generate:video')
+  @Span()
   async handleGenerateVideo(
     @MessageBody() data: RequestVideoGenerateDto,
     @ConnectedSocket() client: Socket,
@@ -324,6 +345,7 @@ export class WebsocketGatewayService
   }
 
   @SubscribeMessage('generate:omnihumen')
+  @Span()
   async handleGenerateOmniHumen(
     @MessageBody() data: RequestVideoGenerateDto,
     @ConnectedSocket() client: Socket,
@@ -391,6 +413,7 @@ export class WebsocketGatewayService
   }
 
   @SubscribeMessage('generate:dreamactor')
+  @Span()
   async handleGenerateDreamactor(
     @MessageBody() data: RequestVideoGenerateDto,
     @ConnectedSocket() client: Socket,
@@ -594,6 +617,7 @@ export class WebsocketGatewayService
   }
 
   @SubscribeMessage('task:cancel')
+  @Span()
   async handleCancelTask(
     @MessageBody() data: { taskId: string },
     @ConnectedSocket() client: Socket,

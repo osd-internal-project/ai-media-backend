@@ -3,8 +3,13 @@ function getByPath(obj: unknown, path: string): unknown {
   return path.split('.').reduce((cur: any, key) => cur?.[key], obj);
 }
 
-import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Job, UnrecoverableError } from 'bullmq';
+import {
+  InjectQueue,
+  Processor,
+  WorkerHost,
+  OnWorkerEvent,
+} from '@nestjs/bullmq';
+import { Job, Queue, UnrecoverableError } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
@@ -17,6 +22,8 @@ import {
   GalleryRepository,
   LogRepository,
   QUEUE_NAME_IMAGE,
+  IMAGE_JOB_SWEEP,
+  LIVE_JOB_STATES,
   MAX_CONCURRENT_TASKS_PER_TYPE,
   RefImageRepository,
   StorageUrlService,
@@ -29,9 +36,18 @@ import {
   MasterdataModelTypeRepository,
   MasterModelTypeDto,
   describeTosError,
+  TraceJob,
+  TRACE_CARRIER_KEY,
+  injectTraceContext,
 } from '@ai-media/share';
+import { Span } from 'nestjs-otel';
+import { Prisma } from '@prisma/client';
 import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
+
+/** sweeper รอบละ 10 นาที — ปิด gallery PENDING ที่เกิน 30 นาทีแล้ว job ไม่อยู่ในคิว (pod ตาย / stalled) */
+const IMAGE_SWEEP_EVERY_MS = 10 * 60 * 1000;
+const IMAGE_SWEEP_STALE_MS = 30 * 60 * 1000;
 
 interface TaskResponseMap {
   taskIdPath: string;
@@ -79,6 +95,7 @@ export class ImageProcessor extends WorkerHost {
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly generateHelperService: GenerateHelperService,
     private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
+    @InjectQueue(QUEUE_NAME_IMAGE) private readonly imageQueue: Queue,
   ) {
     super();
     this.agent = new https.Agent({
@@ -110,8 +127,9 @@ export class ImageProcessor extends WorkerHost {
     this.logger.error(`❌ Job ${job.id} failed: ${error.message}`);
   }
 
+  @TraceJob()
   async process(job: any): Promise<any> {
-    //
+    if (job.name === IMAGE_JOB_SWEEP) return this.handleSweep();
     const { taskId, clientId, body, userId, sendApi, sendConfig } =
       job.data as ImageProcessJob;
     // Per-org LLM gateway key set by the producer (falls back to the model token).
@@ -287,38 +305,36 @@ export class ImageProcessor extends WorkerHost {
 
       // Save to Gallery — 1 record ต่อ 1 generation, เก็บ object name ทุกรูปใน resultUrl[]
       // imageUrl เก็บรูปแรกไว้เพื่อ backward-compat กับ reader ที่ยังอ่าน imageUrl
-      await this.galleryRepo.create({
-        data: {
-          taskId,
-          projectId: body.projectId,
-          userId,
-          prompt: body.prompt,
-          imageUrl: uploadedImages[0] ?? '',
-          resultUrl: uploadedImages,
-          typeGenerate: 'image',
-          genneratedStatus: 'SUCCESS',
-          status: false,
-          usedCredit: credit.credit,
-          // denormalize metadata จาก log ลง gallery (dual-write)
-          usedImage: usage.generated_images || 0,
-          tokenUsed: usage.total_tokens || 0,
-          ImageUsed: usage.generated_images || 0,
-          resolution: body.resolution,
+      await this.saveGallery({
+        taskId,
+        projectId: body.projectId,
+        userId,
+        prompt: body.prompt,
+        imageUrl: uploadedImages[0] ?? '',
+        resultUrl: uploadedImages,
+        typeGenerate: 'image',
+        genneratedStatus: 'SUCCESS',
+        status: false,
+        usedCredit: credit.credit,
+        // denormalize metadata จาก log ลง gallery (dual-write)
+        usedImage: usage.generated_images || 0,
+        tokenUsed: usage.total_tokens || 0,
+        ImageUsed: usage.generated_images || 0,
+        resolution: body.resolution,
+        ratio: body.ratio,
+        generateAudio: false,
+        referenceImages: body.image.length > 0 ? body.image : [],
+        generateConfig: this.buildGenerateConfig({
           ratio: body.ratio,
+          width: body.width,
+          height: body.height,
+          prompt: body.prompt,
+          duration: 0,
+          modelName: body.model,
+          imageCount: body.maxImages,
+          resolution: body.resolution,
           generateAudio: false,
-          referenceImages: body.image.length > 0 ? body.image : [],
-          generateConfig: this.buildGenerateConfig({
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
-            prompt: body.prompt,
-            duration: 0,
-            modelName: body.model,
-            imageCount: body.maxImages,
-            resolution: body.resolution,
-            generateAudio: false,
-          }),
-        },
+        }),
       });
 
       // ส่
@@ -505,36 +521,34 @@ export class ImageProcessor extends WorkerHost {
         type: 'image',
         message: error.message,
       });
-      await this.galleryRepo.create({
-        data: {
-          taskId,
-          projectId: body.projectId,
-          userId,
-          prompt: body.prompt,
-          imageUrl: '',
-          resultUrl: [],
-          typeGenerate: 'image',
-          genneratedStatus: 'FAILED',
-          status: false,
-          // denormalize metadata จาก log ลง gallery (dual-write)
-          tokenUsed: 0,
-          ImageUsed: 0,
-          resolution: body.resolution,
+      await this.saveGallery({
+        taskId,
+        projectId: body.projectId,
+        userId,
+        prompt: body.prompt,
+        imageUrl: '',
+        resultUrl: [],
+        typeGenerate: 'image',
+        genneratedStatus: 'FAILED',
+        status: false,
+        // denormalize metadata จาก log ลง gallery (dual-write)
+        tokenUsed: 0,
+        ImageUsed: 0,
+        resolution: body.resolution,
+        ratio: body.ratio,
+        generateAudio: false,
+        referenceImages: body.image.length > 0 ? body.image : [],
+        generateConfig: this.buildGenerateConfig({
           ratio: body.ratio,
+          width: body.width,
+          height: body.height,
+          prompt: body.prompt,
+          duration: 0,
+          modelName: body.model,
+          imageCount: body.maxImages,
+          resolution: body.resolution,
           generateAudio: false,
-          referenceImages: body.image.length > 0 ? body.image : [],
-          generateConfig: this.buildGenerateConfig({
-            ratio: body.ratio,
-            width: body.width,
-            height: body.height,
-            prompt: body.prompt,
-            duration: 0,
-            modelName: body.model,
-            imageCount: body.maxImages,
-            resolution: body.resolution,
-            generateAudio: false,
-          }),
-        },
+        }),
       });
       // บันทึก error log
       await this.logrepo.create({
@@ -572,6 +586,7 @@ export class ImageProcessor extends WorkerHost {
   /**
    * เก็บรูปผลลัพธ์ลง TOS: ให้ TOS ดึงจาก URL ของ provider เอง (`fetchObject`) — ล้ม = throw ให้งาน fail
    */
+  @Span()
   private async storeOutputImage(
     bucket: string,
     key: string,
@@ -600,6 +615,7 @@ export class ImageProcessor extends WorkerHost {
    * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
    */
 
+  @Span()
   private async publishToCore(clientId: string, event: string, payload: any) {
     // Use the last segment so 'worker:generate:error' → channel 'worker:error' (not 'worker:generate')
     const parts = event.split(':');
@@ -612,6 +628,8 @@ export class ImageProcessor extends WorkerHost {
           event,
           payload,
           timestamp: new Date().toISOString(),
+          // core ต่อ trace จากตรงนี้ (WebsocketGateway.onWorkerMessage)
+          [TRACE_CARRIER_KEY]: injectTraceContext(),
         }),
       );
     } catch (error: any) {
@@ -620,8 +638,26 @@ export class ImageProcessor extends WorkerHost {
   }
 
   /**
+   * เขียนผลลง gallery row PENDING ที่ core สร้างตอน submit (update ซ้ำได้ ไม่เกิด row ซ้ำตอน retry)
+   * ไม่เจอ row = job เข้าคิวก่อน core เริ่มสร้าง PENDING → create แทน
+   */
+  @Span()
+  private async saveGallery(data: Prisma.GalleryUncheckedCreateInput) {
+    const { count } = await this.galleryRepo.updateMany({
+      where: { taskId: data.taskId },
+      data,
+    });
+    if (count > 0) return;
+    this.logger.warn(
+      `⚠️ No PENDING gallery row for task ${data.taskId} — creating one`,
+    );
+    await this.galleryRepo.create({ data });
+  }
+
+  /**
    * อัพเดทสถานะของ task ใน Redis
    */
+  @Span()
   private async updateTaskStatus(taskId: string, updates: any) {
     const taskData = await this.redis.get(`task:${taskId}`);
     if (taskData) {
@@ -660,11 +696,111 @@ export class ImageProcessor extends WorkerHost {
     };
   }
 
+  /** ทุก 10 นาที: ปิด gallery PENDING ที่ไม่มี job ไหนจะปิดให้ (FAILED + คืน hold + แจ้ง user) */
+  @Span()
+  private async handleSweep(): Promise<unknown> {
+    const rows = await this.galleryRepo.findMany({
+      where: {
+        typeGenerate: 'image',
+        genneratedStatus: 'PENDING',
+        taskId: { not: null },
+        createdAt: { lt: new Date(Date.now() - IMAGE_SWEEP_STALE_MS) },
+      },
+      select: { taskId: true, userId: true, projectId: true, usedCredit: true },
+    });
+    if (rows.length === 0) return { checked: 0 };
+
+    const counts = { alive: 0, cleared: 0, failed: 0, error: 0 };
+    for (const row of rows) {
+      try {
+        counts[await this.sweepOne(row)] += 1;
+      } catch (error) {
+        counts.error += 1;
+        this.logger.error(
+          `🧹 image sweep failed task=${row.taskId}: ${
+            (error as Error).message
+          }`,
+        );
+      }
+    }
+    this.logger.log(
+      `🧹 image sweep checked=${rows.length} ${JSON.stringify(counts)}`,
+    );
+    return { checked: rows.length, ...counts };
+  }
+
+  @Span()
+  private async sweepOne(row: {
+    taskId: string | null;
+    userId: string;
+    projectId: string;
+    usedCredit: number | null;
+  }): Promise<'alive' | 'cleared' | 'failed'> {
+    const taskId = row.taskId as string; // query กรอง taskId not null แล้ว
+    // job ยังรอคิว / กำลังวิ่ง — คิวช้า ไม่ใช่งานค้าง
+    const job = await this.imageQueue.getJob(taskId);
+    const state = job ? await job.getState() : null;
+    if (state && LIVE_JOB_STATES.includes(state)) return 'alive';
+
+    // claim ด้วยเงื่อนไข PENDING — ทางอื่นปิดไปก่อน (count=0) ต้องไม่คืนเครดิตซ้ำ
+    const { count } = await this.galleryRepo.updateMany({
+      where: { taskId, genneratedStatus: 'PENDING' },
+      data: { genneratedStatus: 'FAILED' },
+    });
+    if (count === 0) return 'cleared';
+
+    this.logger.warn(
+      `🧹 task=${taskId} stale (job state=${
+        state ?? 'missing'
+      }) — closing as failed, refund=${row.usedCredit ?? 0}`,
+    );
+    await this.generateHelperService.updateUsedCreditFail(
+      row.userId,
+      '',
+      row.projectId,
+      'credit',
+      row.usedCredit ?? 0,
+    );
+    await this.updateTaskStatus(taskId, {
+      status: 'failed',
+      failedAt: new Date().toISOString(),
+      error: 'stale',
+    });
+    const message = 'Image generation did not complete. Please try again.';
+    await this.publishToCore(
+      (job?.data as ImageProcessJob | undefined)?.clientId ?? '',
+      'worker:image-error',
+      {
+        taskId,
+        error: message,
+        timestamp: new Date().toISOString(),
+        projectId: row.projectId,
+        type: 'image',
+        message,
+      },
+    );
+    return 'failed';
+  }
+
+  async onModuleInit() {
+    // upsert ด้วย id คงที่ — ทุก pod เรียกได้ ได้ scheduler ตัวเดียว
+    await this.imageQueue.upsertJobScheduler(
+      'image-sweep-scheduler',
+      { every: IMAGE_SWEEP_EVERY_MS },
+      {
+        name: IMAGE_JOB_SWEEP,
+        data: {},
+        opts: { removeOnComplete: { count: 10 }, removeOnFail: { count: 10 } },
+      },
+    );
+  }
+
   async onModuleDestroy() {
     await this.redisPublisher.quit();
   }
 
   // map ชื่อ model (prefix) → payload builder function
+  @Span()
   private async buildPayload(body: RequestImageGenerateDto, sendConfig: any) {
     const builder = this.payloadBuilders[sendConfig?.type];
     if (!builder) {

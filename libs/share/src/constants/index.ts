@@ -32,6 +32,18 @@ export const VIDEO_JOB_FINALIZE = 'video-finalize';
 export const VIDEO_JOB_POLL_CHECK = 'video-poll-check';
 export const VIDEO_JOB_SWEEP = 'video-sweep';
 
+/** ชื่อ job ใน QUEUE_NAME_IMAGE ที่ใช้กวาด gallery PENDING ค้าง (งาน generate ใช้ชื่อ 'image') */
+export const IMAGE_JOB_SWEEP = 'image-sweep';
+
+/** job state ที่ BullMQ ยังจะประมวลผลต่อ — sweeper ต้องไม่ยุ่ง */
+export const LIVE_JOB_STATES: readonly string[] = [
+  'waiting',
+  'active',
+  'delayed',
+  'prioritized',
+  'waiting-children',
+];
+
 /**
  * งาน video ที่เข้าคิวแล้วแต่ยังไม่ปิด — core เพิ่มตอนเข้าคิว, worker ลบตอนจบ/fail
  * sweeper ใช้หางานที่ไม่มีใครปิด (worker ไม่หยิบ / stalled / poll-check ขาด)

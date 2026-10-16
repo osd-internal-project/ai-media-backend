@@ -14,6 +14,8 @@ import {
   QUEUE_NAME_VDO,
   QUEUE_NAME_OMNIHUMEN,
   CreateGenerateDto,
+  injectTraceContext,
+  TRACE_CARRIER_KEY,
 } from '@ai-media/share';
 import { GenerateService } from './services/generate.service';
 import { GenerateHelperService } from './services/generate-helper.service';
@@ -38,7 +40,10 @@ export class GenerateController {
     // if (error) {
     //   throw error;
     // }
-    await this.videoQueue.add(QUEUE_NAME_VDO, body);
+    await this.videoQueue.add(QUEUE_NAME_VDO, {
+      ...body,
+      [TRACE_CARRIER_KEY]: injectTraceContext(),
+    });
     return { status: 'queued' };
   }
 
@@ -48,7 +53,10 @@ export class GenerateController {
     // if (error) {
     //   throw error;
     // }
-    await this.omnihumenQueue.add(QUEUE_NAME_OMNIHUMEN, body);
+    await this.omnihumenQueue.add(QUEUE_NAME_OMNIHUMEN, {
+      ...body,
+      [TRACE_CARRIER_KEY]: injectTraceContext(),
+    });
     return { status: 'queued' };
   }
 

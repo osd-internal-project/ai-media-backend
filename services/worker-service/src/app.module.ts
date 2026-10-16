@@ -7,9 +7,14 @@ import { SocialPublishModule } from './social-publish/social-publish.module';
 import { RequestLoggerMiddleware } from './middleware/request-logger.middleware';
 import { TosModule, StorageModule } from '@ai-media/share';
 import { KeycloakAuthModule } from '@ai-media/share';
+import { OpenTelemetryModule } from 'nestjs-otel';
 
 @Module({
   imports: [
+    // ให้ใช้ @Span() / MetricService ได้; HTTP metrics มาจาก instrumentation-http ใน tracing.ts แล้ว
+    OpenTelemetryModule.forRoot({
+      metrics: { hostMetrics: false, apiMetrics: { enable: false } },
+    }),
     // ตรวจ Keycloak token ทุก route ตาม AUTH_MODE (off | report | enforce)
     KeycloakAuthModule,
     ConfigModule.forRoot({ isGlobal: true }),

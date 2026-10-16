@@ -103,7 +103,7 @@ describe('BytePlus video webhook', () => {
       await controller.video('task-1', sig, { id: 'cgt-1', status }, {});
       expect(add).toHaveBeenCalledWith(
         VIDEO_JOB_FINALIZE,
-        { taskId: 'task-1', providerTaskId: 'cgt-1' },
+        expect.objectContaining({ taskId: 'task-1', providerTaskId: 'cgt-1' }),
         expect.objectContaining({ jobId: `${VIDEO_JOB_FINALIZE}-task-1` }),
       );
     },

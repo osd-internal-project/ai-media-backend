@@ -29,10 +29,13 @@ import {
   StorageUrlService,
   TQueryClient,
   VIDEO_GENERATE_TYPES,
+  TRACE_CARRIER_KEY,
   buildOutputKey,
+  injectTraceContext,
   isAbsoluteUrl,
   resolveGalleryResultUrls,
 } from '@ai-media/share';
+import { Span } from 'nestjs-otel';
 import { LogsService } from '../logs/logs.service';
 import {
   CreateActivityShareDto,
@@ -830,13 +833,18 @@ export class ActivityShareService {
    * @param activityShareId id ของงาน
    * @param targetIds จำกัดเฉพาะ target ที่ระบุ (ตอน retry)
    */
+  @Span()
   private async enqueuePublish(
     activityShareId: string,
     targetIds?: string[],
   ): Promise<void> {
     await this.publishQueue.add(
       'publish',
-      { activityShareId, ...(targetIds && { targetIds }) },
+      {
+        activityShareId,
+        ...(targetIds && { targetIds }),
+        [TRACE_CARRIER_KEY]: injectTraceContext(),
+      },
       {
         // jobId ผูกกับ share + รอบการส่ง เพื่อกัน job ซ้ำจาก retry ที่ยิงถี่
         jobId: `${activityShareId}:${Date.now()}`,

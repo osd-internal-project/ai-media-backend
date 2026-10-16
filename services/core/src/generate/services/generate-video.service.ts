@@ -21,6 +21,7 @@ import {
   CreditQuotaResult,
 } from './base-generate.service';
 import { GenerateHelperService } from './generate-helper.service';
+import { Span } from 'nestjs-otel';
 
 @Injectable()
 export class GenerateVideoService extends BaseGenerateService {
@@ -65,6 +66,7 @@ export class GenerateVideoService extends BaseGenerateService {
    * ลงทะเบียนงานให้ sweeper ของ worker ปิดได้ถ้าไม่มีใครปิด
    * ห้าม throw — job เข้าคิวไปแล้ว ถ้า throw ตรงนี้ catch ของ base จะคืน hold เครดิตทั้งที่งานยังวิ่ง
    */
+  @Span()
   protected async afterEnqueue(
     taskId: string,
     clientId: string,
@@ -96,6 +98,7 @@ export class GenerateVideoService extends BaseGenerateService {
     return (body.width * body.height * body.duration * 24) / 1024;
   }
 
+  @Span()
   protected async checkCreditQuota(
     userId: string,
     body: RequestVideoGenerateDto,

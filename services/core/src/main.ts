@@ -2,7 +2,7 @@
 import './tracing';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { PrismaService } from '@ai-media/share';
+import { OtelLogger, PrismaService } from '@ai-media/share';
 import helmet from 'helmet';
 import { InventoryMainModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -13,7 +13,10 @@ async function bootstrap() {
     return this.toString();
   };
 
-  const app = await NestFactory.create(InventoryMainModule);
+  // เติม trace_id ใน log เพื่อกดจาก log ใน Grafana ไป trace ใน Tempo
+  const app = await NestFactory.create(InventoryMainModule, {
+    logger: new OtelLogger(),
+  });
 
   // ===================================
   // 1. CORS Configuration (ทำครั้งเดียว)

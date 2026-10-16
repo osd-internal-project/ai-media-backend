@@ -3,6 +3,8 @@ import { Request } from 'express';
 
 export * from './crypto.util';
 export * from './byteplus-callback.util';
+export * from './trace-context.util';
+export * from './otel-logger';
 
 const { Decimal } = Prisma;
 

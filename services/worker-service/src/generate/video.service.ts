@@ -14,12 +14,19 @@ import {
   VIDEO_JOB_FINALIZE,
   VIDEO_JOB_POLL_CHECK,
   VIDEO_JOB_SWEEP,
+  LIVE_JOB_STATES,
   VIDEO_INFLIGHT_KEY,
   VIDEO_INFLIGHT_DATA_KEY,
   VideoInflightData,
   BYTEPLUS_TERMINAL_STATUSES,
   buildByteplusVideoCallbackUrl,
+  addActiveSpanLinks,
+  injectTraceContext,
+  TRACE_CARRIER_KEY,
+  TraceCarrier,
+  TraceJob,
 } from '@ai-media/share';
+import { Span } from 'nestjs-otel';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
 import { OnWorkerEvent } from '@nestjs/bullmq';
@@ -37,8 +44,6 @@ const VIDEO_POLL_TIMEOUT_MS = 20 * 60 * 1000;
 /** sweeper รอบละ 10 นาที — กวาดงานที่เข้าคิวเกิน 30 นาทีแล้วไม่มีใครปิด */
 const VIDEO_SWEEP_EVERY_MS = 10 * 60 * 1000;
 const VIDEO_SWEEP_STALE_MS = 30 * 60 * 1000;
-/** job state ที่ BullMQ ยังจะประมวลผลต่อ — sweeper ต้องไม่ยุ่ง */
-const LIVE_JOB_STATES = ['waiting', 'active', 'delayed', 'prioritized', 'waiting-children'];
 
 const videoCtxKey = (taskId: string) => `video-ctx:${taskId}`;
 const videoFinalKey = (taskId: string) => `video-final:${taskId}`;
@@ -67,8 +72,9 @@ export const unwrapProviderMessage = (text: string): string => {
 const providerError = (
   result: ProviderVideoResult,
 ): { code: string | null; message: string } => {
-  const error = (result.data as { error?: { code?: unknown; message?: unknown } })
-    ?.error;
+  const error = (
+    result.data as { error?: { code?: unknown; message?: unknown } }
+  )?.error;
   const message =
     typeof error?.message === 'string' && error.message.trim()
       ? unwrapProviderMessage(error.message)
@@ -87,6 +93,8 @@ interface VideoTaskContext {
   authToken: string;
   videoTaskId: string;
   submittedAt: number;
+  /** trace ตอน submit — finalize/poll-check ใช้ทำ span link กลับมา */
+  _otel?: TraceCarrier;
 }
 
 interface ProviderVideoResult {
@@ -188,6 +196,7 @@ export class VideoProcessor extends WorkerHost {
     this.logger.error(`❌ Job ${job.id} failed: ${error.message}`);
   }
 
+  @TraceJob()
   async process(job: any, token?: string): Promise<any> {
     if (job.name === VIDEO_JOB_FINALIZE) return this.handleFinalize(job);
     if (job.name === VIDEO_JOB_POLL_CHECK) return this.handlePollCheck(job);
@@ -199,6 +208,7 @@ export class VideoProcessor extends WorkerHost {
    * ส่งงานให้ provider แล้วคืน worker slot ทันที — ผลมาทาง callback (finalize) หรือ poll-check สำรอง
    * job เก่าที่มี `videoTaskId` อยู่แล้ว (retry/stalled) ไม่ส่งซ้ำ แค่ตั้ง poll-check ใหม่
    */
+  @Span()
   private async handleSubmit(job: Job): Promise<unknown> {
     const {
       taskId,
@@ -214,9 +224,11 @@ export class VideoProcessor extends WorkerHost {
       (job.data as any).authorization ?? sendConfig?.authorization ?? '';
 
     this.logger.log(
-      `${tag(taskId)} 👨‍🍳 submit job=${job.id} client=${clientId} user=${userId} model=${
-        body?.model
-      } attempt=${job.attemptsMade + 1}`,
+      `${tag(taskId)} 👨‍🍳 submit job=${
+        job.id
+      } client=${clientId} user=${userId} model=${body?.model} attempt=${
+        job.attemptsMade + 1
+      }`,
     );
     this.logger.log(`${tag(taskId)} body=${JSON.stringify(body)}`);
 
@@ -226,7 +238,9 @@ export class VideoProcessor extends WorkerHost {
       if ((job.data as any).videoTaskId) {
         videoTaskId = (job.data as any).videoTaskId;
         this.logger.log(
-          `${tag(taskId)} resume provider task ${videoTaskId} (retry/stalled) — no resubmit`,
+          `${tag(
+            taskId,
+          )} resume provider task ${videoTaskId} (retry/stalled) — no resubmit`,
         );
       } else {
         const axiosConfig = {
@@ -260,7 +274,9 @@ export class VideoProcessor extends WorkerHost {
           const apiStatus = error.response?.status;
           const apiBody = error.response?.data;
           const apiMessage = unwrapProviderMessage(
-            String(apiBody?.error?.message ?? apiBody?.message ?? error.message),
+            String(
+              apiBody?.error?.message ?? apiBody?.message ?? error.message,
+            ),
           );
           this.logger.error(
             `${tag(
@@ -291,6 +307,7 @@ export class VideoProcessor extends WorkerHost {
         authToken,
         videoTaskId,
         submittedAt: Date.now(),
+        [TRACE_CARRIER_KEY]: injectTraceContext(),
       };
       await this.redis.set(
         videoCtxKey(taskId),
@@ -311,7 +328,9 @@ export class VideoProcessor extends WorkerHost {
       });
       await this.schedulePollCheck(taskId);
       this.logger.log(
-        `${tag(taskId)} 📨 submitted (provider ${videoTaskId}) — waiting for callback / poll-check every ${
+        `${tag(
+          taskId,
+        )} 📨 submitted (provider ${videoTaskId}) — waiting for callback / poll-check every ${
           VIDEO_POLL_INTERVAL_MS / 1000
         }s`,
       );
@@ -324,6 +343,7 @@ export class VideoProcessor extends WorkerHost {
   }
 
   /** job จาก webhook ของ core — เช็คสถานะจริงกับ provider ก่อนปิดงาน (ไม่เชื่อ body ของ callback) */
+  @Span()
   private async handleFinalize(job: Job): Promise<unknown> {
     const { taskId } = job.data as { taskId: string };
     this.logger.log(
@@ -339,13 +359,21 @@ export class VideoProcessor extends WorkerHost {
       this.logger.warn(`${tag(taskId)} callback: ctx not found yet — retry`);
       throw new Error(`video ctx for ${taskId} not found yet`);
     }
+    // callback เป็น trace ใหม่จาก provider — link กลับไป trace ตอน submit
+    addActiveSpanLinks(ctx._otel);
     const result = await this.fetchProviderStatus(ctx);
+    // ตัด "error":null ออก — panel "Error logs" ใน Grafana หาคำว่า error จากข้อความ
     this.logger.log(
-      `${tag(taskId)} ← provider GET (callback)=${JSON.stringify(result.data)}`,
+      `${tag(taskId)} ← provider GET (callback)=${JSON.stringify(
+        result.data,
+        (k, v: unknown) => (k === 'error' && v === null ? undefined : v),
+      )}`,
     );
     if (!isTerminal(result.status)) {
       this.logger.log(
-        `${tag(taskId)} callback: provider status=${result.status} (not terminal) — ignore`,
+        `${tag(taskId)} callback: provider status=${
+          result.status
+        } (not terminal) — ignore`,
       );
       return { pending: result.status };
     }
@@ -355,6 +383,7 @@ export class VideoProcessor extends WorkerHost {
   }
 
   /** สำรองกรณี callback ไม่มา: GET สถานะ 1 ครั้งต่อรอบ จนจบหรือเกินเวลา */
+  @Span()
   private async handlePollCheck(job: Job): Promise<unknown> {
     const { taskId } = job.data as { taskId: string };
     if (await this.redis.exists(videoFinalKey(taskId))) {
@@ -362,13 +391,18 @@ export class VideoProcessor extends WorkerHost {
     }
     const ctx = await this.loadCtx(taskId);
     if (!ctx) {
-      this.logger.warn(`${tag(taskId)} poll-check: ctx expired — nothing to do`);
+      this.logger.warn(
+        `${tag(taskId)} poll-check: ctx expired — nothing to do`,
+      );
       return { skipped: 'no ctx' };
     }
+    addActiveSpanLinks(ctx._otel);
     const elapsedSec = Math.round((Date.now() - ctx.submittedAt) / 1000);
     if (Date.now() - ctx.submittedAt > VIDEO_POLL_TIMEOUT_MS) {
       this.logger.warn(
-        `${tag(taskId)} ⏱️ poll-check: timed out after ${elapsedSec}s — no callback / no result`,
+        `${tag(
+          taskId,
+        )} ⏱️ poll-check: timed out after ${elapsedSec}s — no callback / no result`,
       );
       await this.failOnce(ctx, new Error('generation timed out'));
       return { timedOut: true };
@@ -393,7 +427,9 @@ export class VideoProcessor extends WorkerHost {
         )}`,
       );
       this.logger.log(
-        `${tag(taskId)} ⏱️ [poll-check] → ${result.status} after ${elapsedSec}s (callback did not arrive first)`,
+        `${tag(taskId)} ⏱️ [poll-check] → ${
+          result.status
+        } after ${elapsedSec}s (callback did not arrive first)`,
       );
       await this.finalizeVideoTask(ctx, result);
       return { finalized: result.status };
@@ -417,6 +453,7 @@ export class VideoProcessor extends WorkerHost {
    * ปิดงานครั้งเดียวต่อ taskId (callback + poll-check อาจมาพร้อมกัน) — กันตัด/คืนเครดิตซ้ำ
    * succeeded → เก็บไฟล์ + ตัดเครดิตจริง · failed/expired/cancelled → fail path (คืนเครดิต)
    */
+  @Span()
   private async finalizeVideoTask(
     ctx: VideoTaskContext,
     result: ProviderVideoResult,
@@ -453,6 +490,7 @@ export class VideoProcessor extends WorkerHost {
   }
 
   /** โค้ด success เดิมจาก loop polling — ย้ายมาเรียกจาก finalize */
+  @Span()
   private async completeVideoTask(
     ctx: VideoTaskContext,
     data: BytepluseResponse,
@@ -570,6 +608,7 @@ export class VideoProcessor extends WorkerHost {
   }
 
   /** fail path เดิม (เคยอยู่ใน catch ของ process) — สถานะ failed, แจ้ง core, คืนเครดิต, gallery FAILED */
+  @Span()
   private async failTask(
     ctx: Pick<VideoTaskContext, 'taskId' | 'clientId' | 'body' | 'userId'>,
     err: Error,
@@ -655,6 +694,7 @@ export class VideoProcessor extends WorkerHost {
   }
 
   /** ทุก 10 นาที: ปิดงานที่เข้าคิวเกิน 30 นาทีแล้วไม่มีทางไหนจะปิดให้ (FAILED + คืนเครดิต + แจ้ง user) */
+  @Span()
   private async handleSweep(): Promise<unknown> {
     const taskIds = await this.redis.zrangebyscore(
       VIDEO_INFLIGHT_KEY,
@@ -680,6 +720,7 @@ export class VideoProcessor extends WorkerHost {
     return { checked: taskIds.length, ...counts };
   }
 
+  @Span()
   private async sweepOne(
     taskId: string,
   ): Promise<'alive' | 'cleared' | 'failed'> {
@@ -696,7 +737,8 @@ export class VideoProcessor extends WorkerHost {
     const ctx = await this.loadCtx(taskId);
     if (
       ctx &&
-      Date.now() - ctx.submittedAt <= VIDEO_POLL_TIMEOUT_MS + VIDEO_POLL_INTERVAL_MS
+      Date.now() - ctx.submittedAt <=
+        VIDEO_POLL_TIMEOUT_MS + VIDEO_POLL_INTERVAL_MS
     ) {
       return 'alive';
     }
@@ -737,11 +779,13 @@ export class VideoProcessor extends WorkerHost {
     };
   }
 
+  @Span()
   private async loadCtx(taskId: string): Promise<VideoTaskContext | null> {
     const raw = await this.redis.get(videoCtxKey(taskId));
     return raw ? (JSON.parse(raw) as VideoTaskContext) : null;
   }
 
+  @Span()
   private async fetchProviderStatus(
     ctx: VideoTaskContext,
   ): Promise<ProviderVideoResult> {
@@ -758,6 +802,7 @@ export class VideoProcessor extends WorkerHost {
     return { status: String(res.data?.status ?? ''), data: res.data };
   }
 
+  @Span()
   private async schedulePollCheck(taskId: string): Promise<void> {
     await this.videoQueue.add(
       VIDEO_JOB_POLL_CHECK,
@@ -773,6 +818,7 @@ export class VideoProcessor extends WorkerHost {
   /**
    * ส่ง event ไปยัง Core Service ผ่าน Redis Pub/Sub
    */
+  @Span()
   private async publishToCore(clientId: string, event: string, payload: any) {
     const parts = event.split(':');
     const channel = `worker:${parts[parts.length - 1] || 'event'}`;
@@ -784,6 +830,8 @@ export class VideoProcessor extends WorkerHost {
           event,
           payload,
           timestamp: new Date().toISOString(),
+          // core ต่อ trace จากตรงนี้ (WebsocketGateway.onWorkerMessage)
+          [TRACE_CARRIER_KEY]: injectTraceContext(),
         }),
       );
     } catch (error) {
@@ -794,6 +842,7 @@ export class VideoProcessor extends WorkerHost {
   /**
    * อัพเดทสถานะของ task ใน Redis
    */
+  @Span()
   private async updateTaskStatus(taskId: string, updates: any) {
     const taskData = await this.redis.get(`task:${taskId}`);
     if (taskData) {
@@ -817,6 +866,7 @@ export class VideoProcessor extends WorkerHost {
     seedance2: this.buildSeedance2Payload.bind(this),
   };
 
+  @Span()
   private async buildPayload(
     body: RequestVideoGenerateDto,
     sendConfig: any,
@@ -843,6 +893,7 @@ export class VideoProcessor extends WorkerHost {
    * @returns URL ที่ provider ดาวน์โหลดได้
    * @throws เมื่อ presign ไม่สำเร็จ — ยอมให้ job fail ดีกว่ายิง url ว่างไปหา provider
    */
+  @Span()
   private async presignRef(value: string): Promise<string> {
     return this.storageUrl.toProviderUrl(value);
   }

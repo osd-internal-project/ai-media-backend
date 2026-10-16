@@ -17,6 +17,7 @@ import {
   CreditQuotaResult,
 } from './base-generate.service';
 import { GenerateHelperService } from './generate-helper.service';
+import { Span } from 'nestjs-otel';
 
 @Injectable()
 export class GenerateOmnihumanService extends BaseGenerateService {
@@ -48,6 +49,7 @@ export class GenerateOmnihumanService extends BaseGenerateService {
     return this.omnihumenQueue;
   }
 
+  @Span()
   protected async checkCreditQuota(
     userId: string,
     body: any,
