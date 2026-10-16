@@ -48,6 +48,7 @@ import { GenerateHelperService } from './generate-helper.service';
 /** sweeper รอบละ 10 นาที — ปิด gallery PENDING ที่เกิน 30 นาทีแล้ว job ไม่อยู่ในคิว (pod ตาย / stalled) */
 const IMAGE_SWEEP_EVERY_MS = 10 * 60 * 1000;
 const IMAGE_SWEEP_STALE_MS = 30 * 60 * 1000;
+const SEEDREAM2_MAX_REF_IMAGES = 10;
 
 interface TaskResponseMap {
   taskIdPath: string;
@@ -816,6 +817,7 @@ export class ImageProcessor extends WorkerHost {
     (body: RequestImageGenerateDto, modelDetail: any) => Promise<any>
   > = {
     seedream1: this.buildSeedream1Payload.bind(this),
+    seedream2: this.buildSeedream2Payload.bind(this),
   };
 
   private async buildSeedream1Payload(
@@ -849,6 +851,33 @@ export class ImageProcessor extends WorkerHost {
       ...(body.maxImages && {
         sequential_image_generation_options: { max_images: body.maxImages },
       }),
+    };
+  }
+
+  // Seedream 5.0 Pro: provider ตอบ 400 ถ้ามี sequential_image_generation (แม้ "disabled") หรือ stream
+  // และสร้างได้ครั้งละ 1 รูป จึงไม่ส่ง field กลุ่มนั้นเลย
+  private async buildSeedream2Payload(
+    body: RequestImageGenerateDto,
+    modelDetail: any,
+  ) {
+    Logger.debug(
+      `Building payload for seedream2 with body: ${JSON.stringify(body)}`,
+    );
+    // Pro รับ reference ได้สูงสุด 10 รูป ส่วนเกินตัดทิ้งเงียบ ๆ แทน throw
+    const refKeys = (body.image ?? [])
+      .filter((ref): ref is string => Boolean(ref))
+      .slice(0, SEEDREAM2_MAX_REF_IMAGES);
+    const images = refKeys.length
+      ? await this.storageUrl.toProviderUrls(refKeys)
+      : null;
+    return {
+      model: body.model,
+      prompt: body.prompt,
+      response_format: 'url',
+      size: `${body.width}x${body.height}`,
+      // พารามิเตอร์นี้คือ sendConfig อยู่แล้ว (ไม่ใช่ modelDetail ที่ห่อ sendConfig)
+      watermark: modelDetail?.watermark ?? false,
+      ...(images && images.length > 0 && { image: images }),
     };
   }
 }

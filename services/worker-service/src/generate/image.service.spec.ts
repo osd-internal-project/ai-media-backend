@@ -150,3 +150,79 @@ describe('ImageProcessor gallery + sweeper', () => {
     });
   });
 });
+
+describe('ImageProcessor seedream2 payload', () => {
+  type Builder = {
+    buildPayload: (
+      body: Record<string, unknown>,
+      sendConfig: Record<string, unknown>,
+    ) => Promise<Record<string, unknown>>;
+  };
+  let storageUrl: { toProviderUrls: jest.Mock };
+  let builder: Builder;
+
+  const body = {
+    model: 'dola-seedream-5-0-pro-260628',
+    prompt: 'a cat',
+    width: 2048,
+    height: 2048,
+    ratio: '1:1',
+    maxImages: 1,
+    sequentialImageGeneration: 'disabled',
+    image: [] as string[],
+  };
+
+  beforeEach(() => {
+    storageUrl = {
+      toProviderUrls: jest
+        .fn()
+        .mockImplementation(async (keys: string[]) =>
+          keys.map((k) => `https://signed/${k}`),
+        ),
+    };
+    const processor = new ImageProcessor(
+      { get: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      storageUrl as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { upsertJobScheduler: jest.fn() } as never,
+    );
+    builder = processor as unknown as Builder;
+  });
+
+  it('omits fields Seedream 5.0 Pro rejects with HTTP 400', async () => {
+    const payload = await builder.buildPayload(body, { type: 'seedream2' });
+    expect(payload).toEqual({
+      model: body.model,
+      prompt: 'a cat',
+      response_format: 'url',
+      size: '2048x2048',
+      watermark: false,
+    });
+  });
+
+  it('reads watermark from sendConfig', async () => {
+    const payload = await builder.buildPayload(body, {
+      type: 'seedream2',
+      watermark: true,
+    });
+    expect(payload.watermark).toBe(true);
+  });
+
+  it('keeps at most 10 reference images', async () => {
+    const refs = Array.from({ length: 12 }, (_, i) => `key-${i}`);
+    const payload = await builder.buildPayload(
+      { ...body, image: [...refs, ''] },
+      { type: 'seedream2' },
+    );
+    expect(storageUrl.toProviderUrls).toHaveBeenCalledWith(refs.slice(0, 10));
+    expect(payload.image).toHaveLength(10);
+  });
+});
