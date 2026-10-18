@@ -24,6 +24,9 @@ interface WorkflowBlockUpdatePayload {
   errorMessage?: string | null;
 }
 
+/** สถานะที่ event จาก worker ยังเปลี่ยนต่อได้ */
+const ACTIVE_STATUSES = ['pending', 'processing'];
+
 /**
  * ช่องสัญญาณ Redis ที่ worker-service เดิม publish อยู่แล้ว
  * (ดู websocket.gateway.ts) — เรา subscribe ซ้ำได้เพราะ Redis pub/sub รองรับหลาย subscriber
@@ -120,7 +123,7 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
       // บล็อกที่จบแล้วไม่รับ event progress ที่มาช้า
       if (
         (block.status === 'success' || block.status === 'failed') &&
-        !this.isTerminalChannel(channel)
+        !this.isTerminalEvent(channel, payload)
       ) {
         return;
       }
@@ -152,11 +155,15 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * channel ที่ถือเป็นจุดจบของงาน (จบ/พลาด)
+   * event ที่ถือเป็นจุดจบของงาน (จบ/พลาด)
+   * - worker:image-complete รายรูป (ไม่มี success:true) เป็นแค่ progress
    */
-  private isTerminalChannel(channel: string): boolean {
+  private isTerminalEvent(
+    channel: string,
+    payload: Record<string, any>,
+  ): boolean {
+    if (channel === 'worker:image-complete') return payload?.success === true;
     return (
-      channel === 'worker:image-complete' ||
       channel === 'worker:video-complete' ||
       channel === 'worker:image-error' ||
       channel === 'worker:video-error'
@@ -171,10 +178,7 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
     payload: Record<string, any>,
   ): Promise<void> {
     const progress = this.extractProgress(payload);
-    await this.blockRepo.update({
-      where: { id: block.id },
-      data: { status: 'processing' },
-    });
+    if (!(await this.markProcessing(block))) return;
     this.emitUpdate(payload.projectId, {
       blockId: block.id,
       status: 'processing',
@@ -211,10 +215,7 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
     block: WorkflowBlock,
     payload: Record<string, any>,
   ): Promise<void> {
-    await this.blockRepo.update({
-      where: { id: block.id },
-      data: { status: 'processing' },
-    });
+    if (!(await this.markProcessing(block))) return;
     this.emitUpdate(payload.projectId, {
       blockId: block.id,
       status: 'processing',
@@ -247,11 +248,14 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
     objectName: string | null,
     projectId: string,
   ): Promise<void> {
-    const duration = (Date.now() - block.createdAt.getTime()) / 1000;
-    await this.blockRepo.update({
-      where: { id: block.id },
+    const duration =
+      block.duration ?? (Date.now() - block.createdAt.getTime()) / 1000;
+    // taskId ต้องตรง — กัน event ของรอบก่อน retry มาปิดบล็อกที่กำลังรันรอบใหม่
+    const { count } = await this.blockRepo.updateMany({
+      where: { id: block.id, taskId: block.taskId },
       data: { status: 'success', outputUrl: objectName, duration },
     });
+    if (count === 0) return;
 
     // ประทับ featureType แยก try/catch — ไม่ให้พังการ emit ถ้า stamp ล้มเหลว
     try {
@@ -271,6 +275,47 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
       progress: 1,
       outputUrl: presignedUrl,
     });
+  }
+
+  /**
+   * ตั้งสถานะ processing แบบมีเงื่อนไข — core หลาย replica รับ event ชุดเดียวกัน
+   * replica ที่ช้าต้องไม่เขียนทับ success/failed ที่อีกตัวเขียนไปแล้ว
+   * @returns false เมื่อบล็อกจบไปแล้วหรือ taskId เปลี่ยน (ไม่ต้อง emit)
+   */
+  private async markProcessing(block: WorkflowBlock): Promise<boolean> {
+    const { count } = await this.blockRepo.updateMany({
+      where: {
+        id: block.id,
+        taskId: block.taskId,
+        status: { in: ACTIVE_STATUSES },
+      },
+      data: { status: 'processing' },
+    });
+    return count > 0;
+  }
+
+  /**
+   * ซ่อมบล็อกที่ค้าง processing ทั้งที่ gallery ของ task เป็น SUCCESS แล้ว
+   * (ข้อมูลที่เสียจาก race ก่อนแก้ guard) — เรียกตอนโหลด conversation
+   * @returns บล็อกหลังซ่อม หรือ null เมื่อไม่ต้องซ่อม
+   */
+  async healStuckBlock(
+    block: WorkflowBlock,
+    projectId: string,
+  ): Promise<WorkflowBlock | null> {
+    if (block.status !== 'processing' || !block.taskId) return null;
+    const gallery = await this.galleryRepo.findOne({
+      where: { taskId: block.taskId },
+    });
+    if (gallery?.genneratedStatus !== 'SUCCESS') return null;
+
+    const objectName =
+      this.firstString(gallery.resultUrl) ??
+      this.firstString(gallery.imageUrl) ??
+      block.outputUrl;
+    await this.markSuccess(block, objectName, projectId);
+    this.logger.warn(`Healed stuck workflow block ${block.id} → success`);
+    return this.blockRepo.findOne({ where: { id: block.id } });
   }
 
   /**
@@ -308,10 +353,15 @@ export class WorkflowEventsService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     const errorMessage =
       payload?.error ?? payload?.message ?? 'Generation failed';
-    await this.blockRepo.update({
-      where: { id: block.id },
+    const { count } = await this.blockRepo.updateMany({
+      where: {
+        id: block.id,
+        taskId: block.taskId,
+        status: { in: ACTIVE_STATUSES },
+      },
       data: { status: 'failed', errorMessage },
     });
+    if (count === 0) return;
     this.emitUpdate(payload.projectId, {
       blockId: block.id,
       status: 'failed',

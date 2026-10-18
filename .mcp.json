@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "/Users/taksapongk/.local/share/uv/tools/code-review-graph/bin/python",
+      "args": [
+        "-m",
+        "code_review_graph",
+        "serve"
+      ],
+      "cwd": "/Users/taksapongk/Documents/Project/ai-media/ai-media-backend",
+      "type": "stdio"
+    }
+  }
+}

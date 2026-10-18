@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { WorkflowConversationRepository } from '@ai-media/share';
 import { WorkflowBlock, WorkflowConversation } from '@prisma/client';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { WorkflowEventsService } from './workflow-events.service';
 import { WorkflowMediaService } from './workflow-media.service';
 
 /** conversation พร้อม relation blocks (include ใน findOne รับประกัน blocks ตอน runtime) */
@@ -15,9 +16,12 @@ type ConversationWithBlocks = WorkflowConversation & {
  */
 @Injectable()
 export class WorkflowConversationsService {
+  private readonly logger = new Logger(WorkflowConversationsService.name);
+
   constructor(
     private readonly conversationRepo: WorkflowConversationRepository,
     private readonly mediaService: WorkflowMediaService,
+    private readonly eventsService: WorkflowEventsService,
   ) {}
 
   /**
@@ -64,19 +68,42 @@ export class WorkflowConversationsService {
     // presign object name ของแต่ละบล็อกตอนอ่าน เพื่อให้รูป/วิดีโอแสดงได้หลังโหลดแคนวาสใหม่
     // (เหมือน gallery ที่ presign ใหม่ทุกครั้งที่โหลด — outputUrl ที่เก็บใน DB เป็น object name ดิบ)
     const blocks = await Promise.all(
-      (conversation.blocks ?? []).map(async (block) => ({
-        ...block,
-        outputUrl: block.outputUrl
-          ? await this.mediaService.presignObject(
-              conversation.projectId,
-              block.type,
-              block.outputUrl,
-            )
-          : block.outputUrl,
-      })),
+      (conversation.blocks ?? []).map(async (raw) => {
+        const block =
+          (await this.healBlock(raw, conversation.projectId)) ?? raw;
+        return {
+          ...block,
+          outputUrl: block.outputUrl
+            ? await this.mediaService.presignObject(
+                conversation.projectId,
+                block.type,
+                block.outputUrl,
+              )
+            : block.outputUrl,
+        };
+      }),
     );
 
     return { ...conversation, blocks };
+  }
+
+  /**
+   * ซ่อมบล็อกที่ค้าง processing — ถ้าซ่อมไม่สำเร็จให้แสดงข้อมูลเดิมต่อ ไม่ทำให้โหลดแคนวาสพัง
+   */
+  private async healBlock(
+    block: WorkflowBlock,
+    projectId: string,
+  ): Promise<WorkflowBlock | null> {
+    try {
+      return await this.eventsService.healStuckBlock(block, projectId);
+    } catch (error) {
+      this.logger.error(
+        `healStuckBlock failed for ${block.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
   }
 
   /**
