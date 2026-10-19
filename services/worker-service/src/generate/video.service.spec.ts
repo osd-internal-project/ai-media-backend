@@ -63,6 +63,7 @@ describe('VideoProcessor (callback + poll-check)', () => {
   let gallery: { updateMany: jest.Mock };
   let logs: { findOne: jest.Mock; updateMany: jest.Mock };
   let videoStorage: { storeVideoWithThumbnail: jest.Mock };
+  let assetSvc: { swapImagesToAssets: jest.Mock; cleanup: jest.Mock };
   let processor: VideoProcessor;
 
   const ctx = {
@@ -109,6 +110,10 @@ describe('VideoProcessor (callback + poll-check)', () => {
         .fn()
         .mockResolvedValue({ file: 'v.mp4', thumbnail: 'thumb.png' }),
     };
+    assetSvc = {
+      swapImagesToAssets: jest.fn().mockResolvedValue(null),
+      cleanup: jest.fn(),
+    };
     axiosGet.mockReset();
     axiosPost.mockReset();
     processor = new VideoProcessor(
@@ -117,11 +122,15 @@ describe('VideoProcessor (callback + poll-check)', () => {
       logs as never,
       {} as never,
       {} as never,
-      { resolveOutputUrl: jest.fn().mockResolvedValue('https://get') } as never,
+      {
+        resolveOutputUrl: jest.fn().mockResolvedValue('https://get'),
+        toProviderUrl: jest.fn(async (v: string) => v),
+      } as never,
       videoStorage as never,
       helper as never,
       { findOne: jest.fn().mockResolvedValue({}) } as never,
       queue as never,
+      assetSvc as never,
     );
   });
 
@@ -300,6 +309,92 @@ describe('VideoProcessor (callback + poll-check)', () => {
     await processor.process({ name: 'video-finalize', data: { taskId: 't1' } });
     expect(helper.updateUsedCreditFail).toHaveBeenCalledTimes(1);
     expect(redis.store.has('video-ctx:t1')).toBe(false);
+  });
+
+  describe('seedance2 assets', () => {
+    const assets = { groupId: 'g1', assetIds: ['a1'] };
+    const seedance2Job = () => ({
+      name: 'vdo-generate-queue',
+      id: '1',
+      data: {
+        taskId: 't1',
+        clientId: 'c1',
+        userId: 'u1',
+        statusBaseUrl: 'https://gw/tasks',
+        sendApi: 'https://gw/create',
+        sendConfig: {
+          type: 'seedance2',
+          configType: 'application/json',
+          authorization: 'key',
+        },
+        body: {
+          ...body,
+          prompt: 'p',
+          image: [],
+          files: [{ type: 'image', url: 'https://s3/face.png' }],
+        },
+      },
+      updateData: jest.fn(),
+    });
+
+    it('submit swaps images to assets before POST and keeps them in ctx + job data', async () => {
+      assetSvc.swapImagesToAssets.mockImplementation(async (payload) => {
+        payload.content[1].image_url.url = 'asset://a1';
+        return assets;
+      });
+      axiosPost.mockResolvedValue({ data: { id: 'cgt-1' } });
+      const job = seedance2Job();
+      await processor.process(job);
+
+      expect(axiosPost.mock.calls[0][1].content[1]).toEqual({
+        type: 'image_url',
+        image_url: { url: 'asset://a1' },
+        role: 'reference_image',
+      });
+      expect(JSON.parse(redis.store.get('video-ctx:t1')!).assets).toEqual(
+        assets,
+      );
+      expect(job.updateData).toHaveBeenCalledWith(
+        expect.objectContaining({ videoTaskId: 'cgt-1', assets }),
+      );
+      expect(assetSvc.cleanup).not.toHaveBeenCalled();
+    });
+
+    it('video POST rejected → assets are deleted', async () => {
+      assetSvc.swapImagesToAssets.mockResolvedValue(assets);
+      axiosPost.mockRejectedValue({
+        response: { status: 400, data: { error: { message: 'bad' } } },
+      });
+      await expect(processor.process(seedance2Job())).rejects.toThrow('bad');
+      expect(assetSvc.cleanup).toHaveBeenCalledWith('t1', assets);
+    });
+
+    it('finalize and timeout delete the assets stored in ctx', async () => {
+      seedCtx({ assets } as never);
+      axiosGet.mockResolvedValue(succeeded);
+      await processor.process({
+        name: 'video-finalize',
+        data: { taskId: 't1' },
+      });
+      expect(assetSvc.cleanup).toHaveBeenCalledWith('t1', assets);
+
+      redis.store.clear();
+      assetSvc.cleanup.mockClear();
+      seedCtx({ assets, submittedAt: Date.now() - 60 * 60 * 1000 } as never);
+      await processor.process({
+        name: 'video-poll-check',
+        data: { taskId: 't1' },
+      });
+      expect(assetSvc.cleanup).toHaveBeenCalledWith('t1', assets);
+    });
+
+    it('seedance1 never touches the asset library', async () => {
+      axiosPost.mockResolvedValue({ data: { id: 'cgt-1' } });
+      const job = seedance2Job();
+      job.data.sendConfig.type = 'seedance1';
+      await processor.process(job);
+      expect(assetSvc.swapImagesToAssets).not.toHaveBeenCalled();
+    });
   });
 
   describe('sweeper', () => {

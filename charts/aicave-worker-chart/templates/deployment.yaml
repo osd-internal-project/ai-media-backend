@@ -82,6 +82,26 @@ spec:
               key: BYTEPLUS_CALLBACK_SECRET
               # ไม่มี key นี้ = ไม่ส่ง callback_url (ใช้ poll-check อย่างเดียว) ไม่ทำให้ pod start ไม่ขึ้น
               optional: true
+        # seedance2: AK/SK สำหรับ Ark Assets API (แปลงรูป reference เป็น asset://) — ไม่มี = งาน seedance2 ที่มีรูปจะ fail
+        - name: BYTEPLUS_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: BYTEPLUS_ACCESS_KEY
+              optional: true
+        - name: BYTEPLUS_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.appName }}-secret
+              key: BYTEPLUS_SECRET_KEY
+              optional: true
+        - name: BYTEPLUS_ARK_OPENAPI_HOST
+          value: {{ .Values.env.byteplusArkOpenapiHost | default "open.byteplusapi.com" | quote }}
+        - name: BYTEPLUS_ARK_REGION
+          value: {{ .Values.env.byteplusArkRegion | default "ap-southeast-1" | quote }}
+        # ต้องตรงกับ project ของ endpoint/API key ที่ใช้ generate ไม่งั้น asset ใช้ไม่ได้
+        - name: BYTEPLUS_ARK_PROJECT_NAME
+          value: {{ .Values.env.byteplusArkProjectName | default "default" | quote }}
         # OpenTelemetry → Grafana Alloy — ไม่ตั้ง otel.endpoint = ไม่ส่ง telemetry (tracing.ts เป็น no-op)
         {{- if .Values.otel.endpoint }}
         - name: OTEL_SERVICE_NAME

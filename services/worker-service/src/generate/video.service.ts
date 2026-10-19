@@ -34,6 +34,7 @@ import axios from 'axios';
 import * as https from 'https';
 import { GenerateHelperService } from './generate-helper.service';
 import { VideoStorageService } from './video-storage.service';
+import { ByteplusAssetService, TaskAssets } from './byteplus-asset.service';
 
 /** ctx ของงานที่ส่งแล้ว — finalize ต้องใช้ แต่ callback ส่งมาแค่ taskId */
 const VIDEO_CTX_TTL_SEC = 24 * 60 * 60;
@@ -93,6 +94,8 @@ interface VideoTaskContext {
   authToken: string;
   videoTaskId: string;
   submittedAt: number;
+  /** seedance2: asset ของรูป reference — ลบตอนงานจบ */
+  assets?: TaskAssets | null;
   /** trace ตอน submit — finalize/poll-check ใช้ทำ span link กลับมา */
   _otel?: TraceCarrier;
 }
@@ -165,6 +168,7 @@ export class VideoProcessor extends WorkerHost {
     private readonly generateHelperService: GenerateHelperService,
     private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     @InjectQueue(QUEUE_NAME_VDO) private readonly videoQueue: Queue,
+    private readonly byteplusAsset: ByteplusAssetService,
   ) {
     super();
     this.agent = new https.Agent({
@@ -232,11 +236,13 @@ export class VideoProcessor extends WorkerHost {
     );
     this.logger.log(`${tag(taskId)} body=${JSON.stringify(body)}`);
 
+    let assets: TaskAssets | null = null;
     try {
       let videoTaskId: string;
       let authToken: string = authorization;
       if ((job.data as any).videoTaskId) {
         videoTaskId = (job.data as any).videoTaskId;
+        assets = (job.data as any).assets ?? null;
         this.logger.log(
           `${tag(
             taskId,
@@ -251,6 +257,10 @@ export class VideoProcessor extends WorkerHost {
           httpsAgent: this.agent,
         };
         const payload = await this.buildPayload(body, sendConfig, taskId);
+        // seedance2 ไม่รับรูปคนจริงเป็น URL — แปลงทุกรูปเป็น asset:// ก่อนส่ง
+        if (sendConfig?.type === 'seedance2') {
+          assets = await this.byteplusAsset.swapImagesToAssets(payload, taskId);
+        }
         let apiRes: any;
         // header มี Authorization — log แค่ payload
         this.logger.log(
@@ -294,7 +304,7 @@ export class VideoProcessor extends WorkerHost {
         await this.updateTaskStatus(taskId, { videoTaskId });
         // Persist into the job payload so a BullMQ retry/stalled re-process
         // resumes this provider task instead of submitting a new one.
-        await job.updateData({ ...(job.data as any), videoTaskId });
+        await job.updateData({ ...(job.data as any), videoTaskId, assets });
       }
 
       // บันทึกสิ่งที่ finalize ต้องใช้ — callback ส่งมาแค่ taskId
@@ -307,6 +317,7 @@ export class VideoProcessor extends WorkerHost {
         authToken,
         videoTaskId,
         submittedAt: Date.now(),
+        assets,
         [TRACE_CARRIER_KEY]: injectTraceContext(),
       };
       await this.redis.set(
@@ -338,6 +349,7 @@ export class VideoProcessor extends WorkerHost {
     } catch (error) {
       await this.failTask({ taskId, clientId, body, userId }, error as Error);
       await this.clearInflight(taskId);
+      await this.byteplusAsset.cleanup(taskId, assets);
       throw error;
     }
   }
@@ -486,6 +498,7 @@ export class VideoProcessor extends WorkerHost {
     } finally {
       await this.redis.del(videoCtxKey(ctx.taskId));
       await this.clearInflight(ctx.taskId);
+      await this.byteplusAsset.cleanup(ctx.taskId, ctx.assets);
     }
   }
 
@@ -665,7 +678,8 @@ export class VideoProcessor extends WorkerHost {
 
   /** fail ที่เกิดหลัง submit (timeout / sweeper) — ใช้ lock เดียวกับ finalize กันคืนเครดิตซ้ำ */
   private async failOnce(
-    ctx: Pick<VideoTaskContext, 'taskId' | 'clientId' | 'body' | 'userId'>,
+    ctx: Pick<VideoTaskContext, 'taskId' | 'clientId' | 'body' | 'userId'> &
+      Pick<Partial<VideoTaskContext>, 'assets'>,
     err: Error,
   ): Promise<void> {
     const acquired = await this.redis.set(
@@ -681,6 +695,8 @@ export class VideoProcessor extends WorkerHost {
     } finally {
       await this.redis.del(videoCtxKey(ctx.taskId));
       await this.clearInflight(ctx.taskId);
+      // shortcut: sweeper ที่ไม่มี ctx (หมดอายุ) ไม่รู้ asset → ค้างใน BytePlus; ถ้าเจอบ่อยให้เก็บ assets ใน inflight data
+      await this.byteplusAsset.cleanup(ctx.taskId, ctx.assets);
     }
   }
 

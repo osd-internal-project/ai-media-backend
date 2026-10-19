@@ -18,6 +18,7 @@ import { OmnihumenProcessor } from './omnihumen.service';
 import { DreamactorProcessor } from './dreamactor.service';
 import { AudioProcessor } from './audio.service';
 import { GenerateHelperService } from './generate-helper.service';
+import { ByteplusAssetService } from './byteplus-asset.service';
 import { VideoStorageService } from './video-storage.service';
 
 @Module({
@@ -59,6 +60,7 @@ import { VideoStorageService } from './video-storage.service';
     AudioProcessor,
     GenerateHelperService,
     VideoStorageService,
+    ByteplusAssetService,
   ], // อย่าลืมใส่ Processor
   exports: [
     ImageProcessor,
