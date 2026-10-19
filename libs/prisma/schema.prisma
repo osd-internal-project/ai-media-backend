@@ -372,6 +372,8 @@ model MasterModelType {
   taskPollSec     Int      @default(10) @map("task_poll_sec") @db.Integer
   taskResponseMap Json?    @map("task_response_map")
   isActive        Boolean  @default(false) @map("is_active")
+  provider        String?  @map("provider") @db.VarChar(50)
+  iconUrl         String?  @map("icon_url") @db.Text
 
   @@map("master_model_type")
 }
