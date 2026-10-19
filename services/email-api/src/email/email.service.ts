@@ -61,7 +61,10 @@ export class EmailService {
         subject: dto.subject,
         html,
       });
-      this.logger.log(`✅ Sent to ${dto.to} | messageId: ${info.messageId}`);
+      // relay's response carries its queue ID — the key for O365 message trace
+      this.logger.log(
+        `✅ Sent to ${dto.to} | messageId: ${info.messageId} | response: ${info.response} | rejected: ${info.rejected.length}`,
+      );
       return { success: true, messageId: info.messageId };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
