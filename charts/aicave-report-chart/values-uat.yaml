@@ -19,7 +19,7 @@ ingress:
 
 env:
   authMode: "report"
-  keycloakAllowedClients: "ai-cave-prod"
+  keycloakAllowedClients: "ai-cave-prod,eportal-client-id"
   keycloakUrl: "https://id24-uat.aicave.ai"
   keycloakRealm: "eportal"
   nodeOptions: "--max-old-space-size=288"

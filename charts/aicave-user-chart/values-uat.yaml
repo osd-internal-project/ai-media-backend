@@ -19,7 +19,7 @@ ingress:
 
 env:
   authMode: "report"
-  keycloakAllowedClients: "ai-cave-prod"
+  keycloakAllowedClients: "ai-cave-prod,eportal-client-id"
   nodeOptions: "--max-old-space-size=288"
   nodeEnv: "staging"
   port: "4000"
