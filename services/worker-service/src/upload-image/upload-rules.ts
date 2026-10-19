@@ -1,6 +1,15 @@
 export const MEDIA_TYPES = ['image', 'video', 'audio'] as const;
 export type UploadMediaType = (typeof MEDIA_TYPES)[number];
 
+/** แท็บที่อัปโหลด reference — เก็บลง ref_image.generate_type */
+export const UPLOAD_GENERATE_TYPES = ['image', 'video', 'audio'] as const;
+export type UploadGenerateType = (typeof UPLOAD_GENERATE_TYPES)[number];
+
+/** ค่าที่ไม่รู้จักตกเป็น 'image' เหมือนพฤติกรรมเดิม */
+export function toUploadGenerateType(value: unknown): UploadGenerateType {
+  return UPLOAD_GENERATE_TYPES.find((type) => type === value) ?? 'image';
+}
+
 const MB = 1024 * 1024;
 
 /** ขนาดสูงสุดต่อชนิด — รูปไม่ต้องใหญ่เท่าวิดีโอ (เดิม 500MB ทุกชนิด) */

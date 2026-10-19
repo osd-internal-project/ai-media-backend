@@ -21,6 +21,7 @@ import {
   CreditBalanceRepository,
   ProjectRepository,
   MasterModelTypeDto,
+  RequestAudioGenerateDto,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -38,6 +39,7 @@ import * as https from 'https';
 import Redis from 'ioredis';
 import { tosConfigs } from 'src/configs';
 import { GenerateDreamactorService } from './generate-dreamactor.service';
+import { GenerateAudioService } from './generate-audio.service';
 import { GenerateImageService } from './generate-image.service';
 import { GenerateOmnihumanService } from './generate-omnihuman.service';
 import { GenerateVideoService } from './generate-video.service';
@@ -56,6 +58,7 @@ export class GenerateService {
     private readonly generateVideoService: GenerateVideoService,
     private readonly generateOmnihumanService: GenerateOmnihumanService,
     private readonly generateDreamactorService: GenerateDreamactorService,
+    private readonly generateAudioService: GenerateAudioService,
 
     @InjectRedis() private readonly redis: Redis,
   ) {}
@@ -87,6 +90,16 @@ export class GenerateService {
 
   async createDreamactorGenerationTask(body: any, clientId: string) {
     return await this.generateDreamactorService.createDreamactorGenerationTask(
+      body,
+      clientId,
+    );
+  }
+
+  async createAudioGenerationTask(
+    body: RequestAudioGenerateDto,
+    clientId: string,
+  ) {
+    return await this.generateAudioService.createAudioGenerationTask(
       body,
       clientId,
     );

@@ -9,7 +9,7 @@ RUN apk upgrade --update-cache && \
 
 ENV TZ=Asia/Bangkok
 WORKDIR /app
-ENV YARN_CACHE_FOLDER=.yarn-cache
+ENV YARN_CACHE_FOLDER=/tmp/yarn-cache
 
 # ===== Pruner stage =====
 FROM base AS pruner
@@ -28,9 +28,8 @@ RUN yarn install --frozen-lockfile
 FROM base AS prod-deps
 COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/yarn.lock ./yarn.lock
-COPY --from=dev-deps /app/${YARN_CACHE_FOLDER} /${YARN_CACHE_FOLDER}
+COPY --from=dev-deps ${YARN_CACHE_FOLDER} ${YARN_CACHE_FOLDER}
 RUN yarn install --frozen-lockfile --production --prefer-offline
-RUN rm -rf /app/${YARN_CACHE_FOLDER}
 
 # ===== Build stage =====
 FROM base AS builder

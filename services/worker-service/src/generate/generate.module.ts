@@ -8,6 +8,7 @@ import {
   QUEUE_NAME_IMAGE,
   QUEUE_NAME_OMNIHUMEN,
   QUEUE_NAME_VDO,
+  QUEUE_NAME_AUDIO,
   TosModule,
   StorageModule,
 } from '@ai-media/share';
@@ -15,6 +16,7 @@ import { PrismaModule } from '@ai-media/share';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { OmnihumenProcessor } from './omnihumen.service';
 import { DreamactorProcessor } from './dreamactor.service';
+import { AudioProcessor } from './audio.service';
 import { GenerateHelperService } from './generate-helper.service';
 import { VideoStorageService } from './video-storage.service';
 
@@ -44,6 +46,9 @@ import { VideoStorageService } from './video-storage.service';
     BullModule.registerQueue({
       name: QUEUE_NAME_DREAMACTOR,
     }),
+    BullModule.registerQueue({
+      name: QUEUE_NAME_AUDIO,
+    }),
   ],
   controllers: [],
   providers: [
@@ -51,6 +56,7 @@ import { VideoStorageService } from './video-storage.service';
     VideoProcessor,
     OmnihumenProcessor,
     DreamactorProcessor,
+    AudioProcessor,
     GenerateHelperService,
     VideoStorageService,
   ], // อย่าลืมใส่ Processor
@@ -59,6 +65,7 @@ import { VideoStorageService } from './video-storage.service';
     VideoProcessor,
     OmnihumenProcessor,
     DreamactorProcessor,
+    AudioProcessor,
     GenerateHelperService,
   ],
 })

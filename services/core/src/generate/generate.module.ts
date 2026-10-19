@@ -8,6 +8,7 @@ import {
   StorageModule,
   QUEUE_NAME_OMNIHUMEN,
   QUEUE_NAME_DREAMACTOR,
+  QUEUE_NAME_AUDIO,
   LlmGatewayModule,
 } from '@ai-media/share';
 import { BullModule } from '@nestjs/bullmq';
@@ -17,6 +18,7 @@ import { GenerateImageService } from './services/generate-image.service';
 import { GenerateVideoService } from './services/generate-video.service';
 import { GenerateOmnihumanService } from './services/generate-omnihuman.service';
 import { GenerateDreamactorService } from './services/generate-dreamactor.service';
+import { GenerateAudioService } from './services/generate-audio.service';
 
 @Module({
   imports: [
@@ -36,6 +38,9 @@ import { GenerateDreamactorService } from './services/generate-dreamactor.servic
     BullModule.registerQueue({
       name: QUEUE_NAME_DREAMACTOR,
     }),
+    BullModule.registerQueue({
+      name: QUEUE_NAME_AUDIO,
+    }),
   ],
   controllers: [GenerateController],
   providers: [
@@ -44,6 +49,7 @@ import { GenerateDreamactorService } from './services/generate-dreamactor.servic
     GenerateVideoService,
     GenerateOmnihumanService,
     GenerateDreamactorService,
+    GenerateAudioService,
     GenerateService,
   ],
   exports: [
@@ -52,6 +58,7 @@ import { GenerateDreamactorService } from './services/generate-dreamactor.servic
     GenerateVideoService,
     GenerateOmnihumanService,
     GenerateDreamactorService,
+    GenerateAudioService,
     GenerateService,
   ],
 })

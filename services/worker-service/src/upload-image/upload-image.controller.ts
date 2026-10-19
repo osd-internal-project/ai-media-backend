@@ -25,6 +25,7 @@ import {
 } from './upload-policy.service';
 import { AuthUser, CurrentUser, Public } from '@ai-media/share';
 import { UploadAccessService } from './upload-access.service';
+import { UploadGenerateType } from './upload-rules';
 
 @Controller('upload')
 export class UploadImageController {
@@ -65,7 +66,7 @@ export class UploadImageController {
     @Body(`userId`) userId: string,
     @Body(`index`) index: number,
     @Body(`projectId`) projectId: string,
-    @Body(`generateType`) generateType: 'image' | 'video',
+    @Body(`generateType`) generateType: UploadGenerateType,
     @Body(`uid`) uid: string,
     @Body(`refUid`) refUid: string,
     @Body(`organizationId`) organizationId: string,

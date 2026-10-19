@@ -24,6 +24,7 @@ import {
   UploadMediaType,
   isAllowedUpload,
   mediaTypeOfMime,
+  toUploadGenerateType,
 } from './upload-rules';
 
 export type { UploadMediaType } from './upload-rules';
@@ -191,7 +192,7 @@ export class UploadPolicyService {
       imagePath: key,
       imageType: contentType,
       imageSize: size,
-      generateType: body.generateType === 'video' ? 'video' : 'image',
+      generateType: toUploadGenerateType(body.generateType),
       status: 'waiting',
     };
     if (scope.kind === 'ref') {

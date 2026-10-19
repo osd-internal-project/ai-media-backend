@@ -3,4 +3,5 @@ export * from './image-generate';
 export * from './video-generate';
 export * from './omnihumen-generate';
 export * from './dreamactor-generate';
+export * from './audio-generate';
 export * from './generate';

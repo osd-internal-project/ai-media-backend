@@ -13,6 +13,24 @@ import {
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 
+const AUDIO_CONTENT_TYPES: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+};
+
+export const downloadContentType = (
+  typeGenerate: string | null,
+  objectName: string,
+): string => {
+  if (typeGenerate === 'video') return 'video/mp4';
+  if (typeGenerate === 'audio') {
+    const ext = objectName.split('.').pop()?.toLowerCase() ?? '';
+    return AUDIO_CONTENT_TYPES[ext] ?? 'application/octet-stream';
+  }
+  return 'image/jpeg';
+};
+
 @Injectable()
 export class GalleryService {
   constructor(
@@ -127,7 +145,7 @@ export class GalleryService {
       );
     }
 
-    const type = found.typeGenerate === 'video' ? 'video/mp4' : 'image/jpeg';
+    const type = downloadContentType(found.typeGenerate, objectName);
     const downloadName = query.filename || objectName;
     const key = buildOutputKey(
       organizationId || '',

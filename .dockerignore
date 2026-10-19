@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+**/.turbo
+.git
+.github
+.claude
+.code-review-graph
+**/.DS_Store

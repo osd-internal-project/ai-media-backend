@@ -455,6 +455,50 @@ export class LogsService {
     fristseq?: number,
     lastseq?: number,
   ) {
+    return this.findProjectGalleryByPage(
+      'dreamactor',
+      projectId,
+      organizationId,
+      userId,
+      skip,
+      take,
+      fristseq,
+      lastseq,
+    );
+  }
+
+  async findProjectAudioByPage(
+    projectId: string,
+    organizationId: string,
+    userId: string,
+    skip?: number,
+    take?: number,
+    fristseq?: number,
+    lastseq?: number,
+  ) {
+    return this.findProjectGalleryByPage(
+      'audio',
+      projectId,
+      organizationId,
+      userId,
+      skip,
+      take,
+      fristseq,
+      lastseq,
+    );
+  }
+
+  /** history จาก gallery ล้วน (ไม่ join log) — ใช้ร่วมกันระหว่าง type ที่ shape เหมือนกัน */
+  private async findProjectGalleryByPage(
+    typeGenerate: 'dreamactor' | 'audio',
+    projectId: string,
+    organizationId: string,
+    userId: string,
+    skip?: number,
+    take?: number,
+    fristseq?: number,
+    lastseq?: number,
+  ) {
     const user = userId
       ? await this.userRepo.findOne({
           where: { token: userId },
@@ -466,7 +510,7 @@ export class LogsService {
         genneratedStatus: { not: 'FAILED' },
         projectId: projectId,
         taskId: { not: null },
-        typeGenerate: 'dreamactor',
+        typeGenerate,
         ...(fristseq && { seq: { lt: fristseq } }),
         ...(lastseq && { seq: { gt: lastseq } }),
         ...(userId && { userId: userId }),
@@ -486,7 +530,7 @@ export class LogsService {
     const data = await this.galleryRepo.findMany({
       where: {
         taskId: { in: targetTaskIds },
-        typeGenerate: 'dreamactor',
+        typeGenerate,
         genneratedStatus: { not: 'FAILED' },
       },
       include: { users: true },
@@ -760,7 +804,7 @@ export class LogsService {
     projectId: string,
     organizationId: string,
     token: string,
-    type: 'image' | 'video' | 'omnihumen' | 'dreamactor',
+    type: 'image' | 'video' | 'omnihumen' | 'dreamactor' | 'audio',
   ): Promise<{ usedCredit?: number; totalCredit?: number }> {
     const findUser = await this.userRepo.findOne({ where: { token: token } });
     const projectMember = await this.projectMemberRepository.findOne({

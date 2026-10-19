@@ -357,6 +357,12 @@ export class GenerateHelperService {
         const credit = body.duration * 30;
         const outToken = body.duration * 20769.23077;
         return { token: outToken, credit };
+      } else if (model.type === 'audio') {
+        // audio ไม่มีราคา hardcode — ต้องตั้ง modelDetails.calculationType ใน master_model_type
+        Logger.error(
+          `audio model ${model.modelType} has no modelDetails.calculationType`,
+        );
+        return undefined;
       }
     } catch (err) {
       Logger.error(`Failed to calculate credit: ${err}`);

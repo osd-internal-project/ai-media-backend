@@ -77,7 +77,7 @@ export class LogsController {
     @Query('userId') userId: string,
     @Query('skip') skip: number,
     @Query('take') take: number,
-    @Query('type') type: 'image' | 'video' | 'omnihumen' | 'dreamactor',
+    @Query('type') type: 'image' | 'video' | 'omnihumen' | 'dreamactor' | 'audio',
     @Query('fristsql') fristsql: number,
     @Query('lastsql') lastsql: number,
   ) {
@@ -119,6 +119,16 @@ export class LogsController {
             )
           : type === 'dreamactor'
           ? await this.logsService.findProjectDreamactorByPage(
+              projectId,
+              organizationId,
+              userId,
+              numSkip,
+              numTake,
+              numFrist,
+              numLast,
+            )
+          : type === 'audio'
+          ? await this.logsService.findProjectAudioByPage(
               projectId,
               organizationId,
               userId,

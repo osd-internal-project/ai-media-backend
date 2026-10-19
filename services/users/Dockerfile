@@ -3,7 +3,7 @@ RUN apk upgrade --update-cache && \
     apk add --no-cache openssl musl tzdata python3 make g++ && \
     rm -rf /var/cache/apk/*
 WORKDIR /app
-ENV YARN_CACHE_FOLDER=.yarn-cache
+ENV YARN_CACHE_FOLDER=/tmp/yarn-cache
 ENV TZ=Asia/Bangkok
 
 # pruner

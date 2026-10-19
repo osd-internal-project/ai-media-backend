@@ -15,6 +15,7 @@ import { GenerateService } from 'src/generate/services/generate.service';
 import {
   RequestImageGenerateDto,
   RequestVideoGenerateDto,
+  RequestAudioGenerateDto,
 } from '@ai-media/share';
 import Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -132,6 +133,9 @@ export class WebsocketGatewayService
       'worker:dreamactor-upload-success',
       'worker:dreamactor-complete',
       'worker:dreamactor-error',
+      'worker:audio-started',
+      'worker:audio-complete',
+      'worker:audio-error',
       INVITATION_NOTIFY_CHANNEL,
     );
 
@@ -483,6 +487,69 @@ export class WebsocketGatewayService
     }
   }
 
+  @SubscribeMessage('generate:audio')
+  @Span()
+  async handleGenerateAudio(
+    @MessageBody() data: RequestAudioGenerateDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      this.logger.log('🎵 Generate Audio request from client: ', client.id);
+
+      const { projectId } = data;
+      const roomName = `${projectId}:audio`;
+
+      const result = await this.generateService.createAudioGenerationTask(
+        data,
+        client.id,
+      );
+      this.server.to(roomName).emit('audio-task:created', {
+        taskId: data.taskId,
+        message: 'Audio Task started',
+        timestamp: new Date().toISOString(),
+        status: result.status,
+        data: result.data,
+      });
+
+      if (result.status !== 200) {
+        client.emit('audio-generate:error', {
+          taskId: data.taskId,
+          message: result.data,
+        });
+        return { success: false, message: result.data };
+      }
+
+      if (typeof result.data === 'string') {
+        client.emit('audio-generate:error', {
+          taskId: data.taskId,
+          message: 'Invalid response from generation service',
+        });
+        return {
+          success: false,
+          message: 'Invalid response from generation service',
+        };
+      }
+
+      await this.redis.sadd(`ws:client-tasks:${client.id}`, result.data.taskId);
+
+      this.server
+        .to(roomName)
+        .emit('task-audio:started', { ...result, oldTaskId: data.taskId });
+
+      return { success: true, data: result };
+    } catch (error) {
+      this.logger.error('Generate audio error:', error);
+      client.emit('audio-generate:error', {
+        taskId: data.taskId,
+        message: this.getErrorMessage(error) || 'Internal server error',
+      });
+      return {
+        success: false,
+        message: this.getErrorMessage(error) || 'Internal server error',
+      };
+    }
+  }
+
   @SubscribeMessage('chat:get-history')
   async handleGetHistory(
     @MessageBody()
@@ -492,7 +559,7 @@ export class WebsocketGatewayService
       userId: string;
       skip: number;
       take: number;
-      type: 'image' | 'video' | 'omnihumen' | 'dreamactor';
+      type: 'image' | 'video' | 'omnihumen' | 'dreamactor' | 'audio';
     },
     @ConnectedSocket() client: Socket,
   ) {
@@ -535,6 +602,14 @@ export class WebsocketGatewayService
               data.skip,
               data.take,
             )
+          : data.type === 'audio'
+          ? await this.logsService.findProjectAudioByPage(
+              projectId,
+              organizationId,
+              data.userId,
+              data.skip,
+              data.take,
+            )
           : [];
       client.emit('chat:history', {
         success: true,
@@ -554,7 +629,7 @@ export class WebsocketGatewayService
       projectId: string;
       organizationId: string;
       userId: string;
-      type: 'image' | 'video' | 'omnihumen' | 'dreamactor';
+      type: 'image' | 'video' | 'omnihumen' | 'dreamactor' | 'audio';
     },
     @ConnectedSocket() client: Socket,
   ) {

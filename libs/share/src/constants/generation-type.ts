@@ -1,7 +1,7 @@
 /**
  * Single source of truth for AI generation types.
  *
- * Three vocabularies exist across the stack for the same four categories, so every
+ * Three vocabularies exist across the stack for the same categories, so every
  * mapping between them lives here:
  *  - `dbValue`  what is actually stored in `log.type_generate` / `gallery.type_generate`.
  *               Note `omnihuman` is persisted as the misspelling `omnihumen`; that is the
@@ -15,6 +15,7 @@ export const GENERATION_TYPES = [
   { key: 'video', dbValue: 'video', label: 'Video' },
   { key: 'omnihuman', dbValue: 'omnihumen', label: 'OmniHuman' },
   { key: 'dreamactor', dbValue: 'dreamactor', label: 'DreamActor' },
+  { key: 'audio', dbValue: 'audio', label: 'Audio' },
 ] as const;
 
 export type GenerationTypeKey = (typeof GENERATION_TYPES)[number]['key'];

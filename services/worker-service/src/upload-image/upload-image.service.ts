@@ -21,6 +21,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import {
   MAX_BYTES_BY_MEDIA,
+  UploadGenerateType,
   isAllowedUpload,
   isExtensionAllowed,
   mediaTypeOfMime,
@@ -52,7 +53,7 @@ export interface PresignUploadInput {
   index: number;
   uid: string;
   organizationId: string;
-  generateType: 'image' | 'video';
+  generateType: UploadGenerateType;
   fileName: string;
   contentType: string;
   size: number;
@@ -97,7 +98,7 @@ export class UploadImageService {
     userId: string,
     index: number,
     projectId: string,
-    generateType: 'image' | 'video',
+    generateType: UploadGenerateType,
     uid: string,
     refUid: string,
     organizationId: string,
