@@ -34,6 +34,8 @@ const EXTENSIONS_BY_MIME: Record<string, readonly string[]> = {
   'audio/wav': ['.wav'],
   'audio/x-wav': ['.wav'],
   'audio/mp4': ['.m4a', '.mp4'],
+  // Chrome/Safari บน macOS ส่ง .m4a เป็น audio/x-m4a
+  'audio/x-m4a': ['.m4a'],
   'audio/aac': ['.aac'],
   'audio/ogg': ['.ogg', '.oga'],
 };
