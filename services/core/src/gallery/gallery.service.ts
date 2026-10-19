@@ -50,19 +50,25 @@ export class GalleryService {
     const organizationId = query.organizationId;
     const page = +query.page || 1;
     const pageSize = +query.pageSize || 10;
+    const where = {
+      projectId: projectId,
+      ...(query?.status && { status: true }),
+      // All Activity hides failed generations; NULL is kept because `not` alone would drop it.
+      ...(query?.hideFailed === 'true' && {
+        OR: [
+          { genneratedStatus: null },
+          { genneratedStatus: { not: 'FAILED' } },
+        ],
+      }),
+    };
     const data = await this.galleryRepo.findMany({
-      where: {
-        projectId: projectId,
-        ...(query?.status && { status: true }),
-      },
+      where,
       include: { users: true },
       skip: (page - 1) * pageSize,
       take: pageSize,
       orderBy: { createdAt: 'desc' },
     });
-    const total = await this.galleryRepo.count({
-      where: { projectId: projectId, ...(query?.status && { status: true }) },
-    });
+    const total = await this.galleryRepo.count({ where });
 
     const processedData = await Promise.all(
       data.map(async (item) => {
