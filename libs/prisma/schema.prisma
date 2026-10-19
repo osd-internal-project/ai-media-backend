@@ -571,6 +571,7 @@ model OrganizationMember {
   userId         String       @map("user_id") @db.VarChar(50)
   organizationId String       @map("organization_id") @db.VarChar(50)
   role           String       @map("role") @db.VarChar(50) //"OWNER | ADMIN | MEMBER | VIEWER"
+  status         String       @default("active") @map("status") @db.VarChar(20) // active | inactive — per-org access, independent of users.status
   joinedAt       DateTime     @default(now()) @map("joined_at")
   organization   Organization @relation(fields: [organizationId], references: [organizationId])
 

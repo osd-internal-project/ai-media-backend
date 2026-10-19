@@ -19,6 +19,10 @@ import {
   BulkAddMembersDto,
   BulkCreateChunkDto,
 } from './dto/bulk-add-members.dto';
+import {
+  BulkMemberIdsDto,
+  BulkMemberStatusDto,
+} from './dto/bulk-member-actions.dto';
 
 @Controller('organization')
 export class OrganizationController {
@@ -96,6 +100,46 @@ export class OrganizationController {
     @CurrentUser() authUser: AuthUser | undefined,
   ) {
     return this.bulkMemberService.createChunk(organizationId, dto, authUser);
+  }
+
+  @Post(':organizationId/bulk-members/remove')
+  removeBulkMembers(
+    @Param('organizationId') organizationId: string,
+    @Body() dto: BulkMemberIdsDto,
+    @CurrentUser() authUser: AuthUser | undefined,
+  ) {
+    return this.bulkMemberService.removeMembers(
+      organizationId,
+      dto.memberIds,
+      authUser,
+    );
+  }
+
+  @Post(':organizationId/bulk-members/status')
+  setBulkMembersStatus(
+    @Param('organizationId') organizationId: string,
+    @Body() dto: BulkMemberStatusDto,
+    @CurrentUser() authUser: AuthUser | undefined,
+  ) {
+    return this.bulkMemberService.setMembersStatus(
+      organizationId,
+      dto.memberIds,
+      dto.status,
+      authUser,
+    );
+  }
+
+  @Post(':organizationId/bulk-members/send-access-email')
+  sendBulkAccessEmails(
+    @Param('organizationId') organizationId: string,
+    @Body() dto: BulkMemberIdsDto,
+    @CurrentUser() authUser: AuthUser | undefined,
+  ) {
+    return this.bulkMemberService.sendAccessEmails(
+      organizationId,
+      dto.memberIds,
+      authUser,
+    );
   }
 
   @Get('access-code/:organizationId')

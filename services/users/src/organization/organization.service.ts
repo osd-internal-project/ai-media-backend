@@ -541,7 +541,7 @@ export class OrganizationService {
         ...(!superAdminRole && {
           OR: [
             {
-              organizationMember: { some: { userId } },
+              organizationMember: { some: { userId, status: 'active' } },
             },
             { createdById: userId },
           ],

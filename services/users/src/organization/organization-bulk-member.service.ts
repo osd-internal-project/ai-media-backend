@@ -14,9 +14,15 @@ import {
   PrismaTransactionService,
   ProjectMemberRepository,
   ProjectRepository,
+  RequestChangePasswordRepository,
   UsersRepository,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
+import { v4 as uuidv4 } from 'uuid';
+import * as dayjs from 'dayjs';
+import configs from 'src/configs';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
 import { checkPasswordPolicy } from 'src/users/password-policy';
 import {
@@ -25,7 +31,9 @@ import {
   BulkMemberRowDto,
   BulkNewProjectDto,
 } from './dto/bulk-add-members.dto';
+import { MemberStatus } from './dto/bulk-member-actions.dto';
 
+const ACCESS_LINK_TTL_DAYS = 7;
 const SYSTEM_ADMIN_ROLES = ['SUPER_ADMIN', 'SYSTEM_ADMIN'];
 const ORG_ROLES = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
 const PROJECT_ROLES = ['ADMIN', 'USER', 'VIEWER'];
@@ -101,7 +109,115 @@ export class OrganizationBulkMemberService {
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly keycloakService: KeycloakService,
     private readonly transaction: PrismaTransactionService,
+    private readonly requestChangePasswordRepo: RequestChangePasswordRepository,
+    private readonly httpService: HttpService,
   ) {}
+
+  /** ลบ membership ของ org นี้ (ไม่ลบ user/Keycloak) — OWNER และ id ของ org อื่นถูกข้าม */
+  async removeMembers(
+    organizationId: string,
+    memberIds: number[],
+    authUser: AuthUser | undefined,
+  ) {
+    this.assertSuperAdmin(authUser);
+    const { count } = await this.organizationMemberRepo.deleteMany({
+      where: this.selectableMembers(organizationId, memberIds),
+    });
+    return { removed: count, skipped: memberIds.length - count };
+  }
+
+  /** เปิด/ปิดสิทธิ์เฉพาะ org นี้ — ไม่แตะ users.status หรือ Keycloak */
+  async setMembersStatus(
+    organizationId: string,
+    memberIds: number[],
+    status: MemberStatus,
+    authUser: AuthUser | undefined,
+  ) {
+    this.assertSuperAdmin(authUser);
+    const { count } = await this.organizationMemberRepo.updatemany({
+      where: this.selectableMembers(organizationId, memberIds),
+      data: { status },
+    });
+    return { updated: count, skipped: memberIds.length - count };
+  }
+
+  /** ส่งลิงก์ตั้งรหัสผ่าน (ใช้หน้า /change-password เดิม) ให้ member ที่เลือก */
+  async sendAccessEmails(
+    organizationId: string,
+    memberIds: number[],
+    authUser: AuthUser | undefined,
+  ) {
+    this.assertSuperAdmin(authUser);
+    const org = await this.findOrganization(organizationId);
+    const members = await this.organizationMemberRepo.findMany({
+      where: { organizationId, id: { in: memberIds } },
+      select: { userId: true },
+    });
+    const users = await this.usersRepo.findMany({
+      where: { userId: { in: members.map((m) => m.userId) } },
+      select: { username: true, email: true },
+    });
+
+    let sent = 0;
+    const failed: { email: string; reason: string }[] = [];
+    for (const user of users) {
+      if (!user.email) {
+        failed.push({ email: user.username, reason: 'No email' });
+        continue;
+      }
+      try {
+        await this.sendAccessEmail(org.name, user.username, user.email);
+        sent += 1;
+      } catch (error) {
+        this.logger.error(
+          `bulk-members: access email to ${user.email} failed: ${error?.message}`,
+        );
+        failed.push({ email: user.email, reason: error?.message ?? 'Failed' });
+      }
+    }
+    return { sent, skipped: memberIds.length - members.length, failed };
+  }
+
+  private selectableMembers(
+    organizationId: string,
+    memberIds: number[],
+  ): Prisma.OrganizationMemberWhereInput {
+    return { organizationId, id: { in: memberIds }, role: { not: 'OWNER' } };
+  }
+
+  private async sendAccessEmail(
+    teamName: string,
+    username: string,
+    email: string,
+  ) {
+    const token = uuidv4();
+    await this.requestChangePasswordRepo.create({
+      data: {
+        email,
+        username,
+        token,
+        status: 'PENDING',
+        expiresAt: dayjs().add(ACCESS_LINK_TTL_DAYS, 'day').toDate(),
+      },
+    });
+    const { data } = await firstValueFrom(
+      this.httpService.post(`${configs().emailApiUrl}/email/send`, {
+        to: email,
+        subject: `Your Ai Cave account for ${teamName}`,
+        template: 'account-access',
+        context: {
+          teamName,
+          username,
+          email,
+          expires_in: `${ACCESS_LINK_TTL_DAYS} days`,
+          action_url: `${configs().frontendUrl}/change-password?token=${token}`,
+        },
+      }),
+    );
+    // email-api reports SMTP failures in the body instead of an HTTP error
+    if (!data?.success) throw new Error(data?.error ?? 'Email not sent');
+    this.logger.log(`bulk-members: access email sent to ${email}`);
+  }
 
   /** project ที่ยังไม่ถูกลบของ org พร้อมยอด credit ที่แจกให้ member แล้ว — ใช้เติม Select ในตาราง */
   async listProjects(organizationId: string, authUser: AuthUser | undefined) {

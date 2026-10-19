@@ -49,7 +49,7 @@ export class OrganizationMembersService {
       where: { token },
     });
     return this.organizationMemberRepo.findOne({
-      where: { organizationId, userId: user?.userId },
+      where: { organizationId, userId: user?.userId, status: 'active' },
     });
   }
   update(

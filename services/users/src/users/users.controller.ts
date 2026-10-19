@@ -11,6 +11,8 @@ import {
 import { UsersService } from './users.service';
 import { Prisma } from '@prisma/client';
 import { RegisterUserDto } from './dto/register-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { AuthUser, CurrentUser } from '@ai-media/share';
 
 @Controller('users')
 export class UsersController {
@@ -44,6 +46,14 @@ export class UsersController {
   @Post('confirm-change-password')
   confirmChangePassword(@Body() body: any) {
     return this.usersService.confirmChangePassword(body);
+  }
+
+  @Post('me/change-password')
+  changeMyPassword(
+    @Body() dto: ChangePasswordDto,
+    @CurrentUser() authUser: AuthUser | undefined,
+  ) {
+    return this.usersService.changeMyPassword(authUser, dto);
   }
 
   @Get()

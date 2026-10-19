@@ -37,7 +37,11 @@ export class UploadAccessService {
       throw new ForbiddenException('organizationId is required');
     }
     const member = await this.orgMemberRepo.findOne({
-      where: { organizationId: target.organizationId, userId: user.userId },
+      where: {
+        organizationId: target.organizationId,
+        userId: user.userId,
+        status: 'active',
+      },
     });
     if (!member) {
       throw new ForbiddenException('Not a member of this organization');

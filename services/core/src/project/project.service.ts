@@ -75,7 +75,7 @@ export class ProjectService {
     userId: string,
     organizationId?: string,
   ): Promise<OrganizationRole | null> {
-    const whereClause: any = { userId };
+    const whereClause: any = { userId, status: 'active' };
     if (organizationId) {
       whereClause.organizationId = organizationId;
     }

@@ -95,10 +95,25 @@ export class GenerateHelperService {
       throw new BadRequestException('User not found');
     }
 
+    const project = await this.projectRepo.findOne({
+      where: { id: projectId },
+      select: { organizationId: true },
+    });
+    // A member disabled in the project's organization counts as not a member
     const projectMember = await this.projectMemberRepo.findOne({
       where: {
         projectId: projectId,
         userId: user.userId,
+        ...(project?.organizationId && {
+          users: {
+            organizationMembers: {
+              none: {
+                organizationId: project.organizationId,
+                status: 'inactive',
+              },
+            },
+          },
+        }),
       },
     });
 

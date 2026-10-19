@@ -6,10 +6,12 @@ import {
   BadRequestException,
   InternalServerErrorException,
   NotFoundException,
+  ForbiddenException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
 import { RegisterUserDto } from './dto/register-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import {
   UsersRepository,
   GroupsRepository,
@@ -23,6 +25,7 @@ import {
   OrganizationSubscriptionRepository,
   CreditBalanceRepository,
   LlmGatewayService,
+  AuthUser,
 } from '@ai-media/share';
 import { v4 as uuidv4 } from 'uuid';
 import * as dayjs from 'dayjs';
@@ -660,6 +663,44 @@ export class UsersService {
       data: { status: 'ACCEPTED' },
     });
 
+    return { message: 'Password updated successfully' };
+  }
+
+  /** เปลี่ยนรหัสของตัวเอง — ยืนยันรหัสเดิมด้วย Keycloak password grant ก่อน */
+  async changeMyPassword(
+    authUser: AuthUser | undefined,
+    dto: ChangePasswordDto,
+  ) {
+    // 403 not 401 — same reasoning as bulk-members: a 401 makes the frontend loop on re-login
+    if (!authUser) throw new ForbiddenException('Missing authenticated user');
+    const user = await this.userRepo.findOne({
+      where: { userId: authUser.userId },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    try {
+      await this.keycloakService.login({
+        username: user.username,
+        password: dto.currentPassword,
+      });
+    } catch {
+      // login() logs the Keycloak reason; Google/Microsoft-only accounts also land here
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    const passwordPolicy = await this.keycloakService.getPasswordPolicy();
+    this.validatePasswordPolicy(dto.newPassword, passwordPolicy);
+
+    try {
+      await this.keycloakService.updateUser(user.token, {
+        password: dto.newPassword,
+      });
+    } catch (error) {
+      Logger.error(
+        `Failed to change password for ${user.userId}: ${error?.message}`,
+      );
+      throw new InternalServerErrorException('Failed to update password');
+    }
     return { message: 'Password updated successfully' };
   }
 

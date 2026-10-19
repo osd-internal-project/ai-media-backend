@@ -12,8 +12,11 @@ import {
   PrismaTransactionService,
   ProjectMemberRepository,
   ProjectRepository,
+  RequestChangePasswordRepository,
   UsersRepository,
 } from '@ai-media/share';
+import { HttpService } from '@nestjs/axios';
+import { of } from 'rxjs';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
 import { OrganizationBulkMemberService } from './organization-bulk-member.service';
 import { BulkMemberRowDto } from './dto/bulk-add-members.dto';
@@ -47,7 +50,14 @@ describe('OrganizationBulkMemberService', () => {
   let db: FakeDb;
 
   const organizationRepo = { findOne: jest.fn() };
-  const memberRepo = { findMany: jest.fn(), create: jest.fn() };
+  const memberRepo = {
+    findMany: jest.fn(),
+    create: jest.fn(),
+    deleteMany: jest.fn(),
+    updatemany: jest.fn(),
+  };
+  const requestChangePasswordRepo = { create: jest.fn() };
+  const http = { post: jest.fn() };
   const projectRepo = { findMany: jest.fn(), create: jest.fn() };
   const projectMemberRepo = { findMany: jest.fn(), create: jest.fn() };
   const usersRepo = { findMany: jest.fn(), create: jest.fn() };
@@ -116,6 +126,11 @@ describe('OrganizationBulkMemberService', () => {
         { provide: CreditBalanceRepository, useValue: creditBalanceRepo },
         { provide: KeycloakService, useValue: keycloak },
         { provide: PrismaTransactionService, useValue: transaction },
+        {
+          provide: RequestChangePasswordRepository,
+          useValue: requestChangePasswordRepo,
+        },
+        { provide: HttpService, useValue: http },
       ],
     }).compile();
     service = moduleRef.get(OrganizationBulkMemberService);
@@ -423,6 +438,70 @@ describe('OrganizationBulkMemberService', () => {
       expect(keycloak.createUser).not.toHaveBeenCalled();
       expect(usersRepo.create).not.toHaveBeenCalled();
       expect(memberRepo.create.mock.calls[0][0].data.userId).toBe('u-1');
+    });
+  });
+  describe('member actions', () => {
+    const scoped = {
+      organizationId: ORG,
+      id: { in: [1, 2, 3] },
+      role: { not: 'OWNER' },
+    };
+
+    it('removes only non-owner members of this org', async () => {
+      memberRepo.deleteMany.mockResolvedValue({ count: 2 });
+      const result = await service.removeMembers(ORG, [1, 2, 3], admin);
+      expect(memberRepo.deleteMany).toHaveBeenCalledWith({ where: scoped });
+      expect(result).toEqual({ removed: 2, skipped: 1 });
+    });
+
+    it('sets the per-org status without touching Keycloak', async () => {
+      memberRepo.updatemany.mockResolvedValue({ count: 3 });
+      const result = await service.setMembersStatus(
+        ORG,
+        [1, 2, 3],
+        'inactive',
+        admin,
+      );
+      expect(memberRepo.updatemany).toHaveBeenCalledWith({
+        where: scoped,
+        data: { status: 'inactive' },
+      });
+      expect(keycloak.createUser).not.toHaveBeenCalled();
+      expect(result).toEqual({ updated: 3, skipped: 0 });
+    });
+
+    it('rejects non-admins', async () => {
+      const member: AuthUser = { userId: 'u', token: 't', role: 'USER' };
+      await expect(service.removeMembers(ORG, [1], member)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(memberRepo.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('counts access emails the email-api did not send as failed', async () => {
+      db.org = { organizationId: ORG, maxUserAccess: 10, name: 'Team' } as FakeDb['org'];
+      memberRepo.findMany.mockResolvedValue([{ userId: 'u-a' }, { userId: 'u-b' }]);
+      usersRepo.findMany.mockResolvedValue([
+        { username: 'alice', email: 'alice@example.com' },
+        { username: 'bob', email: 'bob@example.com' },
+      ]);
+      http.post
+        .mockReturnValueOnce(of({ data: { success: true } }))
+        .mockReturnValueOnce(of({ data: { success: false, error: 'SMTP down' } }));
+
+      const result = await service.sendAccessEmails(ORG, [1, 2, 3], admin);
+
+      expect(result).toEqual({
+        sent: 1,
+        skipped: 1,
+        failed: [{ email: 'bob@example.com', reason: 'SMTP down' }],
+      });
+      expect(requestChangePasswordRepo.create).toHaveBeenCalledTimes(2);
+      expect(http.post.mock.calls[0][1]).toMatchObject({
+        to: 'alice@example.com',
+        template: 'account-access',
+        context: { teamName: 'Team', username: 'alice' },
+      });
     });
   });
 });
