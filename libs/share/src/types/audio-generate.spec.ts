@@ -44,12 +44,30 @@ describe('validateAudioRequest', () => {
       'use either audio references or a reference image, not both',
     ],
     [{ ...valid, image: ['a.png', 'b.png'] }, 'at most 1 reference image'],
-    [{ ...valid, sampleRate: 0 }, 'sampleRate must be a positive integer'],
+    [
+      { ...valid, sampleRate: 22050 },
+      'sampleRate must be one of 8000, 16000, 24000, 32000, 44100, 48000',
+    ],
     [
       { ...valid, pitchRate: Number.NaN },
       'speechRate, loudnessRate and pitchRate must be numbers',
     ],
+    [{ ...valid, speechRate: -51 }, 'speechRate must be between -50 and 100'],
+    [{ ...valid, loudnessRate: 101 }, 'loudnessRate must be between -50 and 100'],
+    [{ ...valid, pitchRate: 13 }, 'pitchRate must be between -12 and 12'],
   ])('rejects case %#', (body, message) => {
     expect(validateAudioRequest(body as never)).toBe(message);
+  });
+
+  it('accepts the documented boundary values', () => {
+    expect(
+      validateAudioRequest({
+        ...valid,
+        sampleRate: 48000,
+        speechRate: -50,
+        loudnessRate: 100,
+        pitchRate: -12,
+      } as never),
+    ).toBeNull();
   });
 });

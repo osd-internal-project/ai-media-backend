@@ -51,14 +51,29 @@ const makeJob = (data = jobData(), attemptsMade = 0) => ({
 });
 
 describe('parseAudioResponse', () => {
-  it('reads base64 audio, duration and subtitles', () => {
+  it('reads the documented response: audio, durations and subtitle.sentences', () => {
+    const sentences = [{ start_time: 0, end_time: 1800, text: 'Hello.' }];
     expect(
-      parseAudioResponse({ audio: 'AAA', duration: 4.2, sentences: [{ t: 1 }] }),
+      parseAudioResponse({
+        audio: 'AAA',
+        duration: 4.2,
+        original_duration: 4.5,
+        url: 'https://x/a.wav',
+        subtitle: { text: 'Hello.', sentences },
+      }),
     ).toEqual({
       audioBase64: 'AAA',
-      url: null,
+      url: 'https://x/a.wav',
       duration: 4.2,
-      subtitles: [{ t: 1 }],
+      originalDuration: 4.5,
+      subtitles: sentences,
+    });
+  });
+
+  it('falls back to duration when original_duration is missing', () => {
+    expect(parseAudioResponse({ audio: 'AAA', duration: 3 })).toMatchObject({
+      originalDuration: 3,
+      subtitles: null,
     });
   });
 
@@ -173,7 +188,36 @@ describe('AudioProcessor', () => {
       'proj',
       'credit',
       10,
+      10,
     );
+  });
+
+  it('charges the billed seconds and releases the rest of the hold', async () => {
+    // same shape as the seed creditFormula: ceil(min(duration ?? 120, 120) * 0.0025 * 1157.41)
+    helper.getUsedCredit.mockImplementation(
+      async (_token: number, b: { duration?: number }) => ({
+        token: 0,
+        credit: Math.ceil(Math.min(b.duration ?? 120, 120) * 0.0025 * 1157.41),
+      }),
+    );
+    post.mockResolvedValue({
+      data: { audio: 'AAAA', duration: 12, original_duration: 12.34 },
+    });
+
+    await processor.process(makeJob() as never);
+
+    expect(helper.updateUsedCreditSuccess).toHaveBeenCalledWith(
+      'u1',
+      'org',
+      'proj',
+      'credit',
+      36,
+      348,
+    );
+    expect(gallery.updateMany).toHaveBeenCalledWith({
+      where: { taskId: 't1' },
+      data: expect.objectContaining({ usedCredit: 36 }),
+    });
   });
 
   it('lets TOS fetch a returned url', async () => {
@@ -189,7 +233,12 @@ describe('AudioProcessor', () => {
   it('does not call the provider again on retry once output is stored', async () => {
     const job = makeJob(
       jobData({
-        output: { objectName: 'x.mp3', duration: null, subtitles: null },
+        output: {
+          objectName: 'x.mp3',
+          duration: null,
+          originalDuration: null,
+          subtitles: null,
+        },
       }),
       1,
     );

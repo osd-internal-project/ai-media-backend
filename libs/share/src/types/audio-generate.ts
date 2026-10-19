@@ -4,6 +4,13 @@ export type AudioFormat = (typeof AUDIO_FORMATS)[number];
 
 export const AUDIO_MAX_PROMPT_LENGTH = 3000;
 export const AUDIO_MAX_REFERENCES = 3;
+export const AUDIO_SAMPLE_RATES = [8000, 16000, 24000, 32000, 44100, 48000];
+/** ช่วงค่า [min, max] ตาม Seed Audio `audio_config` */
+export const AUDIO_RATE_RANGES = {
+  speechRate: [-50, 100],
+  loudnessRate: [-50, 100],
+  pitchRate: [-12, 12],
+} as const;
 
 /** ช่องอ้างอิงที่ N ตรงกับ `@AudioN` ใน prompt — ใส่ได้อย่างใดอย่างหนึ่ง */
 export interface AudioReference {
@@ -76,15 +83,20 @@ export function validateAudioRequest(
   if (
     body.sampleRate !== undefined &&
     body.sampleRate !== null &&
-    !(Number.isInteger(body.sampleRate) && body.sampleRate > 0)
+    !AUDIO_SAMPLE_RATES.includes(body.sampleRate)
   )
-    return 'sampleRate must be a positive integer';
+    return `sampleRate must be one of ${AUDIO_SAMPLE_RATES.join(', ')}`;
   if (
     ![body.speechRate, body.loudnessRate, body.pitchRate].every(
       isOptionalNumber,
     )
   )
     return 'speechRate, loudnessRate and pitchRate must be numbers';
+  for (const [key, [min, max]] of Object.entries(AUDIO_RATE_RANGES)) {
+    const value = body[key as keyof typeof AUDIO_RATE_RANGES];
+    if (typeof value === 'number' && (value < min || value > max))
+      return `${key} must be between ${min} and ${max}`;
+  }
 
   return null;
 }

@@ -61,6 +61,8 @@ interface AudioProcessJob {
 interface AudioOutput {
   objectName: string;
   duration: number | null;
+  /** วินาทีที่ provider คิดเงิน — ใช้ตัดเครดิตจริง */
+  originalDuration: number | null;
   subtitles: unknown[] | null;
 }
 
@@ -68,6 +70,7 @@ export interface ParsedAudioResponse {
   audioBase64: string | null;
   url: string | null;
   duration: number | null;
+  originalDuration: number | null;
   subtitles: unknown[] | null;
 }
 
@@ -96,11 +99,17 @@ export function parseAudioResponse(raw: unknown): ParsedAudioResponse {
   if (!audioBase64 && !url) {
     throw new Error('Seed Audio response has neither audio nor url');
   }
-  const subtitles = data.sentences ?? data.utterances;
+  // docs: `subtitle.sentences` (มีเฉพาะเมื่อเปิด enable_subtitle)
+  const subtitles = data.subtitle?.sentences ?? data.sentences;
+  const duration = typeof data.duration === 'number' ? data.duration : null;
   return {
     audioBase64,
     url,
-    duration: typeof data.duration === 'number' ? data.duration : null,
+    duration,
+    originalDuration:
+      typeof data.original_duration === 'number'
+        ? data.original_duration
+        : duration,
     subtitles: Array.isArray(subtitles) ? subtitles : null,
   };
 }
@@ -197,12 +206,13 @@ export class AudioProcessor extends WorkerHost implements OnModuleDestroy {
       const model = await this.masterModelTypeRepo.findOne({
         where: { modelType: body.model, type: 'audio', isActive: true },
       });
-      const credit = await this.generateHelperService.getUsedCredit(
+      // body ยังไม่มี duration → สูตรคืนยอดที่ core hold ไว้ (เพดาน 120s)
+      const held = await this.generateHelperService.getUsedCredit(
         0,
         body,
         model,
       );
-      if (!credit) {
+      if (!held) {
         throw new UnrecoverableError(
           `audio pricing is not configured for model ${body.model}`,
         );
@@ -238,6 +248,22 @@ export class AudioProcessor extends WorkerHost implements OnModuleDestroy {
         // retry หลังจากนี้ (เช่น DB ล่ม) ไม่ต้องเรียก provider ซ้ำ
         await job.updateData({ ...(job.data as AudioProcessJob), output });
       }
+
+      // ตัดตามวินาทีที่ provider คิดเงินจริง แล้วคืนส่วนต่างจากยอด hold
+      const credit =
+        (output.originalDuration !== null &&
+          output.originalDuration !== undefined &&
+          (await this.generateHelperService.getUsedCredit(
+            0,
+            { ...body, duration: output.originalDuration },
+            model,
+          ))) ||
+        held;
+      this.logger.log(
+        `${tag(taskId)} 💰 credit held=${held.credit} actual=${
+          credit.credit
+        } (originalDuration=${output.originalDuration ?? 'n/a'}s)`,
+      );
 
       const generateConfig = {
         ...((await this.readPendingConfig(taskId)) ?? {}),
@@ -278,6 +304,7 @@ export class AudioProcessor extends WorkerHost implements OnModuleDestroy {
         body.projectId,
         'credit',
         credit.credit,
+        held.credit,
       );
       if (updated) {
         await this.redis.set(
@@ -438,6 +465,7 @@ export class AudioProcessor extends WorkerHost implements OnModuleDestroy {
     return {
       objectName,
       duration: parsed.duration,
+      originalDuration: parsed.originalDuration,
       subtitles: parsed.subtitles,
     };
   }
