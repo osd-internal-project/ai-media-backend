@@ -259,7 +259,20 @@ export class VideoProcessor extends WorkerHost {
         const payload = await this.buildPayload(body, sendConfig, taskId);
         // seedance2 ไม่รับรูปคนจริงเป็น URL — แปลงทุกรูปเป็น asset:// ก่อนส่ง
         if (sendConfig?.type === 'seedance2') {
-          assets = await this.byteplusAsset.swapImagesToAssets(payload, taskId);
+          assets = await this.byteplusAsset.swapImagesToAssets(
+            payload,
+            taskId,
+            (current, total) =>
+              this.publishToCore(clientId, 'worker:video-progress', {
+                taskId,
+                stage: 'preparing',
+                current,
+                total,
+                timestamp: new Date().toISOString(),
+                type: 'video',
+                projectId: body.projectId,
+              }),
+          );
         }
         let apiRes: any;
         // header มี Authorization — log แค่ payload

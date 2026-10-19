@@ -47,6 +47,24 @@ describe('ByteplusAssetService', () => {
     delete process.env.BYTEPLUS_SECRET_KEY;
   });
 
+  it('reports 0/N then k/N as each asset turns Active', async () => {
+    mockApi(['Active', 'Active', 'Active']);
+    const onAssetReady = jest.fn().mockResolvedValue(undefined);
+    const payload = {
+      content: [1, 2, 3].map((i) => ({
+        type: 'image_url',
+        image_url: { url: `https://s3/${i}.png` },
+      })),
+    };
+    await service.swapImagesToAssets(payload, 't1', onAssetReady);
+    expect(onAssetReady.mock.calls).toEqual([
+      [0, 3],
+      [1, 3],
+      [2, 3],
+      [3, 3],
+    ]);
+  });
+
   it('swaps every image_url to asset:// and leaves video/audio/text alone', async () => {
     mockApi(['Processing', 'Active', 'Active']);
     const payload = {

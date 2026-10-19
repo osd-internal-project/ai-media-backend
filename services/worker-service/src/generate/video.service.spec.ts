@@ -360,6 +360,32 @@ describe('VideoProcessor (callback + poll-check)', () => {
       expect(assetSvc.cleanup).not.toHaveBeenCalled();
     });
 
+    it('submit publishes preparing k/N for the asset step', async () => {
+      assetSvc.swapImagesToAssets.mockImplementation(
+        async (_payload, _taskId, onAssetReady) => {
+          await onAssetReady(0, 1);
+          await onAssetReady(1, 1);
+          return assets;
+        },
+      );
+      axiosPost.mockResolvedValue({ data: { id: 'cgt-1' } });
+      await processor.process(seedance2Job());
+
+      const publish = (processor as any).redisPublisher.publish as jest.Mock;
+      const preparing = publish.mock.calls
+        .map(([, raw]) => JSON.parse(raw))
+        .filter(
+          (m) =>
+            m.event === 'worker:video-progress' &&
+            m.payload.stage === 'preparing',
+        )
+        .map((m) => [m.clientId, m.payload.current, m.payload.total]);
+      expect(preparing).toEqual([
+        ['c1', 0, 1],
+        ['c1', 1, 1],
+      ]);
+    });
+
     it('video POST rejected → assets are deleted', async () => {
       assetSvc.swapImagesToAssets.mockResolvedValue(assets);
       axiosPost.mockRejectedValue({

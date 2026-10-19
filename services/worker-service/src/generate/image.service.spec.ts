@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { IMAGE_JOB_SWEEP } from '@ai-media/share';
 import { ImageProcessor } from './image.service';
 
@@ -224,5 +225,61 @@ describe('ImageProcessor seedream2 payload', () => {
     );
     expect(storageUrl.toProviderUrls).toHaveBeenCalledWith(refs.slice(0, 10));
     expect(payload.image).toHaveLength(10);
+  });
+});
+
+describe('ImageProcessor stage events', () => {
+  it('tells the front the task left the queue before the sync provider call', async () => {
+    const post = jest
+      .spyOn(axios, 'post')
+      .mockRejectedValue({ response: { status: 400, data: {} } });
+    const processor = new ImageProcessor(
+      { get: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { getUsedCredit: jest.fn().mockResolvedValue(0) } as never,
+      { findOne: jest.fn().mockResolvedValue({}) } as never,
+      { upsertJobScheduler: jest.fn() } as never,
+    );
+    const priv = processor as unknown as Private & { buildPayload: jest.Mock };
+    priv.publishToCore = jest.fn();
+    priv.updateTaskStatus = jest.fn();
+    priv.buildPayload = jest.fn().mockResolvedValue({});
+
+    await processor
+      .process({
+        id: '1',
+        name: 'image',
+        data: {
+          taskId: 't1',
+          clientId: 'c1',
+          userId: 'u1',
+          sendApi: 'https://gw/img',
+          sendConfig: { configType: 'application/json' },
+          body: { projectId: 'p1', organizationId: 'o1', model: 'm' },
+        },
+      })
+      .catch(() => undefined);
+
+    const generating = priv.publishToCore.mock.calls.findIndex(
+      ([, event, payload]) =>
+        event === 'worker:progress' && payload.stage === 'generating',
+    );
+    expect(generating).toBeGreaterThanOrEqual(0);
+    expect(priv.publishToCore.mock.calls[generating][2]).toMatchObject({
+      taskId: 't1',
+      projectId: 'p1',
+      type: 'image',
+    });
+    expect(
+      priv.publishToCore.mock.invocationCallOrder[generating],
+    ).toBeLessThan(post.mock.invocationCallOrder[0]);
+    post.mockRestore();
   });
 });

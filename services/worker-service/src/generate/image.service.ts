@@ -183,6 +183,14 @@ export class ImageProcessor extends WorkerHost {
         const payload = await this.buildPayload(body, sendConfig);
         // ไม่ log axiosConfig — headers มี Authorization ของ LLM gateway
         console.log('API Payload:', sendApi, payload);
+        // provider ตอบแบบ sync (นานสุดของงาน) — แจ้ง front ว่าพ้นคิวแล้ว กำลังสร้าง
+        await this.publishToCore(clientId, 'worker:progress', {
+          taskId,
+          stage: 'generating',
+          percentage: 15,
+          projectId: body.projectId,
+          type: 'image',
+        });
         let apiRes: any;
         try {
           apiRes = await axios.post(sendApi, payload, axiosConfig);

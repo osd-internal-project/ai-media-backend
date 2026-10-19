@@ -83,6 +83,7 @@ export class ByteplusAssetService {
   async swapImagesToAssets(
     payload: { content?: ContentItem[] },
     taskId: string,
+    onAssetReady?: (done: number, total: number) => Promise<void>,
   ): Promise<TaskAssets | null> {
     const images = (payload.content ?? []).filter(
       (c): c is ContentItem & { image_url: { url: string } } =>
@@ -95,12 +96,15 @@ export class ByteplusAssetService {
       const groupId = await this.createGroup(taskId);
       assets = { groupId, assetIds: [] };
       const created = assets;
+      let done = 0;
+      await onAssetReady?.(0, images.length);
       await Promise.all(
         images.map(async (item) => {
           const assetId = await this.createAsset(groupId, item.image_url.url);
           created.assetIds.push(assetId);
           await this.waitActive(taskId, assetId);
           item.image_url.url = `asset://${assetId}`;
+          await onAssetReady?.(++done, images.length);
         }),
       );
     } catch (error) {
