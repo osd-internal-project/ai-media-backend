@@ -75,6 +75,16 @@ export class AuthController {
     return { exists: !!user, ...user };
   }
 
+  /** SSO first sign-in for an email `check` did not find — same shape as `check`. */
+  @Post('sso/provision')
+  async provisionSso(@Body() body: { accessToken: string }) {
+    if (!body?.accessToken) {
+      throw new BadRequestException('Missing access token');
+    }
+    const user = await this.authService.provisionSsoUser(body.accessToken);
+    return { exists: true, ...user };
+  }
+
   @Post('validate')
   async validate(@Headers('authorization') authHeader: string) {
     if (!authHeader) {

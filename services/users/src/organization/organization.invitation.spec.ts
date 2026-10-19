@@ -1,6 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
+import { NEVER } from 'rxjs';
 import {
   CreditBalanceRepository,
   InvitationRepository,
@@ -113,5 +114,25 @@ describe('OrganizationService invitations', () => {
   it('returns nothing for an empty email', async () => {
     expect(await service.findPendingInvitations('')).toEqual([]);
     expect(invitationRepo.findMany).not.toHaveBeenCalled();
+  });
+
+  it('responds without waiting for a hung email send', async () => {
+    usersRepo.findOne.mockResolvedValue(null);
+    service['organizationRepo'].findOne = jest
+      .fn()
+      .mockResolvedValue({ name: 'Org' });
+    const post = service['httpService'].post as jest.Mock;
+    post.mockReturnValue(NEVER);
+
+    const result = await service.createInvitation({
+      email: 'b@example.com',
+      organizationId: 'org-1',
+    } as Parameters<typeof service.createInvitation>[0]);
+
+    expect(result.message).toBe('Invitation sent');
+    expect(post).toHaveBeenCalledWith(
+      expect.stringContaining('/email/send'),
+      expect.objectContaining({ to: 'b@example.com', template: 'invite' }),
+    );
   });
 });

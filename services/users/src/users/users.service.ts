@@ -356,81 +356,14 @@ export class UsersService {
     });
 
     const userId = newUser.userId;
-    const personalOrg = await this.organizationRepo.create({
-      data: {
-        name: `${register.username} Personal`,
-        slug: `${register.username}-personal`,
-        type: 'personal',
-        createdById: userId,
-        status: true,
-        // packageImageAmount: maxDefaultImage,
-        // packageTokenAmount: maxDefaultToken,
-        // remainImageAmount: maxDefaultImage,
-        // remainTokenAmount: maxDefaultToken,
+    await this.provisionPersonalAccount(userId, register.username);
 
-        maxUserAccess: 1,
+    await this.registerRepo.update({
+      where: { token: register.token },
+      data: {
+        isVerify: true,
       },
     });
-
-    if (personalOrg) {
-      await this.provisionLlmApiKey(personalOrg.organizationId);
-
-      await this.organizationMemberRepo.create({
-        data: {
-          organizationId: personalOrg.organizationId,
-          userId: userId,
-          role: 'OWNER',
-        },
-      });
-      await this.creditBalanceRepo.create({
-        data: {
-          organizationId: personalOrg.organizationId,
-          currentCycleBalance: 0,
-          currentCycleImage: 0,
-          onTopBalance: 50000,
-          onTopImage: 3,
-        },
-      });
-      const personalProject = await this.projectRepo.create({
-        data: {
-          name: `${register.username} Project`,
-          organizationId: personalOrg.organizationId,
-          status: 'active',
-          limitCreditAllowance: 50000,
-          limitImageAllowance: 3,
-          usedCreditAllowance: 0,
-          usedImageAllowance: 0,
-        },
-      });
-
-      if (personalProject) {
-        await this.projectMemberRepo.create({
-          data: {
-            projectId: personalProject.id,
-            userId: userId,
-            role: 'OWNER',
-            maxImages: 3,
-            maxToken: 50000,
-            limitCreditAllowance: 50000,
-            limitImageAllowance: 3,
-          },
-        });
-      }
-
-      await this.registerRepo.update({
-        where: { token: register.token },
-        data: {
-          isVerify: true,
-        },
-      });
-
-      await this.userRepo.update({
-        where: { userId },
-        data: {
-          recentOrganizationId: personalOrg.organizationId,
-        },
-      });
-    }
 
     return { message: 'User registered successfully', userId };
   }
@@ -575,6 +508,10 @@ export class UsersService {
   }
 
   async createFirstUser(register: { email: string, username: string, fullname: string, phoneNumber: string, tokenKeycloak: string, firstName: string }) {
+    // Prisma ตัด `email: undefined` ทิ้ง → findOne จะได้ user คนแรกของตาราง
+    if (!register.email) {
+      throw new BadRequestException('Identity provider returned no email');
+    }
     const existingUser = await this.userRepo.findOne({
       where: { email: register.email },
       select: {
@@ -601,23 +538,39 @@ export class UsersService {
     });
 
     const userId = newUser.userId;
-    const freePlan = await this.planRepo.findOne({
-      where: { isDefault: true },
+    await this.provisionPersonalAccount(
+      userId,
+      register.firstName || register.username,
+    );
+
+    // Return the newly created user
+    return this.userRepo.findOne({
+      where: { userId },
+      select: {
+        recentOrganizationId: true,
+        username: true,
+        email: true,
+        status: true,
+        userId: true,
+        role: true,
+      }
     });
-    const freePlanDetails = freePlan.detailJson as any;
-    const maxDefaultImage = parseInt(freePlanDetails?.packageImageAmount) || 0;
-    const maxDefaultToken = parseInt(freePlanDetails?.packageTokenAmount) || 0;
+  }
+
+  /** personal org + OWNER + CreditBalance 50000/3 + project ของ user ใหม่ — ใช้ร่วมกันระหว่าง web register และ SSO */
+  private async provisionPersonalAccount(userId: string, displayName: string) {
     const personalOrg = await this.organizationRepo.create({
       data: {
-        name: `${register.firstName} Personal`,
-        slug: `${register.firstName}-personal`,
+        name: `${displayName} Personal`,
+        slug: `${displayName}-personal`,
         type: 'personal',
         createdById: userId,
         status: true,
-        packageImageAmount: maxDefaultImage,
-        packageTokenAmount: maxDefaultToken,
-        remainImageAmount: maxDefaultImage,
-        remainTokenAmount: maxDefaultToken,
+        // packageImageAmount: maxDefaultImage,
+        // packageTokenAmount: maxDefaultToken,
+        // remainImageAmount: maxDefaultImage,
+        // remainTokenAmount: maxDefaultToken,
+
         maxUserAccess: 1,
       },
     });
@@ -632,16 +585,24 @@ export class UsersService {
           role: 'OWNER',
         },
       });
-
+      await this.creditBalanceRepo.create({
+        data: {
+          organizationId: personalOrg.organizationId,
+          currentCycleBalance: 0,
+          currentCycleImage: 0,
+          onTopBalance: 50000,
+          onTopImage: 3,
+        },
+      });
       const personalProject = await this.projectRepo.create({
         data: {
-          name: `${register.firstName} Project`,
+          name: `${displayName} Project`,
           organizationId: personalOrg.organizationId,
           status: 'active',
-          remainImageAmount: maxDefaultImage,
-          remainTokenAmount: maxDefaultToken,
-          accessImageAmount: maxDefaultImage,
-          accessTokenAmount: maxDefaultToken,
+          limitCreditAllowance: 50000,
+          limitImageAllowance: 3,
+          usedCreditAllowance: 0,
+          usedImageAllowance: 0,
         },
       });
 
@@ -651,8 +612,10 @@ export class UsersService {
             projectId: personalProject.id,
             userId: userId,
             role: 'OWNER',
-            maxImages: maxDefaultImage,
-            maxToken: maxDefaultToken,
+            maxImages: 3,
+            maxToken: 50000,
+            limitCreditAllowance: 50000,
+            limitImageAllowance: 3,
           },
         });
       }
@@ -664,19 +627,6 @@ export class UsersService {
         },
       });
     }
-
-    // Return the newly created user
-    return this.userRepo.findOne({
-      where: { userId },
-      select: {
-        recentOrganizationId: true,
-        username: true,
-        email: true,
-        status: true,
-        userId: true,
-        role: true,
-      }
-    });
   }
 
   async confirmChangePassword(body: any) {

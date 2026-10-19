@@ -246,25 +246,8 @@ export class OrganizationService {
       },
     };
 
-    try {
-      const emailApiUrl = configs().emailApiUrl;
-      const { data } = await firstValueFrom(
-        this.httpService.post(`${emailApiUrl}/email/send`, emailPayload),
-      );
-      Logger.log(`Email sent: ${JSON.stringify(data)}`);
-    } catch (error) {
-      Logger.error(`Failed to send email: ${error.message}`);
-      // Not throwing error to avoid rolling back invitation? Or should we?
-      // Usually better to log failure but leave invitation pending so admin can resend or manual link.
-    }
-
-    // Mock Email Dispatch (Legacy)
-    console.log(
-      `[Email Service] Sending invitation to ${dto.email} with link: ${
-        configs().frontendUrl
-      }/accept-invite?token=${token}`,
-    );
-
+    // SMTP relay อาจค้างนานกว่า ingress 60s — ไม่รอ ให้ invite ตอบทันที
+    void this.sendInvitationEmail(emailPayload);
     void this.notifyInvitationChanged(dto.email);
 
     return { message: 'Invitation sent', token };
@@ -292,6 +275,18 @@ export class OrganizationService {
       expiresAt: invite.expiresAt,
       createdAt: invite.createdAt,
     }));
+  }
+
+  /** ส่งเมลเชิญผ่าน email-api — พังได้โดยไม่กระทบการเชิญ (invitation ยัง PENDING ให้ส่งซ้ำได้) */
+  private async sendInvitationEmail(payload: Record<string, unknown>) {
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.post(`${configs().emailApiUrl}/email/send`, payload),
+      );
+      Logger.log(`Email sent: ${JSON.stringify(data)}`);
+    } catch (error) {
+      Logger.error(`Failed to send email: ${error.message}`);
+    }
   }
 
   /** ปลุก socket ของผู้ถูกเชิญผ่าน core — พังได้โดยไม่กระทบการเชิญ */

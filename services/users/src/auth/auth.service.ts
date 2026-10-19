@@ -4,14 +4,30 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { IdpHint, KeycloakService } from '../keycloak/keycloak.service';
-import { UsersRepository } from '@ai-media/share';
+import { KeycloakJwtVerifier, UsersRepository } from '@ai-media/share';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly keycloakService: KeycloakService,
     private readonly usersRepo: UsersRepository,
+    private readonly jwtVerifier: KeycloakJwtVerifier,
   ) { }
+
+  /**
+   * First SSO sign-in: creates the local user behind a Keycloak access token.
+   * Identity comes only from the verified token, never from the request body.
+   */
+  async provisionSsoUser(accessToken: string) {
+    const claims = await this.jwtVerifier.verify(accessToken).catch((error: Error) => {
+      throw new UnauthorizedException(error.message);
+    });
+    const user = await this.keycloakService.ensureLocalUser(claims.email, claims.sub);
+    if (!user) {
+      throw new UnauthorizedException('No Keycloak user for this token');
+    }
+    return user;
+  }
 
   async login(loginDto: any) {
     // 1. Check if user exists in local database

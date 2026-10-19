@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { KeycloakModule } from '../keycloak/keycloak.module';
-import { PrismaModule } from '@ai-media/share';
+import { KeycloakJwtVerifier, PrismaModule } from '@ai-media/share';
 
 @Module({
   imports: [KeycloakModule, PrismaModule],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, KeycloakJwtVerifier],
 })
 export class AuthModule {}

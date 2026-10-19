@@ -22,6 +22,34 @@ interface OpenApiResponse {
   Result?: Record<string, unknown>;
 }
 
+type AssetErrorKind = 'auth' | 'rate' | 'rejected' | 'timeout' | 'other';
+
+/** error ภายใน — message มีรายละเอียด provider (ห้ามส่งถึงผู้ใช้), kind ใช้เลือกข้อความผู้ใช้ */
+export class AssetApiError extends Error {
+  constructor(message: string, readonly kind: AssetErrorKind) {
+    super(message);
+  }
+}
+
+const USER_MESSAGES: Record<AssetErrorKind, string> = {
+  rejected:
+    "Your reference image couldn't be used. Please try a different image.",
+  timeout: 'Preparing your reference image took too long. Please try again.',
+  rate: 'The service is busy right now. Please try again in a moment.',
+  auth: "We couldn't prepare your reference image right now. Please try again later.",
+  other:
+    "We couldn't prepare your reference image right now. Please try again later.",
+};
+
+const AUTH_CODES = /InvalidAccessKey|SignatureDoesNotMatch|AccessDenied/i;
+const RATE_CODES = /Limit|Throttl/i;
+
+const classify = (status: number | undefined, code = ''): AssetErrorKind => {
+  if (status === 401 || status === 403 || AUTH_CODES.test(code)) return 'auth';
+  if (status === 429 || RATE_CODES.test(code)) return 'rate';
+  return 'other';
+};
+
 const sha256Hex = (data: string) =>
   createHash('sha256').update(data).digest('hex');
 const hmac = (key: Buffer | string, data: string) =>
@@ -50,7 +78,7 @@ export class ByteplusAssetService {
 
   /**
    * แทน url ของทุก `image_url` ใน payload.content ด้วย `asset://<id>` (mutate payload)
-   * @throws เมื่อสร้าง/รอ asset ไม่สำเร็จ — asset ที่สร้างไปแล้วถูกลบก่อน throw
+   * @throws Error ที่ message อ่านได้สำหรับผู้ใช้ (ไม่มี key/รายละเอียด provider) — asset ที่สร้างแล้วถูกลบก่อน throw
    */
   async swapImagesToAssets(
     payload: { content?: ContentItem[] },
@@ -62,23 +90,32 @@ export class ByteplusAssetService {
     );
     if (images.length === 0) return null;
 
-    const groupId = await this.createGroup(taskId);
-    const assets: TaskAssets = { groupId, assetIds: [] };
+    let assets: TaskAssets | null = null;
     try {
+      const groupId = await this.createGroup(taskId);
+      assets = { groupId, assetIds: [] };
+      const created = assets;
       await Promise.all(
         images.map(async (item) => {
           const assetId = await this.createAsset(groupId, item.image_url.url);
-          assets.assetIds.push(assetId);
+          created.assetIds.push(assetId);
           await this.waitActive(taskId, assetId);
           item.image_url.url = `asset://${assetId}`;
         }),
       );
     } catch (error) {
+      const kind = error instanceof AssetApiError ? error.kind : 'other';
+      // รายละเอียดเต็มไว้ debug ใน log เท่านั้น — ผู้ใช้เห็นแค่ USER_MESSAGES
+      this.logger.error(
+        `[${taskId}] ❌ asset step failed (${kind}): ${
+          (error as Error).message
+        }`,
+      );
       await this.cleanup(taskId, assets);
-      throw error;
+      throw new Error(USER_MESSAGES[kind]);
     }
     this.logger.log(
-      `[${taskId}] ${assets.assetIds.length} image(s) → asset group=${groupId}`,
+      `[${taskId}] ${assets.assetIds.length} image(s) → asset group=${assets.groupId}`,
     );
     return assets;
   }
@@ -121,7 +158,8 @@ export class ByteplusAssetService {
       ProjectName: this.projectName,
     });
     const id = String(res.Id ?? '');
-    if (!id) throw new Error('CreateAssetGroup returned no Id');
+    if (!id)
+      throw new AssetApiError('CreateAssetGroup returned no Id', 'other');
     this.logger.log(`[${taskId}] asset group created ${id}`);
     return id;
   }
@@ -134,7 +172,7 @@ export class ByteplusAssetService {
       ProjectName: this.projectName,
     });
     const id = String(res.Id ?? '');
-    if (!id) throw new Error('CreateAsset returned no Id');
+    if (!id) throw new AssetApiError('CreateAsset returned no Id', 'other');
     this.logger.log(`asset created ${id} in ${groupId}`);
     return id;
   }
@@ -155,14 +193,12 @@ export class ByteplusAssetService {
         this.logger.error(
           `[${taskId}] asset ${assetId} Failed: ${JSON.stringify(res)}`,
         );
-        const err = res.Error as { Message?: string } | undefined;
-        throw new Error(
-          err?.Message ?? 'Reference image was rejected by the provider',
-        );
+        throw new AssetApiError(`asset ${assetId} Failed`, 'rejected');
       }
       if (Date.now() >= deadline) {
-        throw new Error(
-          `Reference image processing timed out (asset ${assetId} status=${status})`,
+        throw new AssetApiError(
+          `asset ${assetId} timed out (status=${status})`,
+          'timeout',
         );
       }
       this.logger.log(`[${taskId}] asset ${assetId} status=${status} — wait`);
@@ -178,7 +214,10 @@ export class ByteplusAssetService {
     const ak = process.env.BYTEPLUS_ACCESS_KEY;
     const sk = process.env.BYTEPLUS_SECRET_KEY;
     if (!ak || !sk) {
-      throw new Error('BYTEPLUS_ACCESS_KEY / BYTEPLUS_SECRET_KEY not set');
+      throw new AssetApiError(
+        'BYTEPLUS_ACCESS_KEY / BYTEPLUS_SECRET_KEY not set',
+        'auth',
+      );
     }
     const payload = JSON.stringify(body);
     const query = `Action=${action}&Version=${ASSET_API_VERSION}`;
@@ -191,17 +230,22 @@ export class ByteplusAssetService {
       );
       const apiError = res.data?.ResponseMetadata?.Error;
       if (apiError) {
-        throw new Error(`${action}: ${apiError.Code} ${apiError.Message}`);
+        throw new AssetApiError(
+          `${action}: ${apiError.Code} ${apiError.Message}`,
+          classify(res.status, apiError.Code),
+        );
       }
       return res.data?.Result ?? {};
     } catch (error: unknown) {
       if (!axios.isAxiosError(error)) throw error;
+      const status = error.response?.status;
       const apiError = (error.response?.data as OpenApiResponse | undefined)
         ?.ResponseMetadata?.Error;
-      throw new Error(
-        `${action}: ${error.response?.status ?? ''} ${
+      throw new AssetApiError(
+        `${action}: ${status ?? ''} ${
           apiError ? `${apiError.Code} ${apiError.Message}` : error.message
         }`,
+        classify(status, apiError?.Code),
       );
     }
   }

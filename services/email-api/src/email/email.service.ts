@@ -33,6 +33,10 @@ export class EmailService {
       rejectUnauthorized: false,
     },
     ignoreTLS: true, // send plain, skip STARTTLS (relay cert is *.outlook, host mismatch)
+    // nodemailer defaults (2m/30s/10m) outlast the 60s ingress — fail fast instead of hanging
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
   });
 
   /**

@@ -3,6 +3,12 @@ import { ByteplusAssetService } from './byteplus-asset.service';
 
 jest.mock('axios');
 const axiosPost = axios.post as jest.Mock;
+(axios.isAxiosError as unknown as jest.Mock).mockImplementation(
+  (e: { isAxiosError?: boolean }) => Boolean(e?.isAxiosError),
+);
+const oneImage = () => ({
+  content: [{ type: 'image_url', image_url: { url: 'u' } }],
+});
 
 /** ตอบตาม Action ใน query — statuses = ลำดับ Status ของ GetAsset */
 const mockApi = (statuses: string[], failOn?: string) => {
@@ -94,7 +100,9 @@ describe('ByteplusAssetService', () => {
         { content: [{ type: 'image_url', image_url: { url: 'u' } }] },
         't1',
       ),
-    ).rejects.toThrow('Reference image was rejected by the provider');
+    ).rejects.toThrow(
+      "Your reference image couldn't be used. Please try a different image.",
+    );
     expect(actions()).toEqual([
       'CreateAssetGroup',
       'CreateAsset',
@@ -112,7 +120,9 @@ describe('ByteplusAssetService', () => {
         { content: [{ type: 'image_url', image_url: { url: 'u' } }] },
         't1',
       ),
-    ).rejects.toThrow(/timed out/);
+    ).rejects.toThrow(
+      'Preparing your reference image took too long. Please try again.',
+    );
     expect(actions()).toContain('DeleteAssetGroup');
   });
 
@@ -129,7 +139,58 @@ describe('ByteplusAssetService', () => {
         { content: [{ type: 'image_url', image_url: { url: 'u' } }] },
         't1',
       ),
-    ).rejects.toThrow('CreateAssetGroup: SignatureDoesNotMatch bad sig');
+    ).rejects.toThrow(
+      "We couldn't prepare your reference image right now. Please try again later.",
+    );
+  });
+
+  it('401 InvalidAccessKey → readable message without the key or provider detail', async () => {
+    axiosPost.mockRejectedValue({
+      isAxiosError: true,
+      message: 'Request failed with status code 401',
+      response: {
+        status: 401,
+        data: {
+          ResponseMetadata: {
+            Error: {
+              Code: 'InvalidAccessKey',
+              Message:
+                'The security token[AKAPYzE5OGNh] included in the request is invalid.',
+            },
+          },
+        },
+      },
+    });
+    const err = await service
+      .swapImagesToAssets(oneImage(), 't1')
+      .catch((e: Error) => e);
+    expect((err as Error).message).toBe(
+      "We couldn't prepare your reference image right now. Please try again later.",
+    );
+    expect((err as Error).message).not.toMatch(/AKAP|401|InvalidAccessKey/);
+  });
+
+  it('429 rate limit → asks the user to retry in a moment, still cleans up', async () => {
+    mockApi([]);
+    axiosPost.mockImplementation(async (url: string) => {
+      const action = new URL(url).searchParams.get('Action');
+      if (action === 'CreateAsset') {
+        throw {
+          isAxiosError: true,
+          message: 'x',
+          response: { status: 429, data: {} },
+        };
+      }
+      return { data: { Result: { Id: 'group-1' } } };
+    });
+    await expect(service.swapImagesToAssets(oneImage(), 't1')).rejects.toThrow(
+      'The service is busy right now. Please try again in a moment.',
+    );
+    expect(actions()).toEqual([
+      'CreateAssetGroup',
+      'CreateAsset',
+      'DeleteAssetGroup',
+    ]);
   });
 
   it('cleanup never throws when delete fails', async () => {

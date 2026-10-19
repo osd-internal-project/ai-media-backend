@@ -448,6 +448,32 @@ export class KeycloakService {
    * @returns Tokens plus the local user's identifiers, or the raw tokens if no matching
    *   Keycloak user could be found.
    */
+  /**
+   * Local user for the Keycloak account with this email, created with a personal org on first sign-in.
+   * @param sub when given, the Keycloak user id must match it.
+   * @returns null when Keycloak has no matching user.
+   */
+  async ensureLocalUser(email: string | undefined, sub?: string) {
+    // ไม่มี email → Keycloak admin search คืนทุก user และ users[0] เป็นคนอื่น
+    if (!email) {
+      throw new BadRequestException('Identity provider returned no email');
+    }
+    const users: { id: string; username: string; firstName?: string; lastName?: string }[] =
+      await this.findUserByEmail(email);
+    const user = users?.find((u) => !sub || u.id === sub);
+    if (!user) return null;
+
+    const fullname = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.username;
+    return this.usersService.createFirstUser({
+      email,
+      username: user.username,
+      fullname,
+      phoneNumber: '',
+      tokenKeycloak: user.id,
+      firstName: user.firstName,
+    });
+  }
+
   async idpCallback(code: string) {
     const config = configs().keycloak;
     const params = new URLSearchParams();
@@ -471,25 +497,10 @@ export class KeycloakService {
     );
 
     const tokens = tokenRes.data;
-    const idToken = tokens.id_token;
-    const decoded: any = jwt.decode(idToken);
-    const email = decoded.email;
-    const users = await this.findUserByEmail(email);
-    const user = users && users.length > 0 ? users[0] : null;
+    const decoded = jwt.decode(tokens.id_token) as { email?: string } | null;
+    const userDetail = await this.ensureLocalUser(decoded?.email);
 
-    if (user) {
-      const fullname = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.username;
-
-      // Update local db state or create a personal organization/project
-      const userDetail = await this.usersService.createFirstUser({
-        email: email,
-        username: user.username,
-        fullname: fullname,
-        phoneNumber: '',
-        tokenKeycloak: user.id,
-        firstName: user.firstName,
-      });
-
+    if (userDetail) {
       return {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
