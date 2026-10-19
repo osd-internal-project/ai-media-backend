@@ -23,7 +23,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, k8s]
     outputs:
       image_ver: ${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }}
 
