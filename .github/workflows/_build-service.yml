@@ -53,7 +53,13 @@ jobs:
       # Build Docker image (build context is root for Turbo monorepo)
       # ---------------------------------------------------------------------
       - name: Build Docker Image
+        env:
+          # SWR rejects the OCI index that provenance/SBOM attestations produce
+          # ("fail to parse 'manifest.json'"); the self-hosted runner's BuildKit adds them by default.
+          BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
         run: |
+          docker version --format 'docker client={{.Client.Version}} server={{.Server.Version}}'
+          docker info --format 'storage={{.Driver}} {{.DriverStatus}}'
           docker build --platform linux/amd64 \
             -t ${{ inputs.image_name }}:${{ steps.pkg.outputs.ver }}-${{ inputs.deploy_env }} \
             -f ${{ inputs.service_path }}/Dockerfile .
