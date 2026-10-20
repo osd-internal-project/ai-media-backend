@@ -1,165 +1,117 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 
 <head>
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Welcome to Ai Cave</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #ffffff;
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            -webkit-font-smoothing: antialiased;
-            color: #111827;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 600px;
-            margin: 0 auto;
-            text-align: center;
-            padding: 40px 20px;
-        }
-
-        .logo {
-            margin-bottom: 30px;
-            font-size: 32px;
-            font-weight: bold;
-            color: #111827;
-            /* Placeholder styling for "Ai Cave" text logo if image unavailable */
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .logo-text {
-            font-family: 'Courier New', Courier, monospace;
-            /* Tech feel for AI Cave */
-            letter-spacing: -1px;
-        }
-
-        h1 {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 10px;
-            line-height: 1.3;
-        }
-
-        p.subtitle {
-            font-size: 16px;
-            color: #4b5563;
-            margin-bottom: 30px;
-        }
-
-        .account-box {
-            background-color: #f9fafb;
-            border-radius: 8px;
-            padding: 24px;
-            margin-bottom: 30px;
-            text-align: center;
-        }
-
-        .account-label {
-            font-size: 14px;
-            font-weight: 600;
-            color: #111827;
-            margin-bottom: 5px;
-        }
-
-        .account-email {
-            font-size: 16px;
-            color: #000080;
-            /* Green color from image */
-            font-weight: 500;
-            text-decoration: none;
-        }
-
-        .btn {
-            display: inline-block;
-            background-color: #000080;
-            /* Green color matching image */
-            color: #ffffff;
-            font-size: 16px;
-            font-weight: 600;
-            padding: 14px 32px;
-            border-radius: 6px;
-            text-decoration: none;
-            margin-bottom: 30px;
-        }
-
-        .btn:hover {
-            background-color: #000060;
-        }
-
-        .fallback {
-            font-size: 14px;
-            color: #4b5563;
-            margin-bottom: 10px;
-            line-height: 1.5;
-        }
-
-        .fallback-link {
-            color: #000080;
-            text-decoration: none;
-            word-break: break-all;
-        }
-
-        .footer {
-            margin-top: 40px;
-            font-size: 12px;
-            color: #9ca3af;
-            line-height: 1.5;
-        }
-    </style>
+    <title>AI Cave</title>
 </head>
 
-<body>
-    <div class="container">
-        <!-- Logo Section -->
-        <div class="logo">
-            <span class="logo-text">Ai Cave</span>
-        </div>
+<!-- inline styles + tables only: Gmail/Outlook strip <style> and ignore flex -->
+<body style="margin:0; padding:0; background-color:#f3f4f6; font-family:'Sarabun','Helvetica Neue',Helvetica,Arial,sans-serif; color:#111827; -webkit-font-smoothing:antialiased;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f4f6;">
+        <tr>
+            <td align="center" style="padding:32px 16px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background-color:#ffffff; border-radius:12px; overflow:hidden;">
+                    <!-- Header -->
+                    <tr>
+                        <td align="center" style="background-color:#000080; padding:24px;">
+                            <span style="font-family:'Courier New',Courier,monospace; font-size:28px; font-weight:bold; letter-spacing:-1px; color:#ffffff;">AI Cave</span>
+                        </td>
+                    </tr>
 
-        <!-- Main Content -->
-        <h1>Welcome to Ai Cave</h1>
-        <p class="subtitle">An Ai Cave account has been created for you in <strong>{{teamName}}</strong>.</p>
+                    <tr>
+                        <td style="padding:32px 32px 8px;">
+                            <h1 style="margin:0 0 8px; font-size:22px; line-height:1.4; font-weight:700; color:#111827; text-align:center;">
+                                คุณได้รับสิทธิ์เข้าใช้งาน AI Cave : {{teamName}} แล้ว
+                            </h1>
+                            <p style="margin:0 0 24px; font-size:15px; line-height:1.6; color:#4b5563; text-align:center;">
+                                สามารถเข้าใช้งานได้ตามขั้นตอนด้านล่าง
+                            </p>
 
-        <!-- Account Info Box -->
-        <div class="account-box">
-            <div class="account-label">Username:</div>
-            <div class="account-email">{{username}}</div>
-            <div class="account-label" style="margin-top: 12px;">Email:</div>
-            <div class="account-email">{{email}}</div>
-        </div>
+                            <!-- Account info -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;">
+                                <tr>
+                                    <td style="padding:16px 16px 6px; font-size:14px; color:#6b7280; width:64px; white-space:nowrap;">ชื่อผู้ใช้</td>
+                                    <td style="padding:16px 16px 6px; font-size:15px; font-weight:600; color:#000080;">{{username}}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding:6px 16px 16px; font-size:14px; color:#6b7280; width:64px; white-space:nowrap;">อีเมล</td>
+                                    <td style="padding:6px 16px 16px; font-size:15px; font-weight:600; color:#000080; word-break:break-all;">{{email}}</td>
+                                </tr>
+                            </table>
 
-        <!-- Steps -->
-        <ol style="text-align: left; max-width: 440px; margin: 0 auto 30px; padding-left: 20px; font-size: 15px; color: #374151; line-height: 1.7;">
-            <li>Click the button below to set up your account (link valid for {{expires_in}}).</li>
-            <li>Choose your Ai Cave password.</li>
-            <li>Sign in at <a href="{{login_url}}" style="color: #000080;">{{login_url}}</a> with your username or email and the new password.</li>
-        </ol>
+                            <!-- Steps -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;">
+                                <tr>
+                                    <td valign="top" style="width:36px; padding-bottom:14px;">
+                                        <div style="width:26px; height:26px; line-height:26px; border-radius:13px; background-color:#000080; color:#ffffff; font-size:14px; font-weight:700; text-align:center;">1</div>
+                                    </td>
+                                    <td valign="top" style="padding-bottom:14px; font-size:15px; line-height:1.6; color:#374151;">
+                                        คลิกปุ่มด้านล่าง <span style="color:#6b7280;">(ลิงก์มีอายุ {{expires_in}})</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td valign="top" style="width:36px; padding-bottom:14px;">
+                                        <div style="width:26px; height:26px; line-height:26px; border-radius:13px; background-color:#000080; color:#ffffff; font-size:14px; font-weight:700; text-align:center;">2</div>
+                                    </td>
+                                    <td valign="top" style="padding-bottom:14px; font-size:15px; line-height:1.6; color:#374151;">
+                                        ตั้งรหัสผ่านใหม่
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td valign="top" style="width:36px;">
+                                        <div style="width:26px; height:26px; line-height:26px; border-radius:13px; background-color:#000080; color:#ffffff; font-size:14px; font-weight:700; text-align:center;">3</div>
+                                    </td>
+                                    <td valign="top" style="font-size:15px; line-height:1.6; color:#374151;">
+                                        เข้าสู่ระบบอีกครั้งที่ <a href="{{login_url}}" style="color:#000080; text-decoration:underline;">{{login_url}}</a>
+                                        ด้วยชื่อผู้ใช้หรืออีเมล และรหัสผ่านใหม่
+                                    </td>
+                                </tr>
+                            </table>
 
-        <!-- Action Button -->
-        <a href="{{action_url}}" class="btn">Set up my account</a>
+                            <!-- Button: color set on both <a> and <span> so clients can't repaint it link-blue -->
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:28px auto 20px;">
+                                <tr>
+                                    <td align="center" bgcolor="#000080" style="border-radius:8px;">
+                                        <a href="{{action_url}}" target="_blank" style="display:inline-block; padding:14px 32px; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:8px;"><span style="color:#ffffff;">ตั้งรหัสผ่านและเริ่มใช้งาน</span></a>
+                                    </td>
+                                </tr>
+                            </table>
 
-        <!-- Fallback Link -->
-        <div class="fallback">
-            Can’t click the button above?<br>
-            Click or copy and paste this link into your browser.
-        </div>
-        <div style="text-align: center; margin-bottom: 20px;">
-            <a href="{{action_url}}" class="fallback-link">{{action_url}}</a>
-        </div>
+                            <!-- Fallback link -->
+                            <p style="margin:0 0 6px; font-size:13px; line-height:1.6; color:#6b7280; text-align:center;">
+                                หากคลิกปุ่มไม่ได้ ให้คัดลอกลิงก์นี้ไปเปิดในเบราว์เซอร์
+                            </p>
+                            <p style="margin:0 0 24px; font-size:13px; line-height:1.6; text-align:center; word-break:break-all;">
+                                <a href="{{action_url}}" style="color:#000080;">{{action_url}}</a>
+                            </p>
 
-        <!-- Footer -->
-        <div class="footer">
-            If you weren’t expecting this email, you can ignore it.<br>
-            If you’re having any issues with your account, feel free to contact customer support or reach out via Ai
-            Cave support.
-        </div>
-    </div>
+                            <!-- English -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #e5e7eb;">
+                                <tr>
+                                    <td style="padding:20px 0 8px; font-size:13px; line-height:1.6; color:#6b7280;">
+                                        You've been granted access to AI Cave : <strong>{{teamName}}</strong>.
+                                        Use the button above to set your password (link valid for {{expires_in}}),
+                                        then sign in again at <a href="{{login_url}}" style="color:#000080;">{{login_url}}</a>.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding:16px 32px 28px; font-size:12px; line-height:1.7; color:#9ca3af; text-align:center;">
+                            หากพบปัญหา รบกวนติดต่อ / Need help? Contact
+                            <a href="mailto:aicavesupport@osd.co.th" style="color:#000080;">aicavesupport@osd.co.th</a><br>
+                            หากคุณไม่ได้คาดว่าจะได้รับอีเมลนี้ สามารถเพิกเฉยได้ / If you weren't expecting this email, you can ignore it.
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 
 </html>

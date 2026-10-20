@@ -204,7 +204,7 @@ export class OrganizationBulkMemberService {
       this.httpService.post(`${configs().emailApiUrl}/email/send`, {
         to: email,
         // no "password" in the subject — O365 flags it as phishing
-        subject: `Welcome to Ai Cave – your ${teamName} account is ready`,
+        subject: `คุณได้รับสิทธิ์เข้าใช้งาน AI Cave : ${teamName} แล้ว`,
         template: 'account-access',
         context: {
           teamName,
