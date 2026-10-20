@@ -73,7 +73,9 @@ describe('changeCycleSubscription with billing disabled', () => {
     imageAllowance: 50,
   });
 
-  const makeService = (sub: ReturnType<typeof paidSub>) => {
+  const makeService = (
+    sub: ReturnType<typeof paidSub> & Record<string, unknown>,
+  ) => {
     const subRepo = {
       // ครั้งแรก = sub ที่ถึงวันต่ออายุ, รอบอื่น (period / cancel) = ว่าง
       findMany: jest.fn().mockResolvedValueOnce([sub]).mockResolvedValue([]),
@@ -82,18 +84,71 @@ describe('changeCycleSubscription with billing disabled', () => {
     const creditRepo = { update: jest.fn() };
     const omise = { chargeCustomerCard: jest.fn() };
     const organizationRepo = { findOne: jest.fn(), update: jest.fn() };
+    const planRepo = { findOne: jest.fn() };
+    const planPriceRepo = { findOne: jest.fn() };
     const service = new OrganizationSubscriptionService(
       subRepo as never,
       creditRepo as never,
-      { findOne: jest.fn() } as never,
-      { findOne: jest.fn() } as never,
+      planRepo as never,
+      planPriceRepo as never,
       {} as never,
       organizationRepo as never,
       { create: jest.fn() } as never,
       omise as never,
+      {} as never,
     );
-    return { service, subRepo, creditRepo, omise };
+    return {
+      service,
+      subRepo,
+      creditRepo,
+      omise,
+      organizationRepo,
+      planRepo,
+      planPriceRepo,
+    };
   };
+
+  it.each(['pending_cancel', 'expired'])(
+    'free plan in status %s → not rolled',
+    async (status) => {
+      const { service, subRepo, creditRepo } = makeService({
+        ...paidSub(true),
+        price: 0,
+        status,
+      });
+      await service.changeCycleSubscription();
+      expect(creditRepo.update).not.toHaveBeenCalled();
+      expect(subRepo.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('paid renewal keeps an org the admin switched off inactive', async () => {
+    const { service, subRepo, omise, organizationRepo, planRepo, planPriceRepo } =
+      makeService({ ...paidSub(true), status: 'active', nextPlanId: 'p', nextPlanPriceId: 'pp' });
+    subRepo.update.mockResolvedValue({ organizationId: 'org-1' });
+    organizationRepo.findOne.mockResolvedValue({ omiseCustomerId: 'cust' });
+    omise.chargeCustomerCard.mockResolvedValue({ id: 'c', status: 'successful' });
+    planRepo.findOne.mockResolvedValue({
+      id: 'p',
+      name: 'Pro',
+      detailJson: { creditAllowance: 100, imageAllowance: 50, maxUserAccess: 5 },
+    });
+    planPriceRepo.findOne.mockResolvedValue({ id: 'pp', price: 990, periodCount: 1 });
+    // configs() อ่าน env ระหว่าง await — withBilling คืนค่า env ก่อน promise จบ
+    const before = process.env.BILLING_ENABLED;
+    process.env.BILLING_ENABLED = 'true';
+    try {
+      await service.changeCycleSubscription();
+    } finally {
+      if (before === undefined) delete process.env.BILLING_ENABLED;
+      else process.env.BILLING_ENABLED = before;
+    }
+    expect(omise.chargeCustomerCard).toHaveBeenCalled();
+    expect(organizationRepo.update).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1' },
+      data: { maxUserAccess: 5 },
+    });
+  });
 
   it('autoRenew on → rolls the cycle and resets credits without charging', async () => {
     const { service, subRepo, creditRepo, omise } = makeService(paidSub(true));

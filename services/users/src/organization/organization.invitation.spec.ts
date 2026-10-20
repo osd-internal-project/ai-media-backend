@@ -12,8 +12,6 @@ import {
   PackageTransactionRepository,
   PlanPriceRepository,
   PlanRepository,
-  ProjectMemberRepository,
-  ProjectRepository,
   UsersRepository,
 } from '@ai-media/share';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
@@ -36,8 +34,11 @@ describe('OrganizationService invitations', () => {
     findMany: jest.fn(),
     update: jest.fn(),
   };
-  const usersRepo = { findOne: jest.fn(), update: jest.fn() };
+  const usersRepo = { findOne: jest.fn(), update: jest.fn(), create: jest.fn() };
   const memberRepo = { findOne: jest.fn(), create: jest.fn() };
+  const organizationRepo = { findOne: jest.fn(), create: jest.fn() };
+  const creditBalanceRepo = { create: jest.fn() };
+  const keycloakService = { createUser: jest.fn() };
 
   beforeEach(async () => {
     jest.resetAllMocks();
@@ -48,15 +49,13 @@ describe('OrganizationService invitations', () => {
         { provide: UsersRepository, useValue: usersRepo },
         { provide: OrganizationMemberRepository, useValue: memberRepo },
         { provide: HttpService, useValue: { post: jest.fn() } },
+        { provide: OrganizationRepository, useValue: organizationRepo },
+        { provide: CreditBalanceRepository, useValue: creditBalanceRepo },
+        { provide: KeycloakService, useValue: keycloakService },
         ...[
-          OrganizationRepository,
-          ProjectMemberRepository,
-          ProjectRepository,
-          KeycloakService,
           PlanRepository,
           PlanPriceRepository,
           PackageTransactionRepository,
-          CreditBalanceRepository,
           OrganizationSubscriptionRepository,
           LlmGatewayService,
         ].map((provide) => ({ provide, useValue: {} })),
@@ -93,6 +92,31 @@ describe('OrganizationService invitations', () => {
     expect(invitationRepo.update).toHaveBeenCalledWith({
       where: { id: 'inv-1' },
       data: { status: 'ACCEPTED' },
+    });
+  });
+
+  it('joins a new user to the inviting org only, without a personal org', async () => {
+    usersRepo.findOne.mockResolvedValue(null);
+    keycloakService.createUser.mockResolvedValue('kc-new');
+    usersRepo.create.mockResolvedValue({ userId: 'u-new' });
+    memberRepo.findOne.mockResolvedValue(null);
+
+    const result = await service.acceptInvitation({
+      token: 'tok',
+      username: 'newbie',
+      password: 'Secret#123',
+      fullname: 'New Bie',
+    });
+
+    expect(result.organizationId).toBe('org-1');
+    expect(usersRepo.create.mock.calls[0][0].data.recentOrganizationId).toBe(
+      'org-1',
+    );
+    expect(organizationRepo.create).not.toHaveBeenCalled();
+    expect(creditBalanceRepo.create).not.toHaveBeenCalled();
+    expect(memberRepo.create).toHaveBeenCalledTimes(1);
+    expect(memberRepo.create).toHaveBeenCalledWith({
+      data: { organizationId: 'org-1', userId: 'u-new', role: 'MEMBER' },
     });
   });
 

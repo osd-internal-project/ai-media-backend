@@ -1,6 +1,14 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  AuthUser,
   CreditBalanceRepository,
+  OrganizationMemberRepository,
   OrganizationRepository,
   OrganizationSubscriptionRepository,
   PackageTransactionRepository,
@@ -8,10 +16,14 @@ import {
   PlanRepository,
   PrismaService,
 } from '@ai-media/share';
-import { OrganizationSubscription } from '@prisma/client';
+import { OrganizationSubscription, Prisma } from '@prisma/client';
 import * as dayjs from 'dayjs';
 import configs from '../configs';
 import { OmiseService } from '../omise/omise.service';
+import { CancelMode } from './dto/admin-subscription.dto';
+
+const SYSTEM_ADMIN_ROLES = ['SUPER_ADMIN', 'SYSTEM_ADMIN'];
+const ORGANIZATION_MANAGER_ROLES = ['OWNER', 'ADMIN'];
 
 @Injectable()
 export class OrganizationSubscriptionService {
@@ -24,6 +36,7 @@ export class OrganizationSubscriptionService {
     private readonly organizationRepo: OrganizationRepository,
     private readonly packageTransactionRepo: PackageTransactionRepository,
     private readonly omiseService: OmiseService,
+    private readonly organizationMemberRepo: OrganizationMemberRepository,
   ) {}
 
   findOne(id: string) {
@@ -75,18 +88,29 @@ export class OrganizationSubscriptionService {
     });
   }
 
+  /** Package ที่ปิดไปแล้วเปลี่ยนเข้าไม่ได้ แต่ต่ออายุ package เดิมของ org ได้ */
+  private async findTargetPlan(sub: OrganizationSubscription, priceId: string) {
+    const planPrice = await this.planPriceRepo.findOne({
+      where: { id: priceId },
+    });
+    if (!planPrice) throw new NotFoundException('Price plan not found');
+    const plan = await this.planRepo.findOne({
+      where: { id: planPrice.planId },
+    });
+    if (!plan) throw new NotFoundException('Plan not found');
+    if (!plan.status && plan.id !== sub.planId) {
+      throw new BadRequestException('Package is inactive');
+    }
+    return { planPrice, plan };
+  }
+
   async downgradeSubscription(organizationId: string, priceId: string) {
     const sub = await this.organizationSubscriptionRepo.findOne({
       where: { organizationId },
     });
     if (!sub) throw new NotFoundException('Subscription not found');
 
-    const planPrice = await this.planPriceRepo.findOne({
-      where: { id: priceId },
-    });
-    const plan = await this.planRepo.findOne({
-      where: { id: planPrice?.planId },
-    });
+    const { plan } = await this.findTargetPlan(sub, priceId);
     return await this.organizationSubscriptionRepo.update({
       where: { id: sub.id },
       data: {
@@ -102,14 +126,7 @@ export class OrganizationSubscriptionService {
     });
     if (!sub) throw new NotFoundException('Subscription not found');
 
-    const planPrice = await this.planPriceRepo.findOne({
-      where: { id: priceId },
-    });
-    if (!planPrice) throw new NotFoundException('Price plan not found');
-    const plan = await this.planRepo.findOne({
-      where: { id: planPrice?.planId },
-    });
-    if (!plan) throw new NotFoundException('Plan not found');
+    const { planPrice, plan } = await this.findTargetPlan(sub, priceId);
     if (plan.id === sub.planId) {
       //Change Billing Date
       const nextBillingDate = dayjs(sub.nextBillingDate);
@@ -272,6 +289,11 @@ export class OrganizationSubscriptionService {
 
       for (const sub of subscriptions) {
         try {
+          // ยกเลิกแล้ว/หมดอายุไม่ต่อรอบ — ต้องเช็คก่อน plan ฟรี เพราะ plan ฟรีไม่ดู autoRenew
+          if (sub.status === 'expired' || sub.status === 'pending_cancel') {
+            continue;
+          }
+
           // Free plan (price 0): perpetual, never charged. Roll the cycle forward
           // for free — refresh credits + advance dates — and keep it active.
           if (Number(sub.price) === 0) {
@@ -401,12 +423,10 @@ export class OrganizationSubscriptionService {
               currentCycleImage: imageAllowance,
             },
           });
+          // ไม่แตะ Organization.status — สวิตช์ซ่อน org ของ admin แยกจากการต่ออายุ
           await this.organizationRepo.update({
             where: { organizationId: newSub.organizationId },
-            data: {
-              status: true,
-              maxUserAccess: maxUserAccess,
-            },
+            data: { maxUserAccess: maxUserAccess },
           });
         } catch (error) {
           Logger.error(
@@ -516,5 +536,215 @@ export class OrganizationSubscriptionService {
       where: { id: sub.id },
       data: { autoRenew: false, status: 'pending_cancel' },
     });
+  }
+
+  assertSuperAdmin(authUser: AuthUser | undefined) {
+    // trim ก่อนเทียบ — ข้อมูล role ในระบบมีค่าที่ติดช่องว่างท้ายอยู่จริง
+    const role = authUser?.role?.trim();
+    if (!role || !SYSTEM_ADMIN_ROLES.includes(role)) {
+      throw new ForbiddenException(
+        'Only a system administrator can manage this package',
+      );
+    }
+  }
+
+  /** Super admin หรือ OWNER/ADMIN ของ org นั้น */
+  async assertOrganizationManager(
+    authUser: AuthUser | undefined,
+    organizationId: string,
+  ) {
+    if (!authUser) throw new ForbiddenException('Missing authenticated user');
+    if (SYSTEM_ADMIN_ROLES.includes(authUser.role?.trim() ?? '')) return;
+    const member = await this.organizationMemberRepo.findOne({
+      where: { organizationId, userId: authUser.userId },
+      select: { role: true },
+    });
+    if (!member || !ORGANIZATION_MANAGER_ROLES.includes(member.role)) {
+      throw new ForbiddenException(
+        'Only an organization owner or admin can manage this package',
+      );
+    }
+  }
+
+  /** ต่อ 1 รอบของ package เดิม — ถ้าหมดอายุ/ค้างจ่าย เริ่มรอบใหม่วันนี้พร้อม reset credit */
+  async adminRenew(organizationId: string) {
+    const sub = await this.findSubscriptionOrThrow(organizationId);
+    const months = await this.renewalMonths(sub);
+    const lapsed = sub.status === 'expired' || sub.status === 'past_due';
+    const start = lapsed ? dayjs() : dayjs(sub.nextBillingDate).add(1, 'day');
+    const nextBillingDate = start
+      .add(months, 'month')
+      .subtract(1, 'day')
+      .toDate();
+
+    return this.prisma.$transaction(async (tx) => {
+      if (lapsed) {
+        await tx.creditBalance.update({
+          where: { organizationId },
+          data: {
+            currentCycleBalance: sub.creditAllowance,
+            currentCycleImage: sub.imageAllowance,
+          },
+        });
+      }
+      const subscription = await tx.organizationSubscription.update({
+        where: { id: sub.id },
+        data: {
+          status: 'active',
+          autoRenew: true,
+          nextBillingDate,
+          ...(lapsed && {
+            currentPeriodStart: start.toDate(),
+            currentPeriodEnd: start.add(1, 'month').subtract(1, 'day').toDate(),
+            periodCurrent: 1,
+          }),
+        },
+      });
+      await tx.packageTransaction.create({
+        data: {
+          organizationId,
+          amountPaid: 0,
+          planId: sub.planId,
+          currency: 'THB',
+          status: 'complete',
+          paymentMethod: 'admin_renewal',
+          paidAt: new Date(),
+          planName: sub.planName,
+          planInterval: sub.interval || sub.period || 'monthly',
+          billingPeriodStart: start.toDate(),
+          billingPeriodEnd: nextBillingDate,
+        },
+      });
+      Logger.log(
+        `Admin renewed sub ${sub.id} org=${organizationId} lapsed=${lapsed} nextBillingDate=${nextBillingDate.toISOString()}`,
+      );
+      return subscription;
+    });
+  }
+
+  /** เปลี่ยน package ทันที: plan/allowance/seat ใหม่ + reset credit รอบปัจจุบัน วันของรอบคงเดิม */
+  async adminChangePackage(organizationId: string, priceId: string) {
+    const sub = await this.findSubscriptionOrThrow(organizationId);
+    if (sub.status === 'expired') {
+      throw new BadRequestException(
+        'Subscription has expired — renew it before changing the package',
+      );
+    }
+    const { planPrice, plan } = await this.findTargetPlan(sub, priceId);
+    const { creditAllowance, imageAllowance, maxUserAccess } =
+      this.planAllowances(plan.detailJson);
+
+    return this.prisma.$transaction(async (tx) => {
+      const subscription = await tx.organizationSubscription.update({
+        where: { id: sub.id },
+        data: {
+          planId: plan.id,
+          planName: plan.name,
+          price: planPrice.price,
+          interval: planPrice.interval,
+          creditAllowance,
+          imageAllowance,
+          periodCount: planPrice.periodCount || 1,
+          nextPlanId: plan.id,
+          nextPlanPriceId: planPrice.id,
+        },
+      });
+      await tx.creditBalance.update({
+        where: { organizationId },
+        data: {
+          currentCycleBalance: creditAllowance,
+          currentCycleImage: imageAllowance,
+        },
+      });
+      await tx.organization.update({
+        where: { organizationId },
+        data: { maxUserAccess },
+      });
+      await tx.packageTransaction.create({
+        data: {
+          organizationId,
+          amountPaid: 0,
+          planId: plan.id,
+          currency: 'THB',
+          status: 'complete',
+          paymentMethod: 'admin_change',
+          paidAt: new Date(),
+          planName: plan.name,
+          planInterval: planPrice.interval,
+          billingPeriodStart: new Date(),
+          billingPeriodEnd: sub.nextBillingDate,
+        },
+      });
+      Logger.log(
+        `Admin changed package sub ${sub.id} org=${organizationId} ${sub.planId} -> ${plan.id} price=${planPrice.id}`,
+      );
+      return subscription;
+    });
+  }
+
+  async adminCancel(organizationId: string, mode: CancelMode) {
+    const sub = await this.findSubscriptionOrThrow(organizationId);
+    if (sub.status === 'expired') {
+      throw new BadRequestException('Subscription has already expired');
+    }
+    if (mode === 'end_of_period') {
+      return this.cancelSubscription(organizationId);
+    }
+    // ยกเลิกทันที: credit ของรอบเป็น 0 แต่ on-top ที่ซื้อแยกยังอยู่ (เหมือน cron ตอนหมดอายุ)
+    return this.prisma.$transaction(async (tx) => {
+      await tx.creditBalance.update({
+        where: { organizationId },
+        data: { currentCycleBalance: 0, currentCycleImage: 0 },
+      });
+      const subscription = await tx.organizationSubscription.update({
+        where: { id: sub.id },
+        data: { status: 'expired', autoRenew: false },
+      });
+      Logger.log(`Admin cancelled sub ${sub.id} org=${organizationId} immediately`);
+      return subscription;
+    });
+  }
+
+  async adminResume(organizationId: string) {
+    const sub = await this.findSubscriptionOrThrow(organizationId);
+    if (sub.status !== 'pending_cancel') {
+      throw new BadRequestException(
+        'Only a subscription pending cancellation can be resumed',
+      );
+    }
+    return this.organizationSubscriptionRepo.update({
+      where: { id: sub.id },
+      data: { status: 'active', autoRenew: true },
+    });
+  }
+
+  private async findSubscriptionOrThrow(organizationId: string) {
+    const sub = await this.organizationSubscriptionRepo.findOne({
+      where: { organizationId },
+    });
+    if (!sub) throw new NotFoundException('Subscription not found');
+    return sub;
+  }
+
+  /** ความยาว 1 รอบ = periodCount ของ price ปัจจุบัน (nextPlanPriceId ใช้ได้เมื่อยังเป็น plan เดิม) */
+  private async renewalMonths(sub: OrganizationSubscription) {
+    const price = sub.nextPlanPriceId
+      ? await this.planPriceRepo.findOne({ where: { id: sub.nextPlanPriceId } })
+      : null;
+    if (price && price.planId === sub.planId && price.periodCount > 0) {
+      return price.periodCount;
+    }
+    return sub.periodCount || 1;
+  }
+
+  /** อ่าน allowance แบบเดียวกับ createBySystemAdmin (Plan.detailJson) */
+  private planAllowances(detailJson: Prisma.JsonValue) {
+    // detailJson เป็น Json อิสระจากหน้า plan-management — แปลงทีละ field
+    const details = (detailJson ?? {}) as Record<string, unknown>;
+    return {
+      creditAllowance: Number(details.creditAllowance) || 0,
+      imageAllowance: Number(details.imageAllowance) || 0,
+      maxUserAccess: Number(details.maxUserAccess) || 0,
+    };
   }
 }

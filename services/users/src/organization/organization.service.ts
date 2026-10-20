@@ -12,8 +12,6 @@ import {
   InvitationRepository,
   OrganizationMemberRepository,
   OrganizationRepository,
-  ProjectMemberRepository,
-  ProjectRepository,
   UsersRepository,
   PlanRepository,
   PlanPriceRepository,
@@ -34,8 +32,6 @@ export class OrganizationService {
   constructor(
     private readonly organizationRepo: OrganizationRepository,
     private readonly organizationMemberRepo: OrganizationMemberRepository,
-    private readonly projectMemberRepo: ProjectMemberRepository,
-    private readonly projectRepo: ProjectRepository,
     private readonly invitationRepo: InvitationRepository,
     private readonly usersRepo: UsersRepository,
     private readonly keycloakService: KeycloakService,
@@ -411,62 +407,6 @@ export class OrganizationService {
         },
       });
       userId = newUser.userId;
-
-      const personalOrg = await this.organizationRepo.create({
-        data: {
-          name: `${dto.username} Personal`,
-          slug: `${dto.username}-personal`,
-          type: 'personal',
-          createdById: userId,
-          status: true,
-          maxUserAccess: 1,
-        },
-      });
-
-      if (personalOrg) {
-        // Add User as Owner of Personal Org
-        await this.creditBalanceRepo.create({
-          data: {
-            organizationId: personalOrg.organizationId,
-            onTopBalance: 50000,
-            onTopImage: 3,
-          },
-        });
-        await this.organizationMemberRepo.create({
-          data: {
-            organizationId: personalOrg.organizationId,
-            userId: userId,
-            role: 'OWNER',
-          },
-        });
-
-        // Create Personal Project
-        const personalProject = await this.projectRepo.create({
-          data: {
-            name: `${dto.username} Project`,
-            organizationId: personalOrg.organizationId,
-            status: 'active',
-            limitCreditAllowance: 50000,
-            limitImageAllowance: 3,
-            remainImageAmount: 0,
-            remainTokenAmount: 0,
-          },
-        });
-
-        if (personalProject) {
-          // Add User as Owner of Personal Project
-          await this.projectMemberRepo.create({
-            data: {
-              projectId: personalProject.id,
-              userId: userId,
-              role: 'OWNER',
-
-              limitCreditAllowance: 50000,
-              limitImageAllowance: 3,
-            },
-          });
-        }
-      }
     }
 
     // กด accept ซ้ำ/เป็นสมาชิกอยู่แล้วต้องไม่สร้างแถวซ้ำ
