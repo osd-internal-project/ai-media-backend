@@ -63,4 +63,9 @@ export class PromptGuideController {
   getPromptGuideImages(@Param('id') id: string) {
     return this.promptGuideService.getPromptGuideImages(+id);
   }
+
+  @Get(':id/results')
+  getPromptGuideResults(@Param('id') id: string) {
+    return this.promptGuideService.getPromptGuideResults(+id);
+  }
 }

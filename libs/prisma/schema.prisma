@@ -441,6 +441,8 @@ model PromptGuide {
   organizationId      String?              @map("organization_id") @db.VarChar(50)
   generateType        String               @default("image") @map("generate_type") @db.VarChar(10) // image/video
   promptGuideImages   String[]             @default([]) @map("prompt_guide_images")
+  /// uid ของ PromptGuideImage ที่เป็นผลลัพธ์ตัวอย่าง — แสดงเป็น showcase ไม่ถูกแนบตอน Use Template
+  promptGuideResults  String[]             @default([]) @map("prompt_guide_results")
   photoEventTemplates PhotoEventTemplate[]
 
   @@map("prompt_guide")
