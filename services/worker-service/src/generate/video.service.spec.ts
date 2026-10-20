@@ -60,7 +60,7 @@ describe('VideoProcessor (callback + poll-check)', () => {
   let redis: ReturnType<typeof makeRedis>;
   let queue: { add: jest.Mock; getJob: jest.Mock };
   let helper: Record<string, jest.Mock>;
-  let gallery: { updateMany: jest.Mock };
+  let gallery: { updateMany: jest.Mock; findOne: jest.Mock };
   let logs: { findOne: jest.Mock; updateMany: jest.Mock };
   let videoStorage: { storeVideoWithThumbnail: jest.Mock };
   let assetSvc: { swapImagesToAssets: jest.Mock; cleanup: jest.Mock };
@@ -100,7 +100,10 @@ describe('VideoProcessor (callback + poll-check)', () => {
         .fn()
         .mockResolvedValue({ usedCreditAllowance: 0, holdCreditAllowance: 0 }),
     };
-    gallery = { updateMany: jest.fn() };
+    gallery = {
+      updateMany: jest.fn(),
+      findOne: jest.fn().mockResolvedValue({ id: 'g1' }),
+    };
     logs = {
       findOne: jest.fn().mockResolvedValue({ usedCredit: 5 }),
       updateMany: jest.fn(),
@@ -202,6 +205,48 @@ describe('VideoProcessor (callback + poll-check)', () => {
         data: expect.objectContaining({ genneratedStatus: 'SUCCESS' }),
       }),
     );
+  });
+
+  it('submit marks the gallery PROCESSING so history after refresh shows generating', async () => {
+    axiosPost.mockResolvedValue({ data: { id: 'cgt-1' } });
+    await processor.process({
+      name: 'vdo-generate-queue',
+      id: '1',
+      data: {
+        taskId: 't1',
+        clientId: 'c1',
+        userId: 'u1',
+        statusBaseUrl: 'https://gw/tasks',
+        sendApi: 'https://gw/create',
+        sendConfig: { type: 'seedance1', configType: 'application/json' },
+        body: { ...body, prompt: 'p', ratio: '1:1', resolution: '720p', image: [], files: [] },
+      },
+      updateData: jest.fn(),
+    });
+    expect(gallery.updateMany).toHaveBeenCalledWith({
+      where: { taskId: 't1', genneratedStatus: { in: ['PENDING', 'QUEUED'] } },
+      data: { genneratedStatus: 'PROCESSING' },
+    });
+  });
+
+  it('upload-success carries galleryId and is sent after the gallery row is SUCCESS', async () => {
+    seedCtx();
+    axiosGet.mockResolvedValue(succeeded);
+    await processor.process({ name: 'video-finalize', data: { taskId: 't1' } });
+    const publish = (processor as any).redisPublisher.publish as jest.Mock;
+    const idx = publish.mock.calls.findIndex(
+      ([, raw]) => JSON.parse(raw).event === 'worker:video-upload-success',
+    );
+    expect(JSON.parse(publish.mock.calls[idx][1]).payload).toMatchObject({
+      taskId: 't1',
+      galleryId: 'g1',
+    });
+    const successWrite = gallery.updateMany.mock.invocationCallOrder[
+      gallery.updateMany.mock.calls.findIndex(
+        ([a]) => a.data.genneratedStatus === 'SUCCESS',
+      )
+    ];
+    expect(successWrite).toBeLessThan(publish.mock.invocationCallOrder[idx]);
   });
 
   it('provider failed → fail path (refund + FAILED), never reports success', async () => {

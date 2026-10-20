@@ -350,6 +350,11 @@ export class VideoProcessor extends WorkerHost {
         status: 'processing',
         startedAt: new Date().toISOString(),
       });
+      // ให้ history หลัง refresh เห็นว่ากำลังสร้าง — in[] กันทับ SUCCESS/FAILED ถ้า callback มาก่อน
+      await this.galleryRepo.updateMany({
+        where: { taskId, genneratedStatus: { in: ['PENDING', 'QUEUED'] } },
+        data: { genneratedStatus: 'PROCESSING' },
+      });
       await this.schedulePollCheck(taskId);
       this.logger.log(
         `${tag(
@@ -544,24 +549,6 @@ export class VideoProcessor extends WorkerHost {
       }`,
     );
 
-    await this.publishToCore(clientId, 'worker:video-upload-success', {
-      taskId,
-      videoUrl: await this.storageUrl.resolveOutputUrl(
-        body.organizationId,
-        body.projectId,
-        'video',
-        result.file,
-      ),
-      thumbnailUrl: await this.storageUrl.resolveOutputUrl(
-        body.organizationId,
-        body.projectId,
-        'video',
-        result.thumbnail,
-      ),
-      timestamp: new Date().toISOString(),
-      type: 'video',
-      projectId: body.projectId,
-    });
     const log = await this.logrepo.findOne({
       where: { taskId: taskId },
     });
@@ -589,6 +576,28 @@ export class VideoProcessor extends WorkerHost {
         // denormalize token จริงจาก log ลง gallery (dual-write)
         tokenUsed: usage.total_tokens,
       },
+    });
+
+    // ส่งหลังเขียน resultUrl แล้ว + galleryId — ไม่งั้นกด download ทันทีได้ 404
+    const gallery = await this.galleryRepo.findOne({ where: { taskId } });
+    await this.publishToCore(clientId, 'worker:video-upload-success', {
+      taskId,
+      galleryId: gallery?.id,
+      videoUrl: await this.storageUrl.resolveOutputUrl(
+        body.organizationId,
+        body.projectId,
+        'video',
+        result.file,
+      ),
+      thumbnailUrl: await this.storageUrl.resolveOutputUrl(
+        body.organizationId,
+        body.projectId,
+        'video',
+        result.thumbnail,
+      ),
+      timestamp: new Date().toISOString(),
+      type: 'video',
+      projectId: body.projectId,
     });
 
     await this.logrepo.updateMany({
