@@ -5,6 +5,7 @@ import {
   DashboardFilterDto,
   DashboardGranularity,
   DashboardMetric,
+  GenerationLogFilterDto,
 } from './dto/dashboard-filter.dto';
 import { generateExcelBuffer } from 'src/utils/excel';
 import { Prisma } from '@prisma/client';
@@ -12,6 +13,7 @@ import * as dayjs from 'dayjs';
 import {
   CreditBalanceRepository,
   GalleryRepository,
+  dbValuesForKey,
   GENERATION_TYPES,
   LogRepository,
   OrganizationMemberRepository,
@@ -37,18 +39,25 @@ const DEFAULT_LOOKBACK_MONTHS = 5;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/** Series key for generations whose type is NULL or not in GENERATION_TYPES. */
+const OTHER_TYPE_KEY = 'other';
+
 /**
- * Row shape returned by the recent-generations query.
+ * Row shape returned by the generation-log queries.
  *
  * `LogRepository.findMany` accepts a non-generic `Prisma.LogFindManyArgs`, so its return type
  * collapses to the bare `Log` payload and drops the `select`ed relations. This describes what
  * the query actually returns.
  */
-type RecentGenerationRow = {
+type GenerationLogRow = {
   id: string;
   taskId: string | null;
   typeGenerate: string | null;
   prompt: string;
+  status: string | null;
+  galleryId: string | null;
+  resolution: string | null;
+  ratio: string | null;
   usedCredit: number | null;
   usedImage: number | null;
   createdAt: Date;
@@ -89,18 +98,45 @@ export class DashboardService {
    */
   private buildLogWhere(
     organizationId: string,
-    filter: DashboardFilterDto = {},
+    filter: GenerationLogFilterDto = {},
   ): Prisma.LogWhereInput {
     const { from, to } = this.resolveRange(filter);
+    // Only the logs endpoint sends `status`; every other caller keeps the success-only set.
+    const status = filter.status ?? this.SUCCESS_STATUS;
 
     return {
-      status: this.SUCCESS_STATUS,
+      ...(status !== 'all' && { status }),
       project: {
         organizationId,
         ...(filter.projectId && { id: filter.projectId }),
       },
+      ...(filter.userId && { userId: filter.userId }),
+      ...(filter.type && this.buildTypeWhere(filter.type)),
       createdAt: { gte: from, lte: to },
     };
+  }
+
+  /**
+   * Prisma predicate for one series key, matching the SQL in {@link typeMatch}.
+   *
+   * @param type Canonical key, or `other` for NULL / unrecognised types.
+   */
+  private buildTypeWhere(type: string): Prisma.LogWhereInput {
+    const matchAny = (values: string[]): Prisma.LogWhereInput[] =>
+      values.map((value) => ({
+        typeGenerate: { equals: value, mode: 'insensitive' },
+      }));
+
+    if (type === OTHER_TYPE_KEY) {
+      const known = GENERATION_TYPES.flatMap((t) => dbValuesForKey(t.key));
+      return {
+        OR: [{ typeGenerate: null }, { NOT: { OR: matchAny(known) } }],
+      };
+    }
+
+    const key = toGenerationTypeKey(type);
+    // An unknown key matches nothing rather than silently returning every row.
+    return key ? { OR: matchAny(dbValuesForKey(key)) } : { id: { in: [] } };
   }
 
   /**
@@ -324,7 +360,7 @@ export class DashboardService {
    *
    * @param organizationId Organization UUID.
    * @param filter Range, project scope and metric.
-   * @returns One row per bucket: `{ bucket, image, video, omnihuman, dreamactor }`.
+   * @returns One row per bucket: `{ bucket, <every GENERATION_TYPES key>, other }`.
    */
   async findGenerationSeries(
     organizationId: string,
@@ -339,7 +375,18 @@ export class DashboardService {
     // request input, so there is no injection surface in the interpolated identifiers.
     const columns = GENERATION_TYPES.map(
       (type) =>
-        Prisma.sql`${this.metricExpression(metric, type.dbValue)}::FLOAT AS ${Prisma.raw(`"${type.key}"`)}`,
+        Prisma.sql`${this.metricExpression(metric, this.typeMatch(dbValuesForKey(type.key)))}::FLOAT AS ${Prisma.raw(`"${type.key}"`)}`,
+    );
+    // Rows whose type is NULL or unrecognised still count toward the Generations card, so they
+    // get their own bucket — otherwise the per-type totals fall short of the card.
+    const knownValues = GENERATION_TYPES.flatMap((type) =>
+      dbValuesForKey(type.key),
+    );
+    columns.push(
+      Prisma.sql`${this.metricExpression(
+        metric,
+        Prisma.sql`l.id IS NOT NULL AND (l."type_generate" IS NULL OR NOT ${this.typeMatch(knownValues)})`,
+      )}::FLOAT AS ${Prisma.raw(`"${OTHER_TYPE_KEY}"`)}`,
     );
 
     // The ::text cast is required — Postgres cannot infer the type of a bare parameter
@@ -379,22 +426,30 @@ export class DashboardService {
   }
 
   /**
-   * Builds the aggregate expression for one generation type.
+   * Builds the aggregate expression for one series.
    *
    * @param metric Which quantity to report.
-   * @param dbValue The database literal for the type (from GENERATION_TYPES).
+   * @param condition Row predicate selecting the series (from {@link typeMatch}).
    * @returns A SQL fragment safe to embed in the SELECT list.
    */
-  private metricExpression(metric: DashboardMetric, dbValue: string) {
+  private metricExpression(metric: DashboardMetric, condition: Prisma.Sql) {
     if (metric === 'count') {
       // COUNT ignores the NULL rows produced by the LEFT JOIN, so empty buckets yield 0.
-      return Prisma.sql`COUNT(l.id) FILTER (WHERE l."type_generate" = ${dbValue})`;
+      return Prisma.sql`COUNT(l.id) FILTER (WHERE ${condition})`;
     }
 
     const column =
       metric === 'image' ? Prisma.sql`l.used_image` : Prisma.sql`l.used_credit`;
 
-    return Prisma.sql`COALESCE(SUM(CASE WHEN l."type_generate" = ${dbValue} THEN ${column} ELSE 0 END), 0)`;
+    return Prisma.sql`COALESCE(SUM(CASE WHEN ${condition} THEN COALESCE(${column}, 0) ELSE 0 END), 0)`;
+  }
+
+  /**
+   * Case-insensitive match of `type_generate` against stored literals, mirroring
+   * `toGenerationTypeKey` so the SQL and the API agree on which type a row is.
+   */
+  private typeMatch(dbValues: string[]) {
+    return Prisma.sql`LOWER(l."type_generate") IN (${Prisma.join(dbValues)})`;
   }
 
   /**
@@ -411,32 +466,86 @@ export class DashboardService {
     organizationId: string,
     filter: DashboardFilterDto = {},
   ) {
-    const parsedLimit = Number(filter.limit);
-    const take =
-      Number.isFinite(parsedLimit) && parsedLimit > 0
-        ? Math.min(Math.trunc(parsedLimit), 50)
-        : 10;
+    const take = this.parsePositiveInt(filter.limit, 10, 50);
+    const where = this.buildLogWhere(organizationId, filter);
+    return (await this.findLogRows(where, 0, take)).map((row) =>
+      this.toRecentGeneration(row),
+    );
+  }
 
+  /**
+   * One page of generation logs for the dashboard log viewer.
+   *
+   * @param organizationId Organization UUID.
+   * @param filter Range, project / user / type / status scope and paging.
+   * @returns The page of rows plus the total for the same filter.
+   */
+  async findGenerationLogs(
+    organizationId: string,
+    filter: GenerationLogFilterDto = {},
+  ) {
+    const page = this.parsePositiveInt(filter.page, 1, Number.MAX_SAFE_INTEGER);
+    const pageSize = this.parsePositiveInt(filter.pageSize, 10, 50);
+    const where = this.buildLogWhere(organizationId, filter);
+
+    const [rows, total] = await Promise.all([
+      this.findLogRows(where, (page - 1) * pageSize, pageSize),
+      this.logRepo.count({ where }),
+    ]);
+
+    return {
+      data: rows.map((row) => ({
+        ...this.toRecentGeneration(row),
+        status: row.status,
+        galleryId: row.galleryId,
+        resolution: row.resolution,
+        ratio: row.ratio,
+      })),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  private parsePositiveInt(raw: string | undefined, fallback: number, max: number) {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0
+      ? Math.min(Math.trunc(parsed), max)
+      : fallback;
+  }
+
+  private async findLogRows(
+    where: Prisma.LogWhereInput,
+    skip: number,
+    take: number,
+  ) {
     // Cast justified: LogRepository.findMany is not generic over its args, so TypeScript
-    // cannot see the `select`ed relations. RecentGenerationRow describes the real payload.
-    const logs = (await this.logRepo.findMany({
-      where: this.buildLogWhere(organizationId, filter),
+    // cannot see the `select`ed relations. GenerationLogRow describes the real payload.
+    return (await this.logRepo.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
+      skip,
       take,
       select: {
         id: true,
         taskId: true,
         typeGenerate: true,
         prompt: true,
+        status: true,
         usedCredit: true,
         usedImage: true,
         createdAt: true,
+        galleryId: true,
+        resolution: true,
+        ratio: true,
         project: { select: { id: true, name: true } },
         users: { select: { userId: true, fullname: true, username: true } },
       },
-    })) as unknown as RecentGenerationRow[];
+    })) as unknown as GenerationLogRow[];
+  }
 
-    return logs.map((log) => ({
+  private toRecentGeneration(log: GenerationLogRow) {
+    return {
       id: log.id,
       taskId: log.taskId,
       // Normalise the stored literal (e.g. 'omnihumen') to the canonical API key.
@@ -449,7 +558,7 @@ export class DashboardService {
       projectName: log.project?.name ?? null,
       userId: log.users?.userId ?? null,
       userFullname: log.users?.fullname ?? log.users?.username ?? null,
-    }));
+    };
   }
 
   /**

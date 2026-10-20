@@ -44,6 +44,18 @@ export const KEY_BY_DB_VALUE: Readonly<Record<string, GenerationTypeKey>> = {
 };
 
 /**
+ * Every stored literal (lower-case) that normalises to `key`, aliases included.
+ *
+ * @param key Canonical generation type key.
+ * @returns The `type_generate` values to match for that key.
+ */
+export function dbValuesForKey(key: GenerationTypeKey): string[] {
+  return Object.keys(KEY_BY_DB_VALUE).filter(
+    (value) => KEY_BY_DB_VALUE[value] === key,
+  );
+}
+
+/**
  * Normalises a raw `type_generate` value into a canonical key.
  *
  * @param dbValue Raw value read from the database; may be null for legacy rows.

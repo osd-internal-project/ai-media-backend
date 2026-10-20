@@ -142,6 +142,14 @@ export class LogsController {
     return conversation;
   }
 
+  @Get('detail/:logId')
+  findDetail(
+    @Param('logId') logId: string,
+    @Query('organizationId') organizationId: string,
+  ) {
+    return this.logsService.findDetail(logId, organizationId);
+  }
+
   @Get('generate-vdo-logs/:taskId')
   findByTaskId(@Param('taskId') taskId: string, @Query() query: any) {
     return this.logsService.findByTaskId(taskId, query);

@@ -13,7 +13,10 @@ import { Response } from 'express';
 
 import { DashboardService } from './dashboard.service';
 import { CreateDashboardDto } from './dto/create-dashboard.dto';
-import { DashboardFilterDto } from './dto/dashboard-filter.dto';
+import {
+  DashboardFilterDto,
+  GenerationLogFilterDto,
+} from './dto/dashboard-filter.dto';
 import { UpdateDashboardDto } from './dto/update-dashboard.dto';
 import * as dayjs from 'dayjs';
 
@@ -43,6 +46,14 @@ export class DashboardController {
     @Query() filter: DashboardFilterDto,
   ) {
     return this.dashboardService.findRecentGenerations(organizationId, filter);
+  }
+
+  @Get('generation-logs/:organizationId')
+  findGenerationLogs(
+    @Param('organizationId') organizationId: string,
+    @Query() filter: GenerationLogFilterDto,
+  ) {
+    return this.dashboardService.findGenerationLogs(organizationId, filter);
   }
 
   @Get('credit-per-month-and-type/:organizationId')

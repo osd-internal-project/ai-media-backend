@@ -1,4 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   LogRepository,
   GalleryRepository,
@@ -8,6 +13,7 @@ import {
   ProjectMemberRepository,
   resolveGalleryResultUrls,
   StorageUrlService,
+  toGenerationTypeKey,
 } from '@ai-media/share';
 import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
 import * as dayjs from 'dayjs';
@@ -879,5 +885,79 @@ export class LogsService {
         userAgent,
       },
     });
+  }
+
+  /**
+   * One generation with presigned media, for the dashboard log drawer.
+   * The organization is part of the lookup, so a log from another org reads as not found.
+   */
+  async findDetail(logId: string, organizationId: string) {
+    if (!organizationId) {
+      throw new NotFoundException(`Log ${logId} not found`);
+    }
+    const log = await this.logrepo.findOne({
+      where: { id: logId, project: { organizationId } },
+      include: {
+        project: { select: { id: true, name: true } },
+        users: { select: { userId: true, fullname: true, username: true } },
+      },
+    });
+    if (!log) {
+      throw new NotFoundException(`Log ${logId} not found`);
+    }
+
+    const gallery = log.galleryId
+      ? await this.galleryRepo.findOne({ where: { id: log.galleryId } })
+      : log.taskId
+        ? await this.galleryRepo.findOne({ where: { taskId: log.taskId } })
+        : null;
+
+    const typeGenerate = gallery?.typeGenerate ?? log.typeGenerate ?? '';
+    const resolve = (name: string | null | undefined) =>
+      this.resolveOutputUrl(
+        organizationId,
+        { projectId: log.projectId, typeGenerate },
+        name,
+      );
+    const [resultUrl, thumbnailUrl, referenceImages] = await Promise.all([
+      gallery
+        ? Promise.all(resolveGalleryResultUrls(gallery).map(resolve))
+        : Promise.resolve([]),
+      resolve(gallery?.thumbnailUrl),
+      this.storageUrl.toVerifiedDisplayUrls(log.referenceImages ?? []),
+    ]);
+
+    // Cast justified: LogRepository.findOne is not generic, so the included relations are
+    // invisible to TypeScript even though Prisma returns them.
+    const withRelations = log as typeof log & {
+      project: { id: string; name: string } | null;
+      users: { userId: string; fullname: string | null; username: string } | null;
+    };
+
+    return {
+      id: log.id,
+      taskId: log.taskId,
+      typeGenerate: log.typeGenerate,
+      type: toGenerationTypeKey(log.typeGenerate),
+      status: log.status,
+      prompt: log.prompt,
+      usedCredit: log.usedCredit ?? 0,
+      usedImage: log.usedImage ?? 0,
+      resolution: log.resolution,
+      ratio: log.ratio,
+      generateAudio: log.generateAudio,
+      generateConfig: log.generateConfig,
+      createdAt: log.createdAt,
+      projectId: withRelations.project?.id ?? log.projectId,
+      projectName: withRelations.project?.name ?? null,
+      userId: log.userId,
+      userFullname:
+        withRelations.users?.fullname ?? withRelations.users?.username ?? null,
+      galleryId: gallery?.id ?? log.galleryId,
+      genneratedStatus: gallery?.genneratedStatus ?? null,
+      resultUrl: resultUrl.filter(Boolean),
+      thumbnailUrl: thumbnailUrl || null,
+      referenceImages,
+    };
   }
 }

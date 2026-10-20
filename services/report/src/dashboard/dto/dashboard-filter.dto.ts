@@ -41,3 +41,31 @@ export class DashboardFilterDto {
   @IsString()
   limit?: string;
 }
+
+/** Status values the generation-logs endpoint accepts; `all` disables the status filter. */
+export type GenerationLogStatus = 'success' | 'pending' | 'failed' | 'all';
+
+/** Query filter for the paginated generation-logs endpoint. */
+export class GenerationLogFilterDto extends DashboardFilterDto {
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  /** Canonical generation type key, or `other` for NULL / unrecognised types. */
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  /** Defaults to `success` so totals match the Overview stat cards. */
+  @IsOptional()
+  @IsIn(['success', 'pending', 'failed', 'all'])
+  status?: GenerationLogStatus;
+
+  @IsOptional()
+  @IsString()
+  page?: string;
+
+  @IsOptional()
+  @IsString()
+  pageSize?: string;
+}
