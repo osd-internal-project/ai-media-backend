@@ -1,4 +1,13 @@
-import { Controller, Get, Param, Post, Body, Patch, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Post,
+  Body,
+  Patch,
+  Delete,
+  BadRequestException,
+} from '@nestjs/common';
 import { PlanService } from './plan.service';
 
 @Controller('plans')
@@ -28,6 +37,14 @@ export class PlanController {
   @Post()
   create(@Body() data: any) {
     return this.planService.create(data);
+  }
+
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: string, @Body('status') status: unknown) {
+    if (typeof status !== 'boolean') {
+      throw new BadRequestException('status must be a boolean');
+    }
+    return this.planService.updateStatus(id, status);
   }
 
   @Patch(':id')

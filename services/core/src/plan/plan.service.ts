@@ -208,6 +208,12 @@ export class PlanService {
     });
   }
 
+  // Touches only `status`: update() recreates every price, which changes the price ids subscriptions point at.
+  async updateStatus(id: string, status: boolean) {
+    await this.planRepo.update({ where: { id }, data: { status } });
+    return this.findById(id);
+  }
+
   async update(id: string, data: any) {
     const { prices, features, popular, detailJson, ...rest } = data;
 

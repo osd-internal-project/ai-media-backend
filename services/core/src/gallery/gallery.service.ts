@@ -143,8 +143,11 @@ export class GalleryService {
       throw new NotFoundException(`Gallery item ${id} not found`);
     }
 
-    // ใช้รูปแรกจาก resultUrl[] (fallback imageUrl สำหรับ data เก่า)
-    const objectName = resolveGalleryResultUrls(found)[0] ?? '';
+    // image หลายรูปอยู่ใน row เดียว — เลือกตาม filename ได้เฉพาะไฟล์ของ row นี้, ไม่ตรงใช้รูปแรก
+    const objectNames = resolveGalleryResultUrls(found);
+    const objectName =
+      (objectNames.includes(query.filename) ? query.filename : objectNames[0]) ??
+      '';
     if (!objectName) {
       throw new NotFoundException(
         `Gallery item ${id} has no downloadable file`,
