@@ -1,5 +1,5 @@
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job, Queue, UnrecoverableError } from 'bullmq';
+import { DelayedError, Job, Queue, UnrecoverableError } from 'bullmq';
 import { Logger, Injectable } from '@nestjs/common';
 import {
   GalleryRepository,
@@ -35,6 +35,7 @@ import * as https from 'https';
 import { GenerateHelperService } from './generate-helper.service';
 import { VideoStorageService } from './video-storage.service';
 import { ByteplusAssetService, TaskAssets } from './byteplus-asset.service';
+import { acquireVideoSlot, releaseVideoSlot, slotLimit } from './video-slot';
 
 /** ctx ของงานที่ส่งแล้ว — finalize ต้องใช้ แต่ callback ส่งมาแค่ taskId */
 const VIDEO_CTX_TTL_SEC = 24 * 60 * 60;
@@ -45,6 +46,21 @@ const VIDEO_POLL_TIMEOUT_MS = 20 * 60 * 1000;
 /** sweeper รอบละ 10 นาที — กวาดงานที่เข้าคิวเกิน 30 นาทีแล้วไม่มีใครปิด */
 const VIDEO_SWEEP_EVERY_MS = 10 * 60 * 1000;
 const VIDEO_SWEEP_STALE_MS = 30 * 60 * 1000;
+/** slot เต็ม / provider ตอบ 429 → หน่วง job ไว้ในคิวแล้วลองใหม่ จนรอรวมเกิน VIDEO_QUEUE_MAX_WAIT_MS ค่อย fail */
+const VIDEO_SLOT_RETRY_MS = 15 * 1000;
+const VIDEO_BUSY_RETRY_MS = 30 * 1000;
+const VIDEO_QUEUE_MAX_WAIT_MS = 20 * 60 * 1000;
+
+/** provider รับงานไม่ไหวชั่วคราว (slot ของเราเต็ม หรือโดน rate/concurrency limit) — รอแล้วส่งใหม่ได้ */
+class ProviderBusyError extends Error {
+  constructor(message: string, readonly retryMs: number) {
+    super(message);
+  }
+}
+const BUSY_MESSAGE =
+  /HTTP 429|too many requests|rate ?limit|concurren\w* ?limit|throttl|ServerOverloaded|RequestBurstTooFast/i;
+export const isProviderBusy = (status: number | undefined, message: string) =>
+  status === 429 || BUSY_MESSAGE.test(message);
 
 const videoCtxKey = (taskId: string) => `video-ctx:${taskId}`;
 const videoFinalKey = (taskId: string) => `video-final:${taskId}`;
@@ -205,7 +221,7 @@ export class VideoProcessor extends WorkerHost {
     if (job.name === VIDEO_JOB_FINALIZE) return this.handleFinalize(job);
     if (job.name === VIDEO_JOB_POLL_CHECK) return this.handlePollCheck(job);
     if (job.name === VIDEO_JOB_SWEEP) return this.handleSweep();
-    return this.handleSubmit(job);
+    return this.handleSubmit(job, token);
   }
 
   /**
@@ -213,7 +229,7 @@ export class VideoProcessor extends WorkerHost {
    * job เก่าที่มี `videoTaskId` อยู่แล้ว (retry/stalled) ไม่ส่งซ้ำ แค่ตั้ง poll-check ใหม่
    */
   @Span()
-  private async handleSubmit(job: Job): Promise<unknown> {
+  private async handleSubmit(job: Job, token?: string): Promise<unknown> {
     const {
       taskId,
       clientId,
@@ -256,6 +272,13 @@ export class VideoProcessor extends WorkerHost {
           },
           httpsAgent: this.agent,
         };
+        const limit = slotLimit(sendConfig);
+        if (!(await acquireVideoSlot(this.redis, body.model, taskId, limit))) {
+          throw new ProviderBusyError(
+            `${body.model} has ${limit} tasks in flight`,
+            VIDEO_SLOT_RETRY_MS,
+          );
+        }
         const payload = await this.buildPayload(body, sendConfig, taskId);
         // seedance2 ไม่รับรูปคนจริงเป็น URL — แปลงทุกรูปเป็น asset:// ก่อนส่ง
         if (sendConfig?.type === 'seedance2') {
@@ -309,6 +332,9 @@ export class VideoProcessor extends WorkerHost {
             )}`,
           );
 
+          if (isProviderBusy(apiStatus, apiMessage)) {
+            throw new ProviderBusyError(apiMessage, VIDEO_BUSY_RETRY_MS);
+          }
           throw new UnrecoverableError(apiMessage);
         }
 
@@ -365,6 +391,13 @@ export class VideoProcessor extends WorkerHost {
       );
       return { submitted: true, taskId, videoTaskId };
     } catch (error) {
+      if (error instanceof ProviderBusyError) {
+        await releaseVideoSlot(this.redis, taskId);
+        await this.byteplusAsset.cleanup(taskId, assets);
+        if (Date.now() - job.timestamp < VIDEO_QUEUE_MAX_WAIT_MS) {
+          return this.delaySubmit(job, token, error);
+        }
+      }
       await this.failTask({ taskId, clientId, body, userId }, error as Error);
       await this.clearInflight(taskId);
       await this.byteplusAsset.cleanup(taskId, assets);
@@ -722,8 +755,25 @@ export class VideoProcessor extends WorkerHost {
     }
   }
 
-  /** งานจบแล้ว (ทางไหนก็ได้) — เอาออกจากรายการที่ sweeper เฝ้า */
+  /** หน่วง submit job ไว้ในคิว (ไม่นับเป็น attempt) — gallery ยัง QUEUED จนกว่าจะส่งได้ */
+  private async delaySubmit(
+    job: Job,
+    token: string | undefined,
+    reason: ProviderBusyError,
+  ): Promise<never> {
+    const { taskId } = job.data as VideoProcessJob;
+    this.logger.warn(
+      `${tag(taskId)} ⏳ provider busy (${reason.message}) — retry in ${
+        reason.retryMs / 1000
+      }s`,
+    );
+    await job.moveToDelayed(Date.now() + reason.retryMs, token);
+    throw new DelayedError();
+  }
+
+  /** งานจบแล้ว (ทางไหนก็ได้) — เอาออกจากรายการที่ sweeper เฝ้า + คืน slot ของ provider */
   private async clearInflight(taskId: string): Promise<void> {
+    await releaseVideoSlot(this.redis, taskId);
     await this.redis
       .multi()
       .zrem(VIDEO_INFLIGHT_KEY, taskId)

@@ -1,5 +1,10 @@
 import axios from 'axios';
-import { VideoProcessor, unwrapProviderMessage } from './video.service';
+import { DelayedError } from 'bullmq';
+import {
+  VideoProcessor,
+  isProviderBusy,
+  unwrapProviderMessage,
+} from './video.service';
 
 jest.mock('ioredis', () => ({
   Redis: jest.fn().mockImplementation(() => ({ publish: jest.fn() })),
@@ -21,6 +26,27 @@ const makeRedis = () => {
   const store = new Map<string, string>();
   const zset = new Map<string, number>();
   const hash = new Map<string, string>();
+  // video-slot Lua (acquire = 2 keys, release = 1 key) แบบ in-memory — Lua จริงทดสอบกับ redis-server แยก
+  const slots = new Map<string, Set<string>>();
+  const owners = new Map<string, string>();
+  const evalSlot = async (_lua: string, numKeys: number, ...a: unknown[]) => {
+    if (numKeys === 2) {
+      const [k, owner, , , limit, taskId] = a as string[];
+      const set = slots.get(k) ?? new Set<string>();
+      slots.set(k, set);
+      if (set.has(taskId)) return 1;
+      if (set.size >= Number(limit)) return 0;
+      set.add(taskId);
+      owners.set(owner, k);
+      return 1;
+    }
+    const [owner, taskId] = a as string[];
+    const k = owners.get(owner);
+    if (!k) return 0;
+    slots.get(k)?.delete(taskId);
+    owners.delete(owner);
+    return 1;
+  };
   const multi = () => {
     const chain = {
       zrem: (_k: string, m: string) => (zset.delete(m), chain),
@@ -33,6 +59,8 @@ const makeRedis = () => {
     store,
     zset,
     hash,
+    slots,
+    eval: jest.fn(evalSlot),
     multi: jest.fn(multi),
     zrangebyscore: jest.fn(async (_k: string, _min: string, max: number) =>
       [...zset].filter(([, score]) => score <= max).map(([m]) => m),
@@ -219,7 +247,14 @@ describe('VideoProcessor (callback + poll-check)', () => {
         statusBaseUrl: 'https://gw/tasks',
         sendApi: 'https://gw/create',
         sendConfig: { type: 'seedance1', configType: 'application/json' },
-        body: { ...body, prompt: 'p', ratio: '1:1', resolution: '720p', image: [], files: [] },
+        body: {
+          ...body,
+          prompt: 'p',
+          ratio: '1:1',
+          resolution: '720p',
+          image: [],
+          files: [],
+        },
       },
       updateData: jest.fn(),
     });
@@ -241,11 +276,12 @@ describe('VideoProcessor (callback + poll-check)', () => {
       taskId: 't1',
       galleryId: 'g1',
     });
-    const successWrite = gallery.updateMany.mock.invocationCallOrder[
-      gallery.updateMany.mock.calls.findIndex(
-        ([a]) => a.data.genneratedStatus === 'SUCCESS',
-      )
-    ];
+    const successWrite =
+      gallery.updateMany.mock.invocationCallOrder[
+        gallery.updateMany.mock.calls.findIndex(
+          ([a]) => a.data.genneratedStatus === 'SUCCESS',
+        )
+      ];
     expect(successWrite).toBeLessThan(publish.mock.invocationCallOrder[idx]);
   });
 
@@ -591,6 +627,105 @@ describe('VideoProcessor (callback + poll-check)', () => {
       };
       await expect(processor.process(job)).rejects.toThrow(inner);
       expect(publishedError()?.message).toBe(inner);
+    });
+  });
+  describe('provider slot limit', () => {
+    const submitJob = (
+      overrides: { maxConcurrent?: number; timestamp?: number } = {},
+    ) => ({
+      name: 'vdo-generate-queue',
+      id: 't1',
+      timestamp: overrides.timestamp ?? Date.now(),
+      data: {
+        taskId: 't1',
+        clientId: 'c1',
+        userId: 'u1',
+        statusBaseUrl: 'https://gw/tasks',
+        sendApi: 'https://gw/create',
+        sendConfig: {
+          type: 'seedance1',
+          configType: 'application/json',
+          authorization: 'key',
+          maxConcurrent: overrides.maxConcurrent,
+        },
+        body: { ...body, prompt: 'p', image: [], files: [] },
+      },
+      updateData: jest.fn(),
+      moveToDelayed: jest.fn(),
+    });
+    const holders = () => [
+      ...(redis.slots.get('video:slots:seedance-1-5-pro') ?? []),
+    ];
+
+    it('slot full → job is delayed in the queue, never POSTed or failed', async () => {
+      redis.slots.set('video:slots:seedance-1-5-pro', new Set(['other']));
+      const job = submitJob({ maxConcurrent: 1 });
+      await expect(processor.process(job, 'tok')).rejects.toBeInstanceOf(
+        DelayedError,
+      );
+      expect(job.moveToDelayed).toHaveBeenCalledWith(expect.any(Number), 'tok');
+      expect(axiosPost).not.toHaveBeenCalled();
+      expect(helper.updateUsedCreditFail).not.toHaveBeenCalled();
+      expect(holders()).toEqual(['other']);
+    });
+
+    it('submit holds a slot until finalize releases it', async () => {
+      axiosPost.mockResolvedValue({ data: { id: 'cgt-1' } });
+      await processor.process(submitJob());
+      expect(holders()).toEqual(['t1']);
+
+      axiosGet.mockResolvedValue(succeeded);
+      await processor.process({
+        name: 'video-finalize',
+        data: { taskId: 't1' },
+      });
+      expect(holders()).toEqual([]);
+    });
+
+    it('provider 429 → slot released and job delayed instead of failed', async () => {
+      axiosPost.mockRejectedValue({
+        response: { status: 429, data: { error: { message: 'too many' } } },
+      });
+      const job = submitJob();
+      await expect(processor.process(job, 'tok')).rejects.toBeInstanceOf(
+        DelayedError,
+      );
+      expect(job.moveToDelayed).toHaveBeenCalled();
+      expect(helper.updateUsedCreditFail).not.toHaveBeenCalled();
+      expect(holders()).toEqual([]);
+    });
+
+    it('still busy after 20 minutes in the queue → fails and refunds', async () => {
+      axiosPost.mockRejectedValue({
+        response: { status: 429, data: { error: { message: 'too many' } } },
+      });
+      const job = submitJob({ timestamp: Date.now() - 21 * 60 * 1000 });
+      await expect(processor.process(job, 'tok')).rejects.toThrow('too many');
+      expect(job.moveToDelayed).not.toHaveBeenCalled();
+      expect(helper.updateUsedCreditFail).toHaveBeenCalledTimes(1);
+      expect(holders()).toEqual([]);
+    });
+
+    it('other provider errors still fail right away', async () => {
+      axiosPost.mockRejectedValue({
+        response: { status: 400, data: { error: { message: 'bad prompt' } } },
+      });
+      const job = submitJob();
+      await expect(processor.process(job, 'tok')).rejects.toThrow('bad prompt');
+      expect(job.moveToDelayed).not.toHaveBeenCalled();
+      expect(holders()).toEqual([]);
+    });
+
+    it.each([
+      [429, 'x', true],
+      [400, 'Video generation task HTTP 429: {}', true],
+      [400, 'RateLimitExceeded.EndpointRPMExceeded', true],
+      [400, 'concurrency limit reached', true],
+      [503, 'ServerOverloaded', true],
+      [400, 'QuotaExceeded', false],
+      [400, 'prompt is too long', false],
+    ])('isProviderBusy(%s, %s) = %s', (status, message, busy) => {
+      expect(isProviderBusy(status, message)).toBe(busy);
     });
   });
 });

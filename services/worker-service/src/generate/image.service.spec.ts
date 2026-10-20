@@ -15,7 +15,7 @@ jest.mock(
 );
 
 type Private = {
-  saveGallery: (data: Record<string, unknown>) => Promise<void>;
+  saveGallery: (data: Record<string, unknown>) => Promise<string | undefined>;
   publishToCore: jest.Mock;
   updateTaskStatus: jest.Mock;
 };
@@ -25,6 +25,7 @@ describe('ImageProcessor gallery + sweeper', () => {
     updateMany: jest.Mock;
     create: jest.Mock;
     findMany: jest.Mock;
+    findOne: jest.Mock;
   };
   let queue: { getJob: jest.Mock; upsertJobScheduler: jest.Mock };
   let helper: { updateUsedCreditFail: jest.Mock };
@@ -45,8 +46,9 @@ describe('ImageProcessor gallery + sweeper', () => {
   beforeEach(() => {
     gallery = {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-      create: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockResolvedValue({ id: 'g-new' }),
       findMany: jest.fn().mockResolvedValue([staleRow]),
+      findOne: jest.fn().mockResolvedValue({ id: 'g1' }),
     };
     queue = { getJob: jest.fn(), upsertJobScheduler: jest.fn() };
     helper = { updateUsedCreditFail: jest.fn().mockResolvedValue({}) };
@@ -74,7 +76,7 @@ describe('ImageProcessor gallery + sweeper', () => {
     const data = { taskId: 't1', genneratedStatus: 'SUCCESS' };
 
     it('updates the PENDING row core created at submit', async () => {
-      await priv.saveGallery(data);
+      await expect(priv.saveGallery(data)).resolves.toBe('g1');
       expect(gallery.updateMany).toHaveBeenCalledWith({
         where: { taskId: 't1' },
         data,
@@ -84,7 +86,7 @@ describe('ImageProcessor gallery + sweeper', () => {
 
     it('creates the row when none exists (job queued before the deploy)', async () => {
       gallery.updateMany.mockResolvedValue({ count: 0 });
-      await priv.saveGallery(data);
+      await expect(priv.saveGallery(data)).resolves.toBe('g-new');
       expect(gallery.create).toHaveBeenCalledWith({ data });
     });
   });

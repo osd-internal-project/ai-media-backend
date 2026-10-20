@@ -314,7 +314,7 @@ export class ImageProcessor extends WorkerHost {
 
       // Save to Gallery — 1 record ต่อ 1 generation, เก็บ object name ทุกรูปใน resultUrl[]
       // imageUrl เก็บรูปแรกไว้เพื่อ backward-compat กับ reader ที่ยังอ่าน imageUrl
-      await this.saveGallery({
+      const galleryId = await this.saveGallery({
         taskId,
         projectId: body.projectId,
         userId,
@@ -406,6 +406,8 @@ export class ImageProcessor extends WorkerHost {
       // 5. ส่ง event "complete" ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:image-complete', {
         taskId,
+        // front ใช้ download — ไม่มี id จะเอา URL provider ไปเรียกแล้วได้ 404
+        galleryId,
         success: true,
         imageCount: uploadedImages.length,
         images: uploadedImages,
@@ -649,18 +651,27 @@ export class ImageProcessor extends WorkerHost {
   /**
    * เขียนผลลง gallery row PENDING ที่ core สร้างตอน submit (update ซ้ำได้ ไม่เกิด row ซ้ำตอน retry)
    * ไม่เจอ row = job เข้าคิวก่อน core เริ่มสร้าง PENDING → create แทน
+   * @returns gallery id ของ row ที่เขียน
    */
   @Span()
-  private async saveGallery(data: Prisma.GalleryUncheckedCreateInput) {
+  private async saveGallery(
+    data: Prisma.GalleryUncheckedCreateInput,
+  ): Promise<string | undefined> {
     const { count } = await this.galleryRepo.updateMany({
       where: { taskId: data.taskId },
       data,
     });
-    if (count > 0) return;
+    if (count > 0) {
+      const row = await this.galleryRepo.findOne({
+        where: { taskId: data.taskId },
+      });
+      return row?.id;
+    }
     this.logger.warn(
       `⚠️ No PENDING gallery row for task ${data.taskId} — creating one`,
     );
-    await this.galleryRepo.create({ data });
+    const created = await this.galleryRepo.create({ data });
+    return created.id;
   }
 
   /**
