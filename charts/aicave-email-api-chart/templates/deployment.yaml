@@ -45,6 +45,10 @@ spec:
           value: {{ .Values.env.emailPort | quote }}
         - name: EMAIL_SECURE
           value: {{ .Values.env.emailSecure | quote }}
+        - name: EMAIL_HELO
+          value: {{ .Values.env.emailHelo | quote }}
+        - name: EMAIL_TLS_SERVERNAME
+          value: {{ .Values.env.emailTlsServername | quote }}
         - name: EMAIL_FROM
           value: {{ .Values.env.emailFrom | quote }}
         resources:

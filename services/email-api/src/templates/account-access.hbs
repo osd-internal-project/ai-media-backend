@@ -3,7 +3,7 @@
 
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Your Ai Cave account</title>
+    <title>Welcome to Ai Cave</title>
     <style>
         body {
             margin: 0;
@@ -119,24 +119,30 @@
     <div class="container">
         <!-- Logo Section -->
         <div class="logo">
-            <!-- You can replace this text with an <img> tag if you have a URL -->
             <span class="logo-text">Ai Cave</span>
         </div>
 
         <!-- Main Content -->
-        <h1>Your account for {{teamName}} is ready</h1>
-        <p class="subtitle">Set your password to start using Ai Cave. This link expires in {{expires_in}}.</p>
+        <h1>Welcome to Ai Cave</h1>
+        <p class="subtitle">An Ai Cave account has been created for you in <strong>{{teamName}}</strong>.</p>
 
         <!-- Account Info Box -->
         <div class="account-box">
             <div class="account-label">Username:</div>
             <div class="account-email">{{username}}</div>
             <div class="account-label" style="margin-top: 12px;">Email:</div>
-            <a href="mailto:{{email}}" class="account-email">{{email}}</a>
+            <div class="account-email">{{email}}</div>
         </div>
 
+        <!-- Steps -->
+        <ol style="text-align: left; max-width: 440px; margin: 0 auto 30px; padding-left: 20px; font-size: 15px; color: #374151; line-height: 1.7;">
+            <li>Click the button below to set up your account (link valid for {{expires_in}}).</li>
+            <li>Choose your Ai Cave password.</li>
+            <li>Sign in at <a href="{{login_url}}" style="color: #000080;">{{login_url}}</a> with your username or email and the new password.</li>
+        </ol>
+
         <!-- Action Button -->
-        <a href="{{action_url}}" class="btn">Set your password</a>
+        <a href="{{action_url}}" class="btn">Set up my account</a>
 
         <!-- Fallback Link -->
         <div class="fallback">
@@ -149,6 +155,7 @@
 
         <!-- Footer -->
         <div class="footer">
+            If you weren’t expecting this email, you can ignore it.<br>
             If you’re having any issues with your account, feel free to contact customer support or reach out via Ai
             Cave support.
         </div>

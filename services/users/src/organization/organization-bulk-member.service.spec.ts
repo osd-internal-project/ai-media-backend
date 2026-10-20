@@ -500,7 +500,11 @@ describe('OrganizationBulkMemberService', () => {
       expect(http.post.mock.calls[0][1]).toMatchObject({
         to: 'alice@example.com',
         template: 'account-access',
-        context: { teamName: 'Team', username: 'alice' },
+        context: {
+          teamName: 'Team',
+          username: 'alice',
+          login_url: expect.stringMatching(/\/login$/),
+        },
       });
     });
   });

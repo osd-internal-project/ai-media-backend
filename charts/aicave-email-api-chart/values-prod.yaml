@@ -18,6 +18,8 @@ env:
   emailHost: "103.197.245.8"
   emailPort: "25"
   emailSecure: "false"
+  emailHelo: "osd.co.th"
+  emailTlsServername: "osd-co-th.mail.protection.outlook.com"
   emailFrom: '"AI Cave Support" <aicavesupport@osd.co.th>'
 
 resources:

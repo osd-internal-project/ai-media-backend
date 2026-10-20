@@ -24,14 +24,17 @@ const target = SMTP_TARGETS.localTunnel; // เทสจาก local ผ่า�
 
 /* ──────────────────────────────────────────────────────────────────────────
  * 2) NODEMAILER TRANSPORTER
- *    relay นี้ไม่ต้อง auth และเป็น plain SMTP (ไม่ใช้ STARTTLS)
+ *    relay นี้ไม่ต้อง auth; ใช้ STARTTLS โดยตั้ง servername ให้ตรง cert outlook
  * ────────────────────────────────────────────────────────────────────────── */
 const transporter = nodemailer.createTransport({
   host: target.host,
   port: target.port,
   secure: false, // ไม่ใช่ implicit TLS (465)
-  ignoreTLS: true, // ส่งแบบ plain เลี่ยง STARTTLS (cert เป็นชื่อ outlook ไม่ตรง host)
   name: 'osd.co.th', // ชื่อ EHLO/HELO
+  tls: {
+    servername: 'osd-co-th.mail.protection.outlook.com', // cert เป็นชื่อ outlook ไม่ใช่ IP/localhost
+    rejectUnauthorized: false,
+  },
   connectionTimeout: 10000, // กันค้างนานถ้าต่อ relay ไม่ได้
   greetingTimeout: 10000, // ถ้าไม่ได้ 220 ใน 10s ให้ fail เลย (ไม่รอ 30s)
   // ไม่มี auth key -> relay นี้ไม่ต้อง login

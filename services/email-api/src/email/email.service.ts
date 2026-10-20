@@ -16,8 +16,8 @@ const TEMPLATE_NAME = /^[a-z0-9_-]+$/;
 
 /**
  * Sends transactional emails over an unauthenticated SMTP relay using raw
- * nodemailer. Mirrors the working d-service notification `EmailService`:
- * no SMTP auth, plain SMTP (STARTTLS ignored), reading EMAIL_* config.
+ * nodemailer: no SMTP auth, HELO as osd.co.th, STARTTLS with SNI set to the
+ * outlook cert name (EMAIL_TLS_SERVERNAME; cert not verified), reading EMAIL_* config.
  */
 @Injectable()
 export class EmailService {
@@ -29,10 +29,12 @@ export class EmailService {
     port: Number(appConfigs().EMAIL_PORT),
     secure: appConfigs().EMAIL_SECURE, // true for 465, false for STARTTLS/plain
     auth: undefined, // relay needs no credentials
+    name: appConfigs().EMAIL_HELO, // EHLO name; default would be the pod hostname
     tls: {
+      // relay cert is *.mail.protection.outlook.com, not the IP we dial
+      servername: appConfigs().EMAIL_TLS_SERVERNAME,
       rejectUnauthorized: false,
     },
-    ignoreTLS: true, // send plain, skip STARTTLS (relay cert is *.outlook, host mismatch)
     // nodemailer defaults (2m/30s/10m) outlast the 60s ingress — fail fast instead of hanging
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,

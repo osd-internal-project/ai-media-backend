@@ -203,7 +203,8 @@ export class OrganizationBulkMemberService {
     const { data } = await firstValueFrom(
       this.httpService.post(`${configs().emailApiUrl}/email/send`, {
         to: email,
-        subject: `Your Ai Cave account for ${teamName}`,
+        // no "password" in the subject — O365 flags it as phishing
+        subject: `Welcome to Ai Cave – your ${teamName} account is ready`,
         template: 'account-access',
         context: {
           teamName,
@@ -211,6 +212,7 @@ export class OrganizationBulkMemberService {
           email,
           expires_in: `${ACCESS_LINK_TTL_DAYS} days`,
           action_url: `${configs().frontendUrl}/change-password?token=${token}`,
+          login_url: `${configs().frontendUrl}/login`,
         },
       }),
     );

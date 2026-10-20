@@ -14,5 +14,8 @@ export const appConfigs = registerAs('app', () => ({
   EMAIL_HOST: process.env.EMAIL_HOST || 'localhost',
   EMAIL_PORT: process.env.EMAIL_PORT || 2525,
   EMAIL_SECURE: process.env.EMAIL_SECURE === 'true',
+  EMAIL_HELO: process.env.EMAIL_HELO || 'osd.co.th',
+  EMAIL_TLS_SERVERNAME:
+    process.env.EMAIL_TLS_SERVERNAME || 'osd-co-th.mail.protection.outlook.com',
   EMAIL_FROM: process.env.EMAIL_FROM || '"OSD Support" <osdsupport@osd.co.th>',
 }));
