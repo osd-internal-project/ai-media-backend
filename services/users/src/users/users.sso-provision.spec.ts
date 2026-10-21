@@ -1,4 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
 import {
@@ -8,6 +11,7 @@ import {
   OrganizationMemberRepository,
   OrganizationRepository,
   OrganizationSubscriptionRepository,
+  PlanPriceRepository,
   PlanRepository,
   ProjectMemberRepository,
   ProjectRepository,
@@ -39,6 +43,13 @@ describe('UsersService.createFirstUser (SSO)', () => {
   const projectRepo = { create: jest.fn() };
   const memberRepo = { create: jest.fn() };
   const projectMemberRepo = { create: jest.fn() };
+  const planRepo = { findOne: jest.fn() };
+  const planPriceRepo = { findOne: jest.fn() };
+  const freePlan = {
+    id: 'plan-free',
+    accessCodes: ['image', 'video'],
+    detailJson: { creditAllowance: 150 },
+  };
 
   beforeEach(async () => {
     jest.resetAllMocks();
@@ -51,6 +62,8 @@ describe('UsersService.createFirstUser (SSO)', () => {
         { provide: ProjectRepository, useValue: projectRepo },
         { provide: OrganizationMemberRepository, useValue: memberRepo },
         { provide: ProjectMemberRepository, useValue: projectMemberRepo },
+        { provide: PlanRepository, useValue: planRepo },
+        { provide: PlanPriceRepository, useValue: planPriceRepo },
         {
           provide: LlmGatewayService,
           useValue: { getOrCreateApiKey: jest.fn().mockResolvedValue('k') },
@@ -58,7 +71,6 @@ describe('UsersService.createFirstUser (SSO)', () => {
         ...[
           GroupsRepository,
           KeycloakService,
-          PlanRepository,
           HttpService,
           RegisterRepository,
           RequestChangePasswordRepository,
@@ -82,7 +94,12 @@ describe('UsersService.createFirstUser (SSO)', () => {
     expect(userRepo.create).not.toHaveBeenCalled();
   });
 
-  it('gives a new SSO user a personal org with a credit balance', async () => {
+  it('gives a new SSO user a personal org funded by the free plan', async () => {
+    planRepo.findOne.mockResolvedValue(freePlan);
+    planPriceRepo.findOne.mockResolvedValue({
+      creditAllowance: 50,
+      imageAllowance: 0,
+    });
     userRepo.findOne
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ userId: 'u-2', recentOrganizationId: 'org-2' });
@@ -99,12 +116,38 @@ describe('UsersService.createFirstUser (SSO)', () => {
     expect(creditBalanceRepo.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         organizationId: 'org-2',
-        onTopBalance: 50000,
-        onTopImage: 3,
+        onTopBalance: 50,
+        onTopImage: 0,
       }),
+    });
+    expect(planPriceRepo.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { planId: 'plan-free' } }),
+    );
+    expect(organizationRepo.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'personal',
+        accessCodes: ['image', 'video'],
+      }),
+    });
+    expect(projectRepo.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ limitCreditAllowance: 50 }),
+    });
+    expect(projectMemberRepo.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ maxToken: 50, limitCreditAllowance: 50 }),
     });
     expect(memberRepo.create).toHaveBeenCalledWith({
       data: { organizationId: 'org-2', userId: 'u-2', role: 'OWNER' },
     });
+  });
+
+  it('fails before creating an org when no free plan is configured', async () => {
+    planRepo.findOne.mockResolvedValue(null);
+    userRepo.findOne.mockResolvedValueOnce(null);
+    userRepo.create.mockResolvedValue({ userId: 'u-3' });
+
+    await expect(service.createFirstUser(ssoUser)).rejects.toBeInstanceOf(
+      InternalServerErrorException,
+    );
+    expect(organizationRepo.create).not.toHaveBeenCalled();
   });
 });

@@ -20,6 +20,7 @@ import {
   ProjectMemberRepository,
   ProjectRepository,
   PlanRepository,
+  PlanPriceRepository,
   RegisterRepository,
   RequestChangePasswordRepository,
   OrganizationSubscriptionRepository,
@@ -48,6 +49,7 @@ export class UsersService {
     private readonly projectMemberRepo: ProjectMemberRepository,
     @Inject(forwardRef(() => KeycloakService)) private readonly keycloakService: KeycloakService,
     private readonly planRepo: PlanRepository,
+    private readonly planPriceRepo: PlanPriceRepository,
     private readonly httpService: HttpService,
     private readonly registerRepo: RegisterRepository,
     private readonly requestChangePasswordRepo: RequestChangePasswordRepository,
@@ -560,8 +562,14 @@ export class UsersService {
     });
   }
 
-  /** personal org + OWNER + CreditBalance 50000/3 + project ของ user ใหม่ — ใช้ร่วมกันระหว่าง web register และ SSO */
+  /**
+   * personal org + OWNER + on-top credit + project ของ user ใหม่ — ใช้ร่วมกันระหว่าง web register และ SSO
+   * credit/accessCodes มาจาก free plan (isDefault) แต่ไม่สร้าง subscription
+   */
   private async provisionPersonalAccount(userId: string, displayName: string) {
+    const { creditAllowance, imageAllowance, accessCodes } =
+      await this.getFreePlanAllowance();
+
     const personalOrg = await this.organizationRepo.create({
       data: {
         name: `${displayName} Personal`,
@@ -575,6 +583,7 @@ export class UsersService {
         // remainTokenAmount: maxDefaultToken,
 
         maxUserAccess: 1,
+        accessCodes,
       },
     });
 
@@ -593,8 +602,8 @@ export class UsersService {
           organizationId: personalOrg.organizationId,
           currentCycleBalance: 0,
           currentCycleImage: 0,
-          onTopBalance: 50000,
-          onTopImage: 3,
+          onTopBalance: creditAllowance,
+          onTopImage: imageAllowance,
         },
       });
       const personalProject = await this.projectRepo.create({
@@ -602,8 +611,8 @@ export class UsersService {
           name: `${displayName} Project`,
           organizationId: personalOrg.organizationId,
           status: 'active',
-          limitCreditAllowance: 50000,
-          limitImageAllowance: 3,
+          limitCreditAllowance: creditAllowance,
+          limitImageAllowance: imageAllowance,
           usedCreditAllowance: 0,
           usedImageAllowance: 0,
         },
@@ -615,10 +624,10 @@ export class UsersService {
             projectId: personalProject.id,
             userId: userId,
             role: 'OWNER',
-            maxImages: 3,
-            maxToken: 50000,
-            limitCreditAllowance: 50000,
-            limitImageAllowance: 3,
+            maxImages: imageAllowance,
+            maxToken: creditAllowance,
+            limitCreditAllowance: creditAllowance,
+            limitImageAllowance: imageAllowance,
           },
         });
       }
@@ -630,6 +639,25 @@ export class UsersService {
         },
       });
     }
+  }
+
+  // Free plan may be status=false (hidden from the pricing page) — still the source for signup.
+  private async getFreePlanAllowance() {
+    const plan = await this.planRepo.findOne({ where: { isDefault: true } });
+    if (!plan) {
+      Logger.error('Free plan (isDefault) not found — cannot provision personal org');
+      throw new InternalServerErrorException('Free plan is not configured');
+    }
+    const price = await this.planPriceRepo.findOne({
+      where: { planId: plan.id },
+      orderBy: [{ isDefault: 'desc' }, { orderIndex: 'asc' }],
+    });
+    const planDetails = (plan.detailJson as Record<string, number>) ?? {};
+    return {
+      creditAllowance: price?.creditAllowance || planDetails.creditAllowance || 0,
+      imageAllowance: price?.imageAllowance || planDetails.imageAllowance || 0,
+      accessCodes: plan.accessCodes,
+    };
   }
 
   async confirmChangePassword(body: any) {
