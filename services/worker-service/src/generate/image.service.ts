@@ -380,6 +380,7 @@ export class ImageProcessor extends WorkerHost {
       if (imagelog) {
         const updated =
           await this.generateHelperService.updateUsedCreditSuccess(
+            taskId,
             userId,
             body.organizationId,
             body.projectId,
@@ -509,20 +510,27 @@ export class ImageProcessor extends WorkerHost {
         failedAt: new Date().toISOString(),
         error: error.message,
       });
-      const creditForFailure = await this.generateHelperService.getUsedCredit(
-        0,
-        body,
-        await this.masterModelTypeRepo.findOne({
-          where: { modelType: body.model, isActive: true },
-        }),
-      );
-      await this.generateHelperService.updateUsedCreditFail(
-        userId,
-        body.organizationId,
-        body.projectId,
-        'credit',
-        creditForFailure?.credit ?? 0,
-      );
+      // a retry may still succeed and charge — refunding now would make it free
+      const isFinalAttempt =
+        error instanceof UnrecoverableError ||
+        job.attemptsMade + 1 >= (job.opts?.attempts ?? 1);
+      if (isFinalAttempt) {
+        const creditForFailure = await this.generateHelperService.getUsedCredit(
+          0,
+          body,
+          await this.masterModelTypeRepo.findOne({
+            where: { modelType: body.model, isActive: true },
+          }),
+        );
+        await this.generateHelperService.updateUsedCreditFail(
+          taskId,
+          userId,
+          body.organizationId,
+          body.projectId,
+          'credit',
+          creditForFailure?.credit ?? 0,
+        );
+      }
       // ส่ง error event ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:image-error', {
         taskId,
@@ -775,6 +783,7 @@ export class ImageProcessor extends WorkerHost {
       }) — closing as failed, refund=${row.usedCredit ?? 0}`,
     );
     await this.generateHelperService.updateUsedCreditFail(
+      taskId,
       row.userId,
       '',
       row.projectId,

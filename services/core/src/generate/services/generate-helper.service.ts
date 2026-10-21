@@ -6,6 +6,7 @@ import {
   MasterdataModelTypeRepository,
   ProjectMemberRepository,
   ProjectRepository,
+  PrismaService,
   StorageUrlService,
   UsersRepository,
 } from '@ai-media/share';
@@ -44,6 +45,7 @@ export class GenerateHelperService {
     private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly storageUrl: StorageUrlService,
+    private readonly prisma: PrismaService,
   ) {}
 
   /**
@@ -212,35 +214,57 @@ export class GenerateHelperService {
     };
   }
 
-  async updateHoldCreditBalance(
+  /**
+   * Reserve `amount` on the member only if used + hold + amount stays within the limit.
+   * One conditional UPDATE, so concurrent requests cannot both pass the check.
+   */
+  async reserveHold(
     userId: string,
-    organizationId: string,
     projectId: string,
-    unitType: 'image' | 'credit',
     amount: number,
-  ) {
-    try {
-      await this.projectMemberRepo.updateMany({
-        where: { userId: userId, projectId: projectId },
-        data:
-          unitType === 'image'
-            ? { holdImageAllowance: { increment: amount } }
-            : { holdCreditAllowance: { increment: amount } },
-      });
-    } catch (error) {
-      Logger.error(`Failed to update hold credit balance: ${error}`);
-    }
+  ): Promise<boolean> {
+    const rows = await this.prisma.$executeRaw`
+      UPDATE project_member
+         SET hold_credit_allowance = hold_credit_allowance + ${amount}
+       WHERE project_id = ${projectId} AND user_id = ${userId}
+         AND used_credit_allowance + hold_credit_allowance + ${amount}
+             <= COALESCE(limit_credit_allowance, 0)`;
+    return rows > 0;
   }
 
+  /** Release a hold reserved by reserveHold; floored at 0 so a reset row never goes negative */
   async cancelHoldAmount(
     holdCreditAllowance: number,
     userId: string,
     projectId: string,
   ) {
-    await this.projectMemberRepo.updateMany({
-      where: { userId: userId, projectId: projectId },
-      data: { holdCreditAllowance: { decrement: holdCreditAllowance } },
-    });
+    await this.prisma.$executeRaw`
+      UPDATE project_member
+         SET hold_credit_allowance = GREATEST(hold_credit_allowance - ${holdCreditAllowance}, 0)
+       WHERE project_id = ${projectId} AND user_id = ${userId}`;
+  }
+
+  /** Credit still free for new work: project limit and org balance minus what is used or held */
+  async getAvailableCredit(
+    projectId: string,
+    organizationId: string,
+  ): Promise<{ project: number; organization: number }> {
+    const [row] = await this.prisma.$queryRaw<
+      { project_free: number | null; org_free: number | null }[]
+    >`
+      SELECT
+        (SELECT p.limit_credit_allowance - p.used_credit_allowance
+                - COALESCE((SELECT SUM(hold_credit_allowance) FROM project_member WHERE project_id = p.id), 0)
+           FROM project p WHERE p.id = ${projectId}) AS project_free,
+        (SELECT cb.current_cycle_balance + cb.on_top_balance
+                - COALESCE((SELECT SUM(pm.hold_credit_allowance)
+                              FROM project_member pm JOIN project p ON p.id = pm.project_id
+                             WHERE p.organization_id = ${organizationId}), 0)
+           FROM credit_balances cb WHERE cb.organization_id = ${organizationId}) AS org_free`;
+    return {
+      project: Number(row?.project_free ?? 0),
+      organization: Number(row?.org_free ?? 0),
+    };
   }
 
   async getUsedCredit(

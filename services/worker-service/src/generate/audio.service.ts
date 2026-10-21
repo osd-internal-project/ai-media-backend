@@ -299,6 +299,7 @@ export class AudioProcessor extends WorkerHost implements OnModuleDestroy {
       });
 
       const updated = await this.generateHelperService.updateUsedCreditSuccess(
+        taskId,
         userId,
         body.organizationId,
         body.projectId,
@@ -552,6 +553,7 @@ export class AudioProcessor extends WorkerHost implements OnModuleDestroy {
         }),
       );
       await this.generateHelperService.updateUsedCreditFail(
+        taskId,
         userId,
         body.organizationId,
         body.projectId,

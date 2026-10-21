@@ -644,6 +644,7 @@ export class VideoProcessor extends WorkerHost {
 
     if (log) {
       const updated = (await this.generateHelperService.updateUsedCreditSuccess(
+        taskId,
         userId,
         body.organizationId,
         body.projectId,
@@ -708,6 +709,7 @@ export class VideoProcessor extends WorkerHost {
       where: { taskId },
     });
     const updated = (await this.generateHelperService.updateUsedCreditFail(
+      taskId,
       userId,
       body.organizationId,
       body.projectId,

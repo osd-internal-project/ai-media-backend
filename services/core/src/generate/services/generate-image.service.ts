@@ -6,13 +6,11 @@ import {
   OrganizationRepository,
   QUEUE_NAME_IMAGE,
   RequestImageGenerateDto,
-  CreditBalanceRepository,
-  ProjectRepository,
   MasterModelTypeDto,
 } from '@ai-media/share';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 import {
@@ -31,8 +29,6 @@ export class GenerateImageService extends BaseGenerateService {
     masterModelTypeRepo: MasterdataModelTypeRepository,
     @InjectRedis() redis: Redis,
     @InjectQueue(QUEUE_NAME_IMAGE) private readonly imageQueue: Queue,
-    private readonly projectRepo: ProjectRepository,
-    private readonly creditBalanceRepo: CreditBalanceRepository,
     organizationRepository: OrganizationRepository,
     llmGateway: LlmGatewayService,
   ) {
@@ -57,33 +53,11 @@ export class GenerateImageService extends BaseGenerateService {
     return this.imageQueue;
   }
 
-  /** Image reserves the hold inside checkCreditQuota — base template skips post-log hold update */
-  protected get holdReservedInCreditCheck(): boolean {
-    return true;
-  }
-
-  /** Cancel the hold that was reserved inside checkCreditQuota on error */
-  @Span()
-  protected async onErrorCancelHold(
-    body: any,
-    holdCredit: number,
-  ): Promise<void> {
-    await this.generateHelperService.cancelHoldAmount(
-      holdCredit,
-      body.userId,
-      body.projectId,
-    );
-  }
-
   /** API call happens in the worker — no external task ID to extract here */
   protected extractExternalTaskId(_apiRes: any): string | null {
     return null;
   }
 
-  /**
-   * Image has extra project-level and org-level credit checks.
-   * Also reserves the hold here (not in the main flow).
-   */
   @Span()
   protected async checkCreditQuota(
     userId: string,
@@ -92,113 +66,13 @@ export class GenerateImageService extends BaseGenerateService {
     cacheKey: string,
     model: MasterModelTypeDto,
   ): Promise<CreditQuotaResult> {
-    try {
-      let currentCreditUsed = 0;
-      const cachedCreditUsed = cacheKey ? await this.redis.get(cacheKey) : null;
-
-      currentCreditUsed = cachedCreditUsed
-        ? parseInt(cachedCreditUsed, 10)
-        : projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
-
-      const credit = await this.generateHelperService.getUsedCredit(
-        0,
-        body,
-        model,
-      );
-      if (!credit) {
-        return {
-          isQuotaExceeded: true,
-          incrementCredit: 0,
-          limitAllowance: 0,
-          usedCredit: 0,
-          onhandToken: 0,
-        };
-      }
-
-      const maxCreditInPlan = projectMember?.limitCreditAllowance || 0;
-      currentCreditUsed = currentCreditUsed + credit.credit;
-
-      if (currentCreditUsed > maxCreditInPlan) {
-        Logger.error(
-          `Credit used ${currentCreditUsed} exceed max credit ${maxCreditInPlan}`,
-        );
-        return {
-          isQuotaExceeded: true,
-          incrementCredit: credit.credit,
-          limitAllowance: maxCreditInPlan,
-          usedCredit: currentCreditUsed,
-          onhandToken: 0,
-        };
-      }
-
-      const project = await this.projectRepo.findOne({
-        where: { id: body.projectId },
-      });
-      if (
-        project.usedCreditAllowance + project.holdCreditAllowance >
-        project.limitCreditAllowance
-      ) {
-        Logger.error(
-          `Project Credit used ${
-            project.usedCreditAllowance + project.holdCreditAllowance
-          } exceed max credit ${project.limitCreditAllowance}`,
-        );
-        return {
-          isQuotaExceeded: true,
-          incrementCredit: credit.credit,
-          limitAllowance: maxCreditInPlan,
-          usedCredit: currentCreditUsed,
-          onhandToken: 0,
-        };
-      }
-
-      const creditBalance = await this.creditBalanceRepo.findOne({
-        where: { organizationId: body.organizationId },
-      });
-      if (
-        creditBalance.currentCycleBalance + creditBalance.onTopBalance <
-        credit.credit
-      ) {
-        Logger.error(
-          `Credit Balance ${
-            creditBalance.currentCycleBalance + creditBalance.onTopBalance
-          } insufficient for ${credit.credit}`,
-        );
-        return {
-          isQuotaExceeded: true,
-          incrementCredit: credit.credit,
-          limitAllowance: maxCreditInPlan,
-          usedCredit: currentCreditUsed,
-          onhandToken: 0,
-        };
-      }
-
-      // Reserve hold immediately (image pattern — base template skips post-log hold update)
-      await this.generateHelperService.updateHoldCreditBalance(
-        userId,
-        body.organizationId,
-        body.projectId,
-        'credit',
-        credit.credit,
-      );
-
-      return {
-        isQuotaExceeded: false,
-        incrementCredit: credit.credit,
-        limitAllowance: maxCreditInPlan,
-        usedCredit: currentCreditUsed,
-        onhandToken: 0,
-      };
-    } catch (e) {
-      Logger.error(e);
-      return {
-        isQuotaExceeded: true,
-        incrementCredit: 0,
-        limitAllowance: 0,
-        usedCredit: 0,
-        onhandToken: 0,
-      };
-    }
+    return this.defaultCheckCreditQuota(
+      userId,
+      body,
+      projectMember,
+      cacheKey,
+      model,
+    );
   }
 
   protected buildQueueJobData(

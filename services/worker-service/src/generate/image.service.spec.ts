@@ -110,6 +110,7 @@ describe('ImageProcessor gallery + sweeper', () => {
       });
       expect(helper.updateUsedCreditFail).toHaveBeenCalledTimes(1);
       expect(helper.updateUsedCreditFail).toHaveBeenCalledWith(
+        't1',
         'u1',
         '',
         'proj',

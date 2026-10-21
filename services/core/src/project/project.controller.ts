@@ -8,8 +8,10 @@ import {
   Delete,
   Query,
 } from '@nestjs/common';
+import { AuthUser, CurrentUser } from '@ai-media/share';
 import { ProjectService } from './project.service';
 import { Prisma } from '@prisma/client';
+import { UpdateProjectDto } from './dto/update-project.dto';
 import { query } from 'express';
 
 @Controller('project')
@@ -45,9 +47,10 @@ export class ProjectController {
   @Patch(':id')
   update(
     @Param('id') id: string,
-    @Body() updateProjectDto: Prisma.ProjectUpdateInput,
+    @Body() updateProjectDto: UpdateProjectDto,
+    @CurrentUser() authUser?: AuthUser,
   ) {
-    return this.projectService.update(id, updateProjectDto);
+    return this.projectService.update(id, updateProjectDto, authUser);
   }
   @Delete(':id/remove')
   deleteProject(@Param('id') id: string) {

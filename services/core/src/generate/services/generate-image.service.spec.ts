@@ -11,8 +11,6 @@ const makeBuild = () => {
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
-    {} as never,
   );
   // buildGalleryData เป็น protected hook — เรียกตรงเพื่อทดสอบแยกจาก flow ทั้งก้อน
   return (

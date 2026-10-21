@@ -1,5 +1,10 @@
-import { Injectable } from '@nestjs/common';
 import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  AuthUser,
   ProjectRepository,
   UsersRepository,
   ProjectMemberRepository,
@@ -8,6 +13,8 @@ import {
   PrismaService,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { planMemberChanges } from './project-members.plan';
 
 interface ProjectMemberInput {
   userId: string;
@@ -231,40 +238,67 @@ export class ProjectService {
     return data;
   }
 
-  update(id: string, updateProjectDto: any) {
-    return this.projectRepo.update({
-      where: { id },
-      data: {
-        ...updateProjectDto,
-        members:
-          updateProjectDto.members !== undefined
-            ? {
-                deleteMany: {},
-                ...(updateProjectDto.members.length > 0 && {
-                  create: updateProjectDto.members.map(
-                    (member: string | ProjectMemberInput) => ({
-                      users: {
-                        connect: {
-                          userId:
-                            typeof member === 'string' ? member : member.userId,
-                        },
-                      },
-                      role: typeof member === 'object' ? member.role : 'USER', // Default to USER role
-                      limitCreditAllowance:
-                        typeof member === 'object'
-                          ? member.limitCreditAllowance || 0
-                          : 0,
-                      limitImageAllowance:
-                        typeof member === 'object'
-                          ? member.limitImageAllowance || 0
-                          : 0,
-                    }),
-                  ),
-                }),
-              }
-            : undefined,
-      },
+  /**
+   * Update project fields and member limits; members are diffed, never recreated,
+   * so used/hold counters survive. Only org OWNER/ADMIN or SUPER_ADMIN may call it.
+   */
+  async update(id: string, dto: UpdateProjectDto, authUser?: AuthUser) {
+    const project = await this.projectRepo.findOne({ where: { id } });
+    if (!project) throw new NotFoundException('Project not found');
+    await this.assertCanManageProject(
+      project.organizationId,
+      authUser?.userId ?? dto.userId,
+    );
+
+    const { members, userId: _caller, ...fields } = dto;
+    return this.prisma.$transaction(async (tx) => {
+      if (members !== undefined) {
+        const existing = await tx.projectMember.findMany({
+          where: { projectId: id },
+        });
+        const changes = planMemberChanges(
+          existing,
+          members,
+          fields.limitCreditAllowance ?? project.limitCreditAllowance,
+        );
+        if (changes.removeIds.length > 0) {
+          await tx.projectMember.deleteMany({
+            where: { id: { in: changes.removeIds } },
+          });
+        }
+        for (const { id: memberId, data } of changes.update) {
+          await tx.projectMember.update({ where: { id: memberId }, data });
+        }
+        if (changes.create.length > 0) {
+          await tx.projectMember.createMany({
+            data: changes.create.map((member) => ({ ...member, projectId: id })),
+          });
+        }
+      }
+      return tx.project.update({ where: { id }, data: fields });
     });
+  }
+
+  /** @throws ForbiddenException unless the caller is OWNER/ADMIN of the project's org or SUPER_ADMIN */
+  private async assertCanManageProject(
+    organizationId: string | null,
+    caller: string | undefined,
+  ): Promise<void> {
+    const user = caller
+      ? await this.usersRepo.findOne({
+          where: { OR: [{ userId: caller }, { token: caller }] },
+        })
+      : null;
+    if (!user) throw new ForbiddenException('Unknown caller');
+    if (user.role === 'SUPER_ADMIN') return;
+    const role = organizationId
+      ? await this.getUserOrganizationRole(user.userId, organizationId)
+      : null;
+    if (role !== 'OWNER' && role !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Only organization owners or admins can edit a project',
+      );
+    }
   }
   async deleteProject(id: string) {
     

@@ -23,6 +23,8 @@ export interface CreditQuotaResult {
   limitAllowance: number;
   usedCredit: number;
   onhandToken: number;
+  /** Why the request was refused; set only when isQuotaExceeded */
+  reason?: string;
 }
 
 /**
@@ -170,14 +172,6 @@ export abstract class BaseGenerateService {
   }
 
   /**
-   * True when checkCreditQuota already reserves the hold internally (image).
-   * The template skips the post-log updateHoldCreditBalance call in that case.
-   */
-  protected get holdReservedInCreditCheck(): boolean {
-    return false;
-  }
-
-  /**
    * When true, the template skips buildPayload + axios.post so the external API
    * is called inside the worker processor instead (respects queue concurrency).
    * Only image overrides this to return true.
@@ -186,31 +180,19 @@ export abstract class BaseGenerateService {
   //   return false;
   // }
 
-  /** Called in the catch block to undo a reserved credit hold on error */
-  protected async onErrorCancelHold(
-    _body: any,
-    _holdCredit: number,
-  ): Promise<void> {}
-
   /**
-   * Default credit quota check — used by video, omni, and dreamactor.
-   * Image overrides checkCreditQuota completely due to extra project/org checks.
+   * Credit check shared by every type: project and org must have room for the cost
+   * (counting in-flight holds), then the member hold is reserved atomically.
+   * A non-exceeded result means the hold is already placed.
    */
   @Span()
   protected async defaultCheckCreditQuota(
-    _userId: string,
+    userId: string,
     body: any,
     projectMember: any,
-    cacheKey: string,
+    _cacheKey: string,
     modelDetail: MasterModelTypeDto,
   ): Promise<CreditQuotaResult> {
-    let currentCreditUsed = 0;
-    const cachedCreditUsed = cacheKey ? await this.redis.get(cacheKey) : null;
-
-    currentCreditUsed = cachedCreditUsed
-      ? parseInt(cachedCreditUsed, 10)
-      : projectMember.holdCreditAllowance + projectMember.usedCreditAllowance;
-
     const token = this.calculateCreditToken(body);
     const onhandCredit = await this.generateHelperService.getUsedCredit(
       token,
@@ -225,23 +207,51 @@ export abstract class BaseGenerateService {
         limitAllowance: 0,
         usedCredit: 0,
         onhandToken: 0,
+        reason: 'Credit could not be calculated for this model',
       };
     }
 
-    const usedCredit = currentCreditUsed + onhandCredit.credit || 0;
+    const cost = onhandCredit.credit || 0;
+    const usedCredit =
+      projectMember.holdCreditAllowance +
+      projectMember.usedCreditAllowance +
+      cost;
     const limitAllowance = projectMember.limitCreditAllowance || 0;
-
-    if (usedCredit > limitAllowance) {
-      Logger.error(
-        `Token used ${usedCredit} exceed max credit ${limitAllowance}`,
-      );
+    const refuse = (reason: string): CreditQuotaResult => {
+      Logger.error(reason);
       return {
         isQuotaExceeded: true,
-        incrementCredit: onhandCredit.credit,
+        incrementCredit: cost,
         limitAllowance,
         usedCredit,
         onhandToken: onhandCredit.token,
+        reason,
       };
+    };
+
+    const available = await this.generateHelperService.getAvailableCredit(
+      body.projectId,
+      body.organizationId,
+    );
+    if (cost > available.project) {
+      return refuse(
+        `Project credit remaining ${available.project} is not enough for ${cost}`,
+      );
+    }
+    if (cost > available.organization) {
+      return refuse(
+        `Organization credit remaining ${available.organization} is not enough for ${cost}`,
+      );
+    }
+    const reserved = await this.generateHelperService.reserveHold(
+      userId,
+      body.projectId,
+      cost,
+    );
+    if (!reserved) {
+      return refuse(
+        `Token used ${usedCredit} exceed max credit ${limitAllowance}`,
+      );
     }
 
     return {
@@ -262,6 +272,9 @@ export abstract class BaseGenerateService {
   ): Promise<{ status: number; data: any }> {
     let taskId: string = body.taskId;
     let holdCredit = 0;
+    let holdUserId = '';
+    // once queued, the worker owns the hold (settle or refund) — core must not release it
+    let enqueued = false;
     setActiveSpanAttributes({
       'task.id': String(taskId),
       'generate.type': this.modelType,
@@ -309,14 +322,16 @@ export abstract class BaseGenerateService {
         cacheKey,
         modelDetail,
       );
-      holdCredit = creditResult.incrementCredit;
-
       if (creditResult.isQuotaExceeded) {
         return {
           status: 400,
-          data: `Token used ${creditResult.usedCredit} exceed max credit ${creditResult.limitAllowance}`,
+          data:
+            creditResult.reason ??
+            `Token used ${creditResult.usedCredit} exceed max credit ${creditResult.limitAllowance}`,
         };
       }
+      holdCredit = creditResult.incrementCredit;
+      holdUserId = user.userId;
 
       let apiRes: any = undefined;
       // if (!this.deferApiCallToWorker) {
@@ -346,17 +361,7 @@ export abstract class BaseGenerateService {
       if (galleryData) await this.galleryRepo.create({ data: galleryData });
 
       const logData = this.buildLogData(taskId, body, user, creditResult);
-      const log = logData ? await this.logrepo.create({ data: logData }) : null;
-
-      if (log && !this.holdReservedInCreditCheck) {
-        await this.generateHelperService.updateHoldCreditBalance(
-          user.userId,
-          body.organizationId,
-          body.projectId,
-          'credit',
-          creditResult.incrementCredit,
-        );
-      }
+      if (logData) await this.logrepo.create({ data: logData });
 
       await this.redis.set(
         cacheKey,
@@ -388,6 +393,7 @@ export abstract class BaseGenerateService {
           removeOnFail: 50,
         },
       );
+      enqueued = true;
 
       await this.afterEnqueue(taskId, clientId, user.userId, body);
 
@@ -423,7 +429,13 @@ export abstract class BaseGenerateService {
       };
     } catch (error) {
       console.error(`Error creating ${this.modelType} generation task:`, error);
-      await this.onErrorCancelHold(body, holdCredit);
+      if (holdCredit > 0 && !enqueued) {
+        await this.generateHelperService.cancelHoldAmount(
+          holdCredit,
+          holdUserId,
+          body.projectId,
+        );
+      }
       this.generateHelperService.handleGenerationError(error, body.userId);
       throw error;
     }

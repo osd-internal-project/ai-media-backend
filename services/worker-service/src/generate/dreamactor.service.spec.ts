@@ -127,7 +127,7 @@ describe('DreamactorProcessor', () => {
       }) as never);
   });
 
-  it('success: submits once, stores, writes DB before upload-success (no success charge — unchanged)', async () => {
+  it('success: submits once, stores, charges the held credit, writes DB before upload-success', async () => {
     axiosPost
       .mockResolvedValueOnce({ data: { data: { task_id: 'cv-1' } } })
       .mockResolvedValueOnce(status('running'))
@@ -149,7 +149,15 @@ describe('DreamactorProcessor', () => {
       order.indexOf('worker:dreamactor-upload-success'),
     );
     expect(events).toContain('worker:dreamactor-complete');
-    expect(helper.updateUsedCreditSuccess).not.toHaveBeenCalled();
+    expect(helper.updateUsedCreditSuccess).toHaveBeenCalledTimes(1);
+    expect(helper.updateUsedCreditSuccess).toHaveBeenCalledWith(
+      't1',
+      'u1',
+      'org',
+      'proj',
+      'credit',
+      5,
+    );
     expect(helper.updateUsedCreditFail).not.toHaveBeenCalled();
   });
 

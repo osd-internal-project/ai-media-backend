@@ -183,6 +183,7 @@ describe('AudioProcessor', () => {
       }),
     });
     expect(helper.updateUsedCreditSuccess).toHaveBeenCalledWith(
+      't1',
       'u1',
       'org',
       'proj',
@@ -207,6 +208,7 @@ describe('AudioProcessor', () => {
     await processor.process(makeJob() as never);
 
     expect(helper.updateUsedCreditSuccess).toHaveBeenCalledWith(
+      't1',
       'u1',
       'org',
       'proj',
@@ -256,6 +258,7 @@ describe('AudioProcessor', () => {
       UnrecoverableError,
     );
     expect(helper.updateUsedCreditFail).toHaveBeenCalledWith(
+      't1',
       'u1',
       'org',
       'proj',

@@ -473,6 +473,7 @@ export class OmnihumenProcessor extends WorkerHost {
     //Update used credit
     if (log) {
       const updated = await this.generateHelperService.updateUsedCreditSuccess(
+        taskId,
         userId,
         body.organizationId,
         body.projectId,
@@ -538,6 +539,7 @@ export class OmnihumenProcessor extends WorkerHost {
     });
     if (failedLog) {
       const updated = await this.generateHelperService.updateUsedCreditFail(
+        taskId,
         userId,
         body.organizationId,
         body.projectId,

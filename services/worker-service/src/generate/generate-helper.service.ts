@@ -21,8 +21,19 @@ import {
   MasterModelTypeDto,
   ErrorLogRepository,
   AuditLogRepository,
+  PrismaService,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
+
+/** Member counters after a settle/refund — what callers publish as used credit */
+export interface MemberCredit {
+  usedCreditAllowance: number;
+  holdCreditAllowance: number;
+}
+
+// longer than any job can live (retries + sweeper) so a late path still sees the claim
+const SETTLEMENT_TTL_SECONDS = 7 * 24 * 60 * 60;
+const settlementKey = (taskId: string) => `credit:settled:${taskId}`;
 
 @Injectable()
 export class GenerateHelperService {
@@ -36,112 +47,122 @@ export class GenerateHelperService {
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly masterModelTypeRepo: MasterdataModelTypeRepository,
+    private readonly prisma: PrismaService,
+    @InjectRedis() private readonly redis: Redis,
   ) {}
 
-  //Update Credit When Generate Fail
-  async updateUsedCreditFail(
+  /**
+   * Claim the one settlement a task may have (charge or refund). Retries, sweeper and
+   * fail-after-success paths all reach here; only the first claim may touch credit.
+   */
+  private async claimSettlement(
+    taskId: string,
+    outcome: 'charged' | 'refunded',
+  ): Promise<boolean> {
+    const key = settlementKey(taskId);
+    const claimed = await this.redis.set(
+      key,
+      outcome,
+      'EX',
+      SETTLEMENT_TTL_SECONDS,
+      'NX',
+    );
+    if (claimed === 'OK') return true;
+    Logger.warn(
+      `[credit][${taskId}] already ${await this.redis.get(key)} — skip ${outcome}`,
+    );
+    return false;
+  }
+
+  private async memberCredit(
     userId: string,
-    organizationId: string,
+    projectId: string,
+  ): Promise<MemberCredit> {
+    const member = await this.projectMemberRepo.findOne({
+      where: { userId, projectId },
+    });
+    return {
+      usedCreditAllowance: member?.usedCreditAllowance ?? 0,
+      holdCreditAllowance: member?.holdCreditAllowance ?? 0,
+    };
+  }
+
+  /** Release the task's hold without charging — at most once per task. Throws on DB failure. */
+  async updateUsedCreditFail(
+    taskId: string,
+    userId: string,
+    _organizationId: string,
     projectId: string,
     unitType: 'image' | 'credit',
     amount: number,
-  ): Promise<any> {
-    try {
-      await this.projectMemberRepo.updateMany({
-        where: { userId: userId, projectId: projectId },
-        data:
-          unitType === 'image'
-            ? {
-                holdImageAllowance: { decrement: amount },
-              }
-            : {
-                holdCreditAllowance: { decrement: amount },
-              },
-      });
-      return await this.projectMemberRepo.findOne({
-        where: { userId: userId, projectId: projectId },
-      });
-    } catch (err) {
-      return err;
+  ): Promise<MemberCredit> {
+    if (await this.claimSettlement(taskId, 'refunded')) {
+      try {
+        if (unitType === 'image') {
+          await this.prisma.$executeRaw`
+            UPDATE project_member
+               SET hold_image_allowance = GREATEST(hold_image_allowance - ${amount}, 0)
+             WHERE project_id = ${projectId} AND user_id = ${userId}`;
+        } else {
+          await this.prisma.$executeRaw`
+            UPDATE project_member
+               SET hold_credit_allowance = GREATEST(hold_credit_allowance - ${amount}, 0)
+             WHERE project_id = ${projectId} AND user_id = ${userId}`;
+        }
+      } catch (err) {
+        await this.redis.del(settlementKey(taskId));
+        Logger.error(`[credit][${taskId}] refund ${amount} failed: ${err}`);
+        throw err;
+      }
     }
+    return this.memberCredit(userId, projectId);
   }
 
-  //Update Credit When Generate Success
+  /**
+   * Charge `trueAmount` to member, project and org and release the hold
+   * (`calculateAmount` = what core held, defaults to `trueAmount`) — one transaction,
+   * at most once per task. The org pays from the cycle balance first, then on-top.
+   */
   async updateUsedCreditSuccess(
+    taskId: string,
     userId: string,
     organizationId: string,
     projectId: string,
-    unitType: 'image' | 'credit',
+    _unitType: 'image' | 'credit',
     trueAmount: number,
     calculateAmount?: number,
-  ) {
-    try {
-      const updatedProjectMember = await this.projectMemberRepo.updateMany({
-        where: { userId: userId, projectId: projectId },
-        data: {
-          holdCreditAllowance: {
-            decrement: calculateAmount || trueAmount,
-          },
-          usedCreditAllowance: { increment: trueAmount },
-        },
-      });
-      if (updatedProjectMember) {
-        await this.projectRepo.updateMany({
-          where: { id: projectId },
-          data: {
-            usedCreditAllowance: { increment: trueAmount },
-          },
-        });
-        const creditBalance = await this.creditBalanceRepo.findOne({
-          where: { organizationId },
-        });
-        let decrementOnTop = 0;
-        let decrementCycle = 0;
-
-        if (creditBalance.currentCycleBalance < trueAmount) {
-          decrementOnTop = trueAmount - creditBalance.currentCycleBalance;
-          decrementCycle = creditBalance.currentCycleBalance || 0;
-        } else {
-          decrementCycle = trueAmount;
-        }
-        await this.creditBalanceRepo.update({
-          where: { organizationId: organizationId },
-          data: {
-            currentCycleBalance: { decrement: decrementCycle },
-            onTopBalance: { decrement: decrementOnTop },
-          },
-        });
-        //   if (updatedProjectMember) {
-        //     const updateProject = await this.projectRepo.update({
-        //       where: { id: projectId },
-        //       data:
-        //         unitType === 'image'
-        //           ? { usedImageAllowance: { increment: amount } }
-        //           : { usedCreditAllowance: { increment: amount } },
-        //     });
-        //     if (updateProject) {
-        //       return await this.creditBalanceRepo.update({
-        //         where: { organizationId: organizationId },
-        //         data:
-        //           unitType === 'image'
-        //             ? {
-        //                 currentCycleImage: { decrement: amount },
-        //               }
-        //             : {
-        //                 currentCycleBalance: { decrement: amount },
-        //               },
-        //       });
-        //     }
-        //   }
+  ): Promise<MemberCredit> {
+    if (await this.claimSettlement(taskId, 'charged')) {
+      const held = calculateAmount || trueAmount;
+      try {
+        // SET expressions read the pre-update row, so the cycle/on-top split is atomic
+        await this.prisma.$transaction([
+          this.prisma.$executeRaw`
+            UPDATE project_member
+               SET hold_credit_allowance = GREATEST(hold_credit_allowance - ${held}, 0),
+                   used_credit_allowance = used_credit_allowance + ${trueAmount}
+             WHERE project_id = ${projectId} AND user_id = ${userId}`,
+          this.prisma.$executeRaw`
+            UPDATE project
+               SET used_credit_allowance = used_credit_allowance + ${trueAmount}
+             WHERE id = ${projectId}`,
+          this.prisma.$executeRaw`
+            UPDATE credit_balances
+               SET current_cycle_balance = current_cycle_balance
+                     - LEAST(GREATEST(current_cycle_balance, 0), ${trueAmount}),
+                   on_top_balance = on_top_balance
+                     - (${trueAmount} - LEAST(GREATEST(current_cycle_balance, 0), ${trueAmount}))
+             WHERE organization_id = ${organizationId}`,
+        ]);
+      } catch (err) {
+        await this.redis.del(settlementKey(taskId));
+        Logger.error(`[credit][${taskId}] charge ${trueAmount} failed: ${err}`);
+        throw err;
       }
-      return await this.projectMemberRepo.findOne({
-        where: { userId: userId, projectId: projectId },
-      });
-    } catch (err) {
-      Logger.error(`Failed to update used credit: ${err}`);
-      return undefined;
     }
+    return this.memberCredit(userId, projectId);
   }
+
 
   // async getUsedCredit(
   //   token: number,

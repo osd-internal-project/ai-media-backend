@@ -400,13 +400,13 @@ export class DreamactorProcessor extends WorkerHost {
     return error;
   }
 
-  /** success path เดิมจาก loop polling — เขียน DB ก่อนแจ้ง front ว่า upload สำเร็จ (เดิมไม่ตัดเครดิตตอนสำเร็จ — คงไว้) */
+  /** success path จาก loop polling — เขียน DB และตัดเครดิตก่อนแจ้ง front ว่า upload สำเร็จ */
   @Span()
   private async completeTask(
     data: DreamactorProcessJob,
     videoUrl: string,
   ): Promise<void> {
-    const { taskId, clientId, body } = data;
+    const { taskId, clientId, body, userId } = data;
     await this.publishToCore(clientId, 'worker:dreamactor-url-success', {
       taskId,
       videoUrl: videoUrl,
@@ -438,6 +438,26 @@ export class DreamactorProcessor extends WorkerHost {
       where: { taskId: taskId },
       data: { status: 'success', tokenUsed: 0 },
     });
+
+    const log = await this.logrepo.findOne({ where: { taskId } });
+    if (log) {
+      const updated = await this.generateHelperService.updateUsedCreditSuccess(
+        taskId,
+        userId,
+        body.organizationId,
+        body.projectId,
+        'credit',
+        log.usedCredit,
+      );
+      await this.redis.set(
+        this.creditCacheKey(data),
+        (updated.usedCreditAllowance + updated.holdCreditAllowance).toString(),
+        'EX',
+        60 * 60,
+      );
+    } else {
+      this.logger.warn(`Task ${taskId}: no log row — credit not charged`);
+    }
 
     await this.publishToCore(clientId, 'worker:dreamactor-upload-success', {
       taskId,
@@ -514,6 +534,7 @@ export class DreamactorProcessor extends WorkerHost {
     });
     if (failedLog) {
       const updated = await this.generateHelperService.updateUsedCreditFail(
+        taskId,
         userId,
         body.organizationId,
         body.projectId,
