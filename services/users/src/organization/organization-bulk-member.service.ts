@@ -688,7 +688,7 @@ export class OrganizationBulkMemberService {
     }));
   }
 
-  /** สูตรเดียวกับหน้า Project: creditAllowance ของ subscription + onTop − limit ที่แจกให้ project แล้ว */
+  /** สูตรเดียวกับหน้า Project: max(creditAllowance, currentCycleBalance) + onTop − limit ที่แจกให้ project แล้ว */
   private async orgCreditRemaining(organizationId: string) {
     const [subscription, balance, projects] = await Promise.all([
       this.organizationSubscriptionRepo.findOne({ where: { organizationId } }),
@@ -698,8 +698,12 @@ export class OrganizationBulkMemberService {
         select: { limitCreditAllowance: true },
       }),
     ]);
+    // org event ได้ credit นอกแพ็กเกจ: creditAllowance = 0 แต่ credit จริงอยู่ใน currentCycleBalance
     const pool =
-      (subscription?.creditAllowance ?? 0) + (balance?.onTopBalance ?? 0);
+      Math.max(
+        subscription?.creditAllowance ?? 0,
+        balance?.currentCycleBalance ?? 0,
+      ) + (balance?.onTopBalance ?? 0);
     const assigned = projects.reduce(
       (sum, p) => sum + (p.limitCreditAllowance ?? 0),
       0,

@@ -324,6 +324,17 @@ describe('OrganizationBulkMemberService', () => {
       expect(result.credit.orgRemaining).toBe(900);
       expect(result.rows[0].errors.join()).toContain('900 remaining');
     });
+
+    it('counts cycle balance granted outside the plan (event org)', async () => {
+      subscriptionRepo.findOne.mockResolvedValue({ creditAllowance: 0 });
+      creditBalanceRepo.findOne.mockResolvedValue({
+        currentCycleBalance: 5000,
+        onTopBalance: 0,
+      });
+      const result = await validate([row({ projectName: 'Beta', credit: 4900 })]);
+      expect(result.credit.orgRemaining).toBe(4900);
+      expect(result.valid).toBe(true);
+    });
   });
 
   describe('permissions', () => {
