@@ -7,12 +7,14 @@ import {
   Post,
   Put,
   Query,
+  UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { CreateGenerationDto } from './dto/create-generation.dto';
+import { SavePrintTemplateDto } from './dto/save-print-template.dto';
 import { SetTemplatesDto } from './dto/set-templates.dto';
 import { UploadPhotosDto } from './dto/upload-photos.dto';
 import { PhotoEventEnabledGuard } from './photo-event-enabled.guard';
@@ -23,6 +25,7 @@ import {
 } from './photo-event.constants';
 import { PhotoEventGenerationsService } from './photo-event-generations.service';
 import { PhotoEventPhotosService } from './photo-event-photos.service';
+import { PhotoEventPrintService } from './photo-event-print.service';
 import { PhotoEventTemplatesService } from './photo-event-templates.service';
 
 @Controller('projects/:projectId/photo-event')
@@ -32,6 +35,7 @@ export class PhotoEventController {
     private readonly templatesService: PhotoEventTemplatesService,
     private readonly photosService: PhotoEventPhotosService,
     private readonly generationsService: PhotoEventGenerationsService,
+    private readonly printService: PhotoEventPrintService,
   ) {}
 
   @Get('templates')
@@ -94,5 +98,64 @@ export class PhotoEventController {
     @Param('generationId') generationId: string,
   ) {
     return this.generationsService.findOne(projectId, generationId);
+  }
+
+  @Get('print-templates')
+  findPrintTemplates(@Param('projectId') projectId: string) {
+    return this.printService.findByProject(projectId);
+  }
+
+  @Get('print-templates/active')
+  findActivePrintTemplate(@Param('projectId') projectId: string) {
+    return this.printService.findActive(projectId);
+  }
+
+  @Post('print-templates')
+  createPrintTemplate(
+    @Param('projectId') projectId: string,
+    @Body() dto: SavePrintTemplateDto,
+  ) {
+    return this.printService.create(projectId, dto);
+  }
+
+  @Put('print-templates/:templateId')
+  updatePrintTemplate(
+    @Param('projectId') projectId: string,
+    @Param('templateId') templateId: string,
+    @Body() dto: SavePrintTemplateDto,
+  ) {
+    return this.printService.update(projectId, templateId, dto);
+  }
+
+  @Put('print-templates/:templateId/activate')
+  activatePrintTemplate(
+    @Param('projectId') projectId: string,
+    @Param('templateId') templateId: string,
+    @Body() dto: UploadPhotosDto,
+  ) {
+    return this.printService.activate(projectId, templateId, dto.userId);
+  }
+
+  @Delete('print-templates/:templateId')
+  removePrintTemplate(
+    @Param('projectId') projectId: string,
+    @Param('templateId') templateId: string,
+    @Query('userId') userId: string,
+  ) {
+    return this.printService.remove(projectId, templateId, userId);
+  }
+
+  @Post('print-assets')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: PHOTO_EVENT_MAX_FILE_BYTES },
+    }),
+  )
+  uploadPrintAsset(
+    @Param('projectId') projectId: string,
+    @Body() dto: UploadPhotosDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    return this.printService.uploadAsset(projectId, dto.userId, file);
   }
 }

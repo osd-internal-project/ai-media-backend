@@ -1,4 +1,5 @@
 import { PhotoEventGenerationStatus } from '../photo-event.constants';
+import { PrintLayout } from '../photo-event-print-layout';
 
 export interface PhotoEventTemplateView {
   promptGuideId: number;
@@ -38,4 +39,19 @@ export interface PublicPhotoEventView {
   id: string;
   imageUrl: string;
   createdAt: Date;
+}
+
+export interface PhotoEventPrintTemplateView {
+  id: string;
+  name: string;
+  isActive: boolean;
+  layout: PrintLayout;
+  /** storage key → presigned URL ของพื้นหลัง/icon/กรอบใน layout */
+  assetUrls: Record<string, string>;
+  updatedAt: Date;
+}
+
+export interface PhotoEventPrintAssetView {
+  key: string;
+  url: string | null;
 }

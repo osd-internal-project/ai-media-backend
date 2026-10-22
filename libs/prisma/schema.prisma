@@ -72,6 +72,7 @@ model Project {
   communityPosts        CommunityPost[]
   photoEventTemplates   PhotoEventTemplate[]
   photoEventPhotos      PhotoEventPhoto[]
+  printTemplates        PhotoEventPrintTemplate[]
   organizationId        String?                @map("organization_id") @db.VarChar(50)
   // ยอดจำกัด ของ Project
   limitImageAllowance   Int                    @default(0) @map("limit_image_allowance")
@@ -255,6 +256,23 @@ model PhotoEventTemplate {
 
   @@unique([projectId, promptGuideId])
   @@map("photo_event_template")
+}
+
+/// layout การ์ดที่พิมพ์ของ Photo Event — project มีได้หลายแบบ แต่ active ได้ทีละ 1
+model PhotoEventPrintTemplate {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  name      String   @db.VarChar(100)
+  isActive  Boolean  @default(false) @map("is_active")
+  // IPrintLayout ของ frontend (หน่วย mm) — validate ด้วย parsePrintLayout ก่อนเก็บ
+  layout    Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@map("photo_event_print_template")
 }
 
 /// รูปที่ staff นำเข้าให้แขกเลือกบนจอ kiosk

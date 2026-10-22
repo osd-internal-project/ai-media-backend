@@ -47,3 +47,8 @@ export type PhotoEventGenerationStatus =
   | 'processing'
   | 'success'
   | 'failed';
+
+/** ด้านยาวสุดของพื้นหลัง/icon/กรอบที่ใช้พิมพ์ — 3000px ≈ 6 นิ้วที่ 500dpi พอสำหรับการ์ดทุกขนาดที่รองรับ */
+export const PHOTO_EVENT_PRINT_ASSET_MAX_EDGE = 3000;
+
+export const PHOTO_EVENT_PRINT_TEMPLATE_NAME_MAX_LENGTH = 100;

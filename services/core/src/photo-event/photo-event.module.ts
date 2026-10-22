@@ -15,6 +15,7 @@ import { PhotoEventEnabledGuard } from './photo-event-enabled.guard';
 import { PhotoEventEventsService } from './photo-event-events.service';
 import { PhotoEventGenerationsService } from './photo-event-generations.service';
 import { PhotoEventPhotosService } from './photo-event-photos.service';
+import { PhotoEventPrintService } from './photo-event-print.service';
 import { PhotoEventTemplatesService } from './photo-event-templates.service';
 import { PhotoEventViewService } from './photo-event-view.service';
 import { PublicPhotoEventController } from './public-photo-event.controller';
@@ -39,6 +40,7 @@ import { PublicPhotoEventService } from './public-photo-event.service';
     PhotoEventViewService,
     PhotoEventTemplatesService,
     PhotoEventPhotosService,
+    PhotoEventPrintService,
     PhotoEventGenerationsService,
     PhotoEventEventsService,
     PublicPhotoEventService,

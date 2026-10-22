@@ -1,6 +1,10 @@
 import sharp = require('sharp');
+import { BadRequestException } from '@nestjs/common';
 import * as path from 'path';
-import { PHOTO_EVENT_MAX_IMAGE_EDGE } from './photo-event.constants';
+import {
+  PHOTO_EVENT_MAX_IMAGE_EDGE,
+  PHOTO_EVENT_PRINT_ASSET_MAX_EDGE,
+} from './photo-event.constants';
 
 export interface PreparedPhoto {
   buffer: Buffer;
@@ -41,5 +45,30 @@ export const preparePhoto = async (
       mimetype: file.mimetype,
       converted: false,
     };
+  }
+};
+
+/** พื้นหลัง/icon/กรอบสำหรับพิมพ์ — เก็บเป็น PNG เพื่อคงพื้นโปร่งใส (preparePhoto แปลงเป็น JPEG) */
+export const preparePrintAsset = async (
+  file: Express.Multer.File,
+): Promise<PreparedPhoto> => {
+  try {
+    const buffer = await sharp(file.buffer, { failOn: 'error' })
+      .rotate()
+      .resize({
+        width: PHOTO_EVENT_PRINT_ASSET_MAX_EDGE,
+        height: PHOTO_EVENT_PRINT_ASSET_MAX_EDGE,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .png()
+      .toBuffer();
+    return { buffer, extension: '.png', mimetype: 'image/png' };
+  } catch (error) {
+    throw new BadRequestException(
+      `Cannot read ${file.originalname} as an image — use PNG, JPEG or WebP (${
+        (error as Error).message
+      })`,
+    );
   }
 };
