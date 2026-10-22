@@ -207,6 +207,24 @@ describe('OrganizationBulkMemberService', () => {
       expect(keycloak.findUserByUsernameOrEmail).not.toHaveBeenCalled();
     });
 
+    it('matches an existing user whose username is an email', async () => {
+      db.users = [
+        { userId: 'u-2', username: 'bob@example.com', email: 'bob@example.com' },
+      ];
+      const result = await validate([
+        row({ username: 'bob@example.com', email: 'bob@example.com' }),
+      ]);
+      expect(result.rows[0].errors).toEqual([]);
+      expect(result.rows[0].status).toBe('EXISTING_USER');
+    });
+
+    it('still rejects an email-style username for a new user', async () => {
+      const [error] = await errorsOf([
+        row({ username: 'new@example.com', email: 'new@example.com' }),
+      ]);
+      expect(error).toContain('Username must be');
+    });
+
     it('rejects an existing org member when no project is given', async () => {
       db.members = [{ userId: 'u-1' }];
       const [error] = await errorsOf([row()]);

@@ -424,11 +424,6 @@ export class OrganizationBulkMemberService {
 
   private checkFormat({ row, errors }: RowPlan) {
     if (!row.username) errors.push('Username is required');
-    else if (!USERNAME_PATTERN.test(row.username)) {
-      errors.push(
-        'Username must be 3-100 characters: letters, digits, dot, dash or underscore',
-      );
-    }
     if (!row.email) errors.push('Email is required');
     else if (!EMAIL_PATTERN.test(row.email)) errors.push('Email is invalid');
     if (!ORG_ROLES.includes(row.role)) {
@@ -546,6 +541,12 @@ export class OrganizationBulkMemberService {
     if (!newUsers.length) return;
     const policy = await this.keycloakService.getPasswordPolicy();
     for (const plan of newUsers) {
+      // เช็ครูปแบบเฉพาะ user ใหม่ — user เดิมที่สมัครเองมี username เป็น email ได้
+      if (!USERNAME_PATTERN.test(plan.row.username)) {
+        plan.errors.push(
+          'Username must be 3-100 characters: letters, digits, dot, dash or underscore',
+        );
+      }
       if (!plan.row.fullname) plan.errors.push('Full name is required');
       if (!plan.row.password) {
         plan.errors.push('Password is required for a new user');
