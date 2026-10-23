@@ -36,6 +36,7 @@ import { BrandKitDetailTypeModule } from './brand-kit-detail-type/brand-kit-deta
 import { ContactSaleLogModule } from './contact-sale-log/contact-sale-log.module';
 import { WorkflowModule } from './workflow/workflow.module';
 import { PhotoEventModule } from './photo-event/photo-event.module';
+import { AnnouncementModule } from './announcement/announcement.module';
 import { ByteplusWebhookModule } from './byteplus-webhook/byteplus-webhook.module';
 import { KeycloakAuthModule } from '@ai-media/share';
 import { OpenTelemetryModule } from 'nestjs-otel';
@@ -85,6 +86,7 @@ import { OpenTelemetryModule } from 'nestjs-otel';
     ContactSaleLogModule,
     WorkflowModule,
     PhotoEventModule,
+    AnnouncementModule,
     ByteplusWebhookModule,
   ],
   controllers: [InventoryController],

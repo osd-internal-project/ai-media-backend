@@ -275,6 +275,22 @@ model PhotoEventPrintTemplate {
   @@map("photo_event_print_template")
 }
 
+/// ประกาศบนหน้า public (home/features/pricing) — super admin จัดการ, active ได้หลายชิ้นพร้อมกัน
+model Announcement {
+  id        String   @id @default(uuid())
+  category  String   @db.VarChar(30) // PROMOTION | SYSTEM_UPDATE
+  title     String   @db.VarChar(150)
+  body      String?  @db.Text
+  imageKey  String?  @map("image_key") @db.VarChar(255)
+  isActive  Boolean  @default(false) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive, sortOrder])
+  @@map("announcement")
+}
+
 /// รูปที่ staff นำเข้าให้แขกเลือกบนจอ kiosk
 model PhotoEventPhoto {
   id             String   @id @default(uuid())
