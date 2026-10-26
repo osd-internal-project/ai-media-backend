@@ -441,6 +441,48 @@ describe('VideoProcessor (callback + poll-check)', () => {
       expect(assetSvc.cleanup).not.toHaveBeenCalled();
     });
 
+    const submitPayload = async (
+      sendConfig: Record<string, unknown>,
+      bodyExtra: Record<string, unknown>,
+    ) => {
+      axiosPost.mockResolvedValue({ data: { id: 'cgt-1' } });
+      const job = seedance2Job();
+      Object.assign(job.data.sendConfig, sendConfig);
+      Object.assign(job.data.body, { ratio: '16:9', draft: false }, bodyExtra);
+      await processor.process(job);
+      return axiosPost.mock.calls[0][1];
+    };
+
+    it('frames + sendConfig.framesRatio → sends that ratio (seedance 2.5)', async () => {
+      const payload = await submitPayload(
+        { framesRatio: 'adaptive' },
+        { files: [], image: ['https://s3/first.png'] },
+      );
+      expect(payload.ratio).toBe('adaptive');
+      expect(payload.content[1].role).toBe('first_frame');
+    });
+
+    it('framesRatio leaves reference-only requests on the chosen ratio', async () => {
+      const payload = await submitPayload({ framesRatio: 'adaptive' }, {});
+      expect(payload.ratio).toBe('16:9');
+    });
+
+    it('no framesRatio keeps the chosen ratio for frames (seedance 2.0)', async () => {
+      const payload = await submitPayload(
+        {},
+        { files: [], image: ['https://s3/first.png'] },
+      );
+      expect(payload.ratio).toBe('16:9');
+    });
+
+    it('supportDraft false drops the draft field; unset keeps it', async () => {
+      expect(await submitPayload({ supportDraft: false }, {})).not.toHaveProperty(
+        'draft',
+      );
+      axiosPost.mockClear();
+      expect(await submitPayload({}, {})).toHaveProperty('draft', false);
+    });
+
     it('submit publishes preparing k/N for the asset step', async () => {
       assetSvc.swapImagesToAssets.mockImplementation(
         async (_payload, _taskId, onAssetReady) => {

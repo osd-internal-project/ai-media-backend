@@ -1,5 +1,8 @@
 import { VIDEO_INFLIGHT_DATA_KEY, VIDEO_INFLIGHT_KEY } from '@ai-media/share';
-import { GenerateVideoService } from './generate-video.service';
+import {
+  GenerateVideoService,
+  unsupportedVideoOption,
+} from './generate-video.service';
 
 const makeService = (exec: jest.Mock) => {
   const chain = {
@@ -55,5 +58,31 @@ describe('GenerateVideoService.afterEnqueue (sweeper registration)', () => {
       jest.fn().mockRejectedValue(new Error('redis down')),
     );
     await expect(afterEnqueue('t1', 'c1', 'u1', body)).resolves.toBeUndefined();
+  });
+});
+
+describe('unsupportedVideoOption', () => {
+  const mini = { resolutions: ['480p', '720p'] };
+  const v25 = { duration: { min: 4, max: 30 } };
+
+  it('accepts anything when the model sets no limits', () => {
+    expect(unsupportedVideoOption({}, { resolution: '1080p', duration: 15 })).toBeNull();
+    expect(unsupportedVideoOption(null, { resolution: '1080p', duration: 15 })).toBeNull();
+  });
+
+  it('rejects a resolution outside sendConfig.resolutions', () => {
+    expect(unsupportedVideoOption(mini, { resolution: '1080p', duration: 5 })).toBe(
+      'Resolution 1080p is not supported (use 480p, 720p)',
+    );
+    expect(unsupportedVideoOption(mini, { resolution: '720p', duration: 5 })).toBeNull();
+  });
+
+  it('rejects a duration outside sendConfig.duration, inclusive bounds pass', () => {
+    expect(unsupportedVideoOption(v25, { resolution: '720p', duration: 31 })).toBe(
+      'Duration 31s is not supported (use 4-30s)',
+    );
+    expect(unsupportedVideoOption(v25, { resolution: '720p', duration: 3 })).not.toBeNull();
+    expect(unsupportedVideoOption(v25, { resolution: '720p', duration: 30 })).toBeNull();
+    expect(unsupportedVideoOption(v25, { resolution: '720p', duration: 4 })).toBeNull();
   });
 });

@@ -1027,7 +1027,7 @@ export class VideoProcessor extends WorkerHost {
 
   private async buildSeedance2Payload(
     body: RequestVideoGenerateDto,
-    _modelDetail: any,
+    sendConfig: { framesRatio?: string; supportDraft?: boolean } | undefined,
   ) {
     const filesUrl = await Promise.all(
       body.files.map(async (file) => {
@@ -1086,9 +1086,13 @@ export class VideoProcessor extends WorkerHost {
             ]
           : []),
       ],
-      draft: body.draft,
+      ...(sendConfig?.supportDraft === false ? {} : { draft: body.draft }),
       generate_audio: body.generateAudio,
-      ratio: body.ratio,
+      // seedance 2.5 รับ frame ได้แค่ ratio "adaptive"
+      ratio:
+        body.image[0] && sendConfig?.framesRatio
+          ? sendConfig.framesRatio
+          : body.ratio,
       duration: body.duration,
       watermark: body.watermark,
       resolution: body.resolution,

@@ -23,6 +23,29 @@ import {
 import { GenerateHelperService } from './generate-helper.service';
 import { Span } from 'nestjs-otel';
 
+interface VideoLimits {
+  resolutions?: string[];
+  duration?: { min: number; max: number };
+}
+
+/**
+ * ค่าที่ model รับไม่ได้ตาม `sendConfig.resolutions` / `sendConfig.duration` (ไม่ตั้ง = ไม่จำกัด)
+ * @returns เหตุผลที่ปฏิเสธ หรือ null ถ้าผ่าน
+ */
+export function unsupportedVideoOption(
+  sendConfig: VideoLimits | null | undefined,
+  body: Pick<RequestVideoGenerateDto, 'resolution' | 'duration'>,
+): string | null {
+  const { resolutions, duration } = sendConfig ?? {};
+  if (resolutions && !resolutions.includes(body.resolution)) {
+    return `Resolution ${body.resolution} is not supported (use ${resolutions.join(', ')})`;
+  }
+  if (duration && (body.duration < duration.min || body.duration > duration.max)) {
+    return `Duration ${body.duration}s is not supported (use ${duration.min}-${duration.max}s)`;
+  }
+  return null;
+}
+
 @Injectable()
 export class GenerateVideoService extends BaseGenerateService {
   private readonly logger = new Logger(GenerateVideoService.name);
@@ -106,6 +129,18 @@ export class GenerateVideoService extends BaseGenerateService {
     cacheKey: string,
     modelDetail: MasterModelTypeDto,
   ): Promise<CreditQuotaResult> {
+    // ตรวจก่อน hold — ถ้าปล่อยไป provider จะปฏิเสธหลังหัก credit แล้ว
+    const unsupported = unsupportedVideoOption(modelDetail.sendConfig, body);
+    if (unsupported) {
+      return {
+        isQuotaExceeded: true,
+        incrementCredit: 0,
+        limitAllowance: 0,
+        usedCredit: 0,
+        onhandToken: 0,
+        reason: unsupported,
+      };
+    }
     return this.defaultCheckCreditQuota(
       userId,
       body,
