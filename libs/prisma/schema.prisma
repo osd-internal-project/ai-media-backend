@@ -543,6 +543,9 @@ model Organization {
   description    String? @map("description") @db.Text
   type           String  @map("type") @db.VarChar(50) // "PERSONAL | TEAM"
   status         Boolean @default(true) @map("status") @db.Boolean
+  /// false = org ยังแสดงใน switcher แต่ผู้ใช้ที่ไม่ใช่ SUPER_ADMIN เห็นแค่หน้า closedMessage (status=false คือซ่อน org)
+  isOpen         Boolean @default(true) @map("is_open")
+  closedMessage  String? @map("closed_message") @db.Text
 
   createdAt          DateTime             @default(now()) @map("created_at")
   updatedAt          DateTime             @updatedAt @map("updated_at")
