@@ -9,6 +9,7 @@ import { ChatModule } from './chat/chat.module';
 import { ChatModelModule } from './chat-model/chat-model.module';
 import { ConversationModule } from './conversation/conversation.module';
 import { LlmStatusModule } from './llm-status/llm-status.module';
+import { ChatAssistantSettingModule } from './setting/chat-assistant-setting.module';
 import appConfig from './configs';
 import { KeycloakAuthModule } from '@ai-media/share';
 
@@ -28,6 +29,7 @@ import { KeycloakAuthModule } from '@ai-media/share';
     ChatModelModule,
     ConversationModule,
     LlmStatusModule,
+    ChatAssistantSettingModule,
   ],
   controllers: [ChatAssistantController],
   providers: [ChatAssistantService],

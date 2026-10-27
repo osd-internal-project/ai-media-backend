@@ -1049,6 +1049,17 @@ model ChatModelConfig {
   @@map("chat_model_config")
 }
 
+/// ค่าตั้งระดับระบบที่ super admin เปลี่ยนได้โดยไม่ต้อง deploy เช่น "chat_assistant.enabled"
+/// ไม่มีแถว = ใช้ค่า default ของ key นั้นในโค้ด
+model AppSetting {
+  key       String   @id @db.VarChar(100)
+  value     Json
+  updatedBy String?  @map("updated_by") @db.VarChar(100)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("app_setting")
+}
+
 model ContactSaleLog {
   id          String   @id @default(uuid()) @db.Uuid
   firstName   String   @map("first_name") @db.VarChar(200)

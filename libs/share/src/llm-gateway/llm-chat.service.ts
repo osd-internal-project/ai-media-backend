@@ -145,6 +145,9 @@ export class LlmChatService {
         const delta = parsed?.choices?.[0]?.delta?.content;
         if (delta) yield { type: 'delta', content: delta };
 
+        const finishReason = parsed?.choices?.[0]?.finish_reason;
+        if (finishReason) yield { type: 'finish', finishReason };
+
         // usage มาเป็น chunk สุดท้ายเมื่อขอ include_usage ไว้
         if (parsed?.usage) {
           yield {
@@ -288,9 +291,10 @@ export class LlmChatService {
     } catch (error:any) {
       const status: number | null = error?.response?.status ?? null;
       const retryable = status === null || status === 429 || status >= 500;
+      const data = await this.readErrorBody(error?.response?.data);
       const detail =
-        error?.response?.data?.error?.message ??
-        error?.response?.data?.message ??
+        data?.error?.message ??
+        data?.message ??
         error?.message ??
         'unknown error';
 
@@ -298,8 +302,36 @@ export class LlmChatService {
         `LLM gateway chat completion failed: ${detail}`,
         status,
         retryable,
-        error?.response?.data,
+        data,
       );
+    }
+  }
+
+  /**
+   * อ่าน body ของ error ให้เป็น object
+   *
+   * คำขอแบบ stream ได้ body เป็น stream แม้ตอน 4xx — ถ้าไม่อ่านออกมา ผู้ใช้จะเห็นแค่
+   * "Request failed with status code 400" แทนเหตุผลจริง เช่นโมเดลไม่อยู่ใน allowlist
+   *
+   * @param data body ดิบจาก axios
+   * @returns object ที่ parse แล้ว, `{ message }` เมื่อไม่ใช่ JSON หรือค่าเดิม
+   */
+  private async readErrorBody(data: any): Promise<any> {
+    if (!data || typeof data[Symbol.asyncIterator] !== 'function') return data;
+    let text = '';
+    try {
+      for await (const chunk of data as AsyncIterable<Buffer | string>) {
+        text += chunk.toString();
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Cannot read gateway error body: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text ? { message: text.slice(0, 500) } : undefined;
     }
   }
 

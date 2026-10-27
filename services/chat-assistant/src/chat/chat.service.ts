@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
+import { Observable, Subject, finalize } from 'rxjs';
 import {
   LlmChatRequest,
   LlmChatService,
@@ -26,6 +26,7 @@ import { PromptEngineeringService } from './services/prompt-engineering.service'
 import { MemoryService } from './services/memory.service';
 import { ToolCallingService, ToolDefinition } from './services/tool-calling.service';
 import { ChatModelService, ResolvedChatModel } from './services/chat-model.service';
+import { ChatAssistantSettingService } from '../setting/chat-assistant-setting.service';
 
 /** พารามิเตอร์ที่ทั้ง path ปกติและ path stream ใช้ร่วมกัน */
 interface ChatTurnInput {
@@ -53,6 +54,7 @@ export class ChatService {
     private readonly llmChat: LlmChatService,
     private readonly llmGateway: LlmGatewayService,
     private readonly orgMemberRepo: OrganizationMemberRepository,
+    private readonly setting: ChatAssistantSettingService,
   ) {}
 
   // ==========================================================================
@@ -170,9 +172,15 @@ export class ChatService {
    */
   streamChat(query: ChatTurnInput): Observable<MessageEvent> {
     const subject = new Subject<MessageEvent>();
+    // Nest unsubscribe เมื่อ client ปิด — ยกเลิกคำขอที่ gateway ด้วย ไม่งั้นโมเดล generate ต่อจนจบและคิดเงิน
+    const abort = new AbortController();
 
-    this.runStreamFlow(query, subject)
+    this.runStreamFlow(query, subject, abort.signal)
       .catch((error) => {
+        if (abort.signal.aborted) {
+          this.logger.log('Stream cancelled by client');
+          return;
+        }
         // ต้องส่ง error chunk ก่อน complete เสมอ — โค้ดเดิมมี finally ที่ complete
         // ไปแล้วตั้งแต่ก่อน catch นี้ทำงาน ทำให้ subject.next() กลายเป็น no-op
         // และฝั่ง client เห็นแค่ stream เงียบไปเฉย ๆ โดยไม่รู้ว่าพัง
@@ -184,7 +192,7 @@ export class ChatService {
       })
       .finally(() => subject.complete());
 
-    return subject.asObservable();
+    return subject.asObservable().pipe(finalize(() => abort.abort()));
   }
 
   // ==========================================================================
@@ -198,6 +206,7 @@ export class ChatService {
    * @returns บทสนทนา ข้อความที่จะส่ง โมเดล และ key ที่จะใช้
    */
   private async prepareTurn(input: ChatTurnInput) {
+    await this.setting.assertEnabled();
     await this.assertOrgMember(input.organizationId, input.userId);
 
     const conversation = await this.resolveConversation(input);
@@ -242,10 +251,12 @@ export class ChatService {
    *
    * @param query พารามิเตอร์ของรอบสนทนานี้
    * @param subject ช่องทางส่ง SSE event กลับ
+   * @param signal ยกเลิกเมื่อ client ปิดการเชื่อมต่อ
    */
   private async runStreamFlow(
     query: ChatTurnInput,
     subject: Subject<MessageEvent>,
+    signal: AbortSignal,
   ): Promise<void> {
     const { conversation, messages, model, apiKey } =
       await this.prepareTurn(query);
@@ -255,11 +266,13 @@ export class ChatService {
       content: query.message,
     });
 
-    const { fullContent, usage, usedModel } = await this.emitAnswer(
-      { apiKey, ...this.toLlmModelParams(model), messages },
-      model,
-      subject,
-    );
+    const { fullContent, usage, usedModel, finishReason } =
+      await this.emitAnswer(
+        { apiKey, ...this.toLlmModelParams(model), messages },
+        model,
+        subject,
+        signal,
+      );
 
     const assistantMessage = await this.persistMessage(conversation.id, {
       role: 'assistant',
@@ -289,7 +302,7 @@ export class ChatService {
       tokenUsage,
       conversationId: conversation.id,
       messageId: assistantMessage.id,
-      finishReason: 'stop',
+      finishReason,
     };
     subject.next({ data: JSON.stringify(doneChunk) } as MessageEvent);
   }
@@ -323,16 +336,19 @@ export class ChatService {
    * @param request พารามิเตอร์ที่จะส่งให้ gateway
    * @param model โมเดลที่ resolve แล้ว (ใช้ดู sendConfig.stream)
    * @param subject ช่องทางส่ง SSE event
-   * @returns เนื้อหาเต็ม usage และโมเดลที่ gateway ใช้จริง
+   * @param signal ยกเลิกเมื่อ client ปิดการเชื่อมต่อ
+   * @returns เนื้อหาเต็ม usage โมเดลที่ gateway ใช้จริง และเหตุที่จบ
    */
   private async emitAnswer(
     request: LlmChatRequest,
     model: ResolvedChatModel,
     subject: Subject<MessageEvent>,
+    signal: AbortSignal,
   ): Promise<{
     fullContent: string;
     usage: LlmUsage | null;
     usedModel: string;
+    finishReason: string;
   }> {
     const send = (delta: string) => {
       const chunk: StreamChunkDto = { type: 'content', delta };
@@ -346,17 +362,23 @@ export class ChatService {
         fullContent: result.content,
         usage: result.usage,
         usedModel: result.model,
+        finishReason: result.finishReason ?? 'stop',
       };
     }
 
     let fullContent = '';
     let usage: LlmUsage | null = null;
     let usedModel = model.modelId;
+    let finishReason = 'stop';
 
-    for await (const event of this.llmChat.stream(request)) {
+    for await (const event of this.llmChat.stream(request, signal)) {
       if (event.type === 'delta') {
         fullContent += event.content;
         send(event.content);
+        continue;
+      }
+      if (event.type === 'finish') {
+        finishReason = event.finishReason;
         continue;
       }
       // usage มาเป็นก้อนสุดท้ายจาก gateway — ใช้ค่านี้แทนการนับ chunk เอง
@@ -364,7 +386,7 @@ export class ChatService {
       usedModel = event.model;
     }
 
-    return { fullContent, usage, usedModel };
+    return { fullContent, usage, usedModel, finishReason };
   }
 
   /**

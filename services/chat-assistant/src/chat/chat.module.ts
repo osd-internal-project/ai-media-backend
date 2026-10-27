@@ -8,13 +8,14 @@ import { MemoryService } from './services/memory.service';
 import { ToolCallingService } from './services/tool-calling.service';
 import { ChatModelService } from './services/chat-model.service';
 import { VisionService } from './services/vision.service';
+import { ChatAssistantSettingModule } from '../setting/chat-assistant-setting.module';
 
 /**
  * HttpModule ยังอยู่เพราะ VisionService ใช้ — ส่วน path ของแชทย้ายไปใช้
  * LlmChatService จาก LlmGatewayModule แล้ว
  */
 @Module({
-  imports: [PrismaModule, HttpModule, LlmGatewayModule],
+  imports: [PrismaModule, HttpModule, LlmGatewayModule, ChatAssistantSettingModule],
   controllers: [ChatController],
   providers: [
     ChatService,

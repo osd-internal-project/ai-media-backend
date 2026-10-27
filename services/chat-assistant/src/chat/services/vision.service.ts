@@ -7,6 +7,7 @@ import {
 } from '@ai-media/share';
 import { MemoryService } from './memory.service';
 import { ChatModelService } from './chat-model.service';
+import { ChatAssistantSettingService } from '../../setting/chat-assistant-setting.service';
 import {
   ImagePromptRequestDto,
   ImagePromptResponseDto,
@@ -53,6 +54,7 @@ export class VisionService {
     private readonly chatModelService: ChatModelService,
     private readonly llmChat: LlmChatService,
     private readonly llmGateway: LlmGatewayService,
+    private readonly setting: ChatAssistantSettingService,
   ) {}
 
   /**
@@ -70,6 +72,7 @@ export class VisionService {
     file: Express.Multer.File,
     dto: ImagePromptRequestDto,
   ): Promise<ImagePromptResponseDto> {
+    await this.setting.assertEnabled();
     const allowedMimeTypes = [
       'image/jpeg',
       'image/png',

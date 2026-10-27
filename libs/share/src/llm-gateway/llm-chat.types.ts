@@ -75,6 +75,8 @@ export interface LlmChatResult {
 /** ชิ้นส่วนที่ทยอยส่งกลับระหว่าง stream */
 export type LlmStreamEvent =
   | { readonly type: 'delta'; readonly content: string }
+  /** 'length' = ถูกตัดที่ max_tokens ผู้ใช้ต้องรู้ว่าได้คำตอบไม่ครบ */
+  | { readonly type: 'finish'; readonly finishReason: string }
   | { readonly type: 'usage'; readonly usage: LlmUsage; readonly model: string };
 
 /**

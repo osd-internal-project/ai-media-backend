@@ -26,7 +26,8 @@ const SHARED_RULES = `
 
 ### How to answer
 - Reply in the same language the user writes in, but always give the final prompt itself in English.
-- Put the final prompt on its own, as the last thing in your reply, so it can be copied straight into the prompt box.
+- Put the final prompt last, inside a single fenced code block (three backticks), so the app can show it with a "Use" button. Only the final prompt goes in that block.
+- Write everything else as plain sentences: no Markdown headings, bold or tables.
 - Keep explanations short. The prompt is the deliverable, not the commentary.
 - If the request is too vague to write a good prompt, ask one focused question rather than guessing at length.`;
 
