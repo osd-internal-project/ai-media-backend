@@ -339,7 +339,6 @@ export class VideoProcessor extends WorkerHost {
         }
 
         videoTaskId = apiRes.data.id;
-        authToken = String(sendConfig.authorization ?? '');
         await this.updateTaskStatus(taskId, { videoTaskId });
         // Persist into the job payload so a BullMQ retry/stalled re-process
         // resumes this provider task instead of submitting a new one.

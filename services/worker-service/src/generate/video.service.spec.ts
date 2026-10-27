@@ -216,6 +216,35 @@ describe('VideoProcessor (callback + poll-check)', () => {
     expect(axiosGet).not.toHaveBeenCalled();
   });
 
+  it('submit: polls with the org key used to create the task, not the model token', async () => {
+    axiosPost.mockResolvedValue({ data: { id: 'cgt-1' } });
+    const job = {
+      name: 'vdo-generate-queue',
+      id: '1',
+      data: {
+        taskId: 't1',
+        clientId: 'c1',
+        userId: 'u1',
+        statusBaseUrl: 'https://gw/tasks',
+        sendApi: 'https://gw/create',
+        authorization: 'org-key',
+        sendConfig: {
+          type: 'seedance1',
+          configType: 'application/json',
+          authorization: 'model-key',
+        },
+        body: { ...body, prompt: 'p', ratio: '1:1', resolution: '720p', image: [], files: [] },
+      },
+      updateData: jest.fn(),
+    };
+    await processor.process(job);
+    expect(axiosPost.mock.calls[0][2].headers.Authorization).toBe('Bearer org-key');
+
+    axiosGet.mockResolvedValue({ data: { id: 'cgt-1', status: 'running' } });
+    await processor.process({ name: 'video-poll-check', data: { taskId: 't1' } });
+    expect(axiosGet.mock.calls[0][1].headers.Authorization).toBe('Bearer org-key');
+  });
+
   it('finalize (callback) completes once even when poll-check also finishes it', async () => {
     seedCtx();
     axiosGet.mockResolvedValue(succeeded);
