@@ -120,6 +120,8 @@ describe('VideoProcessor (callback + poll-check)', () => {
     queue = { add: jest.fn(), getJob: jest.fn().mockResolvedValue(undefined) };
     helper = {
       logAudit: jest.fn(),
+      saveProviderTaskId: jest.fn(),
+      logError: jest.fn(),
       getUsedCredit: jest.fn().mockResolvedValue({ credit: 5 }),
       updateUsedCreditSuccess: jest
         .fn()
@@ -201,6 +203,7 @@ describe('VideoProcessor (callback + poll-check)', () => {
     };
     const res = await processor.process(job);
     expect(res).toMatchObject({ submitted: true, videoTaskId: 'cgt-1' });
+    expect(helper.saveProviderTaskId).toHaveBeenCalledWith('t1', 'cgt-1');
     expect(axiosPost.mock.calls[0][1].callback_url).toMatch(
       /^https:\/\/core\/api\/webhooks\/byteplus\/video\/t1\?sig=[0-9a-f]{64}$/,
     );
@@ -408,6 +411,47 @@ describe('VideoProcessor (callback + poll-check)', () => {
     });
     expect(helper.updateUsedCreditFail).not.toHaveBeenCalled();
     expect(queue.add).toHaveBeenCalledTimes(1);
+  });
+
+  const httpError = (status: number, message: string) =>
+    Object.assign(new Error(`Request failed with status code ${status}`), {
+      response: { status, data: { error: { message } } },
+    });
+
+  it('poll-check 404 → fails right away with the gateway message and writes error_logs', async () => {
+    seedCtx();
+    axiosGet.mockRejectedValue(httpError(404, 'Task not found'));
+    const res = await processor.process({
+      name: 'video-poll-check',
+      data: { taskId: 't1' },
+    });
+    expect(res).toEqual({ rejected: true });
+    expect(helper.updateUsedCreditFail).toHaveBeenCalledTimes(1);
+    expect(helper.logError).toHaveBeenCalledWith(
+      'GenerateVideoService',
+      'u1',
+      'Task not found',
+      expect.any(String),
+      expect.objectContaining({ taskId: 't1' }),
+    );
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('poll-check 503 → still retries', async () => {
+    seedCtx();
+    axiosGet.mockRejectedValue(httpError(503, 'busy'));
+    await processor.process({ name: 'video-poll-check', data: { taskId: 't1' } });
+    expect(helper.updateUsedCreditFail).not.toHaveBeenCalled();
+    expect(queue.add).toHaveBeenCalledTimes(1);
+  });
+
+  it('callback 404 → fails once instead of throwing for a BullMQ retry', async () => {
+    seedCtx();
+    axiosGet.mockRejectedValue(httpError(404, 'Task not found'));
+    await expect(
+      processor.process({ name: 'video-finalize', data: { taskId: 't1' } }),
+    ).resolves.toEqual({ rejected: true });
+    expect(helper.updateUsedCreditFail).toHaveBeenCalledTimes(1);
   });
 
   it('storage failure after the lock → task is closed as failed, not left processing', async () => {

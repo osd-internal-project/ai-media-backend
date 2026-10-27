@@ -281,6 +281,7 @@ export class OmnihumenProcessor extends WorkerHost {
       apiRes.data?.data?.task_id ?? data.omnihumenTaskId;
     const submittedAt = Date.now();
     await this.updateTaskStatus(taskId, { omnihumenTaskId: providerTaskId });
+    await this.generateHelperService.saveProviderTaskId(taskId, providerTaskId);
     await job.updateData({ ...data, providerTaskId, submittedAt });
     return { providerTaskId, submittedAt };
   }

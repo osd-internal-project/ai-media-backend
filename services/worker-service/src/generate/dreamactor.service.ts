@@ -271,6 +271,7 @@ export class DreamactorProcessor extends WorkerHost {
       apiRes.data?.data?.task_id ?? data.dreamactorTaskId;
     const submittedAt = Date.now();
     await this.updateTaskStatus(taskId, { dreamactorTaskId: providerTaskId });
+    await this.generateHelperService.saveProviderTaskId(taskId, providerTaskId);
     await job.updateData({ ...data, providerTaskId, submittedAt });
     return { providerTaskId, submittedAt };
   }
@@ -499,6 +500,7 @@ export class DreamactorProcessor extends WorkerHost {
   private async failTask(data: DreamactorProcessJob, error: Error) {
     const { taskId, clientId, body, userId } = data;
     await this.generateHelperService.logError(
+      'GenerateDreamActorService',
       userId,
       error.message,
       error.stack,

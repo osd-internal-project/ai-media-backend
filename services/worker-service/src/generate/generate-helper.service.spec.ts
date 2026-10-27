@@ -98,3 +98,42 @@ describe('GenerateHelperService credit settlement', () => {
     expect(redis.store.get('credit:settled:t3')).toBe('refunded');
   });
 });
+
+describe('GenerateHelperService.saveProviderTaskId', () => {
+  const build = (fail: boolean) => {
+    const gallery = { updateMany: jest.fn(async () => ({ count: 1 })) };
+    const log = {
+      updateMany: jest.fn(async () => {
+        if (fail) throw new Error('column "provider_task_id" does not exist');
+        return { count: 1 };
+      }),
+    };
+    const service = new GenerateHelperService(
+      gallery as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { log } as never,
+      {} as never,
+    );
+    return { service, gallery, log };
+  };
+
+  it('writes the provider id to gallery and log by taskId', async () => {
+    const { service, gallery, log } = build(false);
+    await service.saveProviderTaskId('t1', 'cgt-1');
+    const arg = { where: { taskId: 't1' }, data: { providerTaskId: 'cgt-1' } };
+    expect(gallery.updateMany).toHaveBeenCalledWith(arg);
+    expect(log.updateMany).toHaveBeenCalledWith(arg);
+  });
+
+  it('a DB error does not fail the generation', async () => {
+    const { service } = build(true);
+    await expect(service.saveProviderTaskId('t1', 'cgt-1')).resolves.toBeUndefined();
+  });
+});

@@ -129,6 +129,8 @@ model Gallery {
   seq Int    @default(autoincrement()) @db.Integer
 
   taskId           String?  @map("task_id")
+  /// task id ฝั่ง provider (เช่น cgt-…) — worker เขียนตอน submit; ใช้โยงกลับไปหา gateway
+  providerTaskId   String?  @map("provider_task_id")
   projectId        String   @map("project_id")
   userId           String   @map("user_id")
   imageUrl         String?  @map("image_url")
@@ -161,6 +163,7 @@ model Gallery {
   // index ตาม source/improvements P1-5 (query จริงใน services)
   @@index([projectId, typeGenerate, seq])
   @@index([taskId])
+  @@index([providerTaskId])
   @@index([userId])
 }
 
@@ -168,6 +171,7 @@ model Log {
   id              String   @id @default(uuid())
   seq             Int      @default(autoincrement()) @db.Integer
   taskId          String?  @map("task_id")
+  providerTaskId  String?  @map("provider_task_id")
   status          String?
   typeGenerate    String?  @map("type_generate")
   projectId       String   @map("project_id")

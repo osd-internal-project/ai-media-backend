@@ -493,6 +493,7 @@ export class ImageProcessor extends WorkerHost {
       };
     } catch (error: any) {
       await this.generateHelperService.logError(
+        'GenerateImageService',
         userId,
         error.message,
         error.stack,

@@ -339,6 +339,7 @@ export class VideoProcessor extends WorkerHost {
         }
 
         videoTaskId = apiRes.data.id;
+        await this.generateHelperService.saveProviderTaskId(taskId, videoTaskId);
         await this.updateTaskStatus(taskId, { videoTaskId });
         // Persist into the job payload so a BullMQ retry/stalled re-process
         // resumes this provider task instead of submitting a new one.
@@ -423,7 +424,13 @@ export class VideoProcessor extends WorkerHost {
     }
     // callback เป็น trace ใหม่จาก provider — link กลับไป trace ตอน submit
     addActiveSpanLinks(ctx._otel);
-    const result = await this.fetchProviderStatus(ctx);
+    let result: ProviderVideoResult;
+    try {
+      result = await this.fetchProviderStatus(ctx);
+    } catch (error) {
+      if (await this.failIfRejected(ctx, error)) return { rejected: true };
+      throw error;
+    }
     // ตัด "error":null ออก — panel "Error logs" ใน Grafana หาคำว่า error จากข้อความ
     this.logger.log(
       `${tag(taskId)} ← provider GET (callback)=${JSON.stringify(
@@ -473,6 +480,7 @@ export class VideoProcessor extends WorkerHost {
     try {
       result = await this.fetchProviderStatus(ctx);
     } catch (error) {
+      if (await this.failIfRejected(ctx, error)) return { rejected: true };
       // GET ล้มชั่วคราว (network/5xx) — ลองรอบหน้า ไม่ fail งาน
       this.logger.warn(
         `${tag(taskId)} poll-check: status request failed — ${
@@ -684,6 +692,13 @@ export class VideoProcessor extends WorkerHost {
     const { taskId, clientId, body, userId } = ctx;
     const redisVideoCacheKey = `${body.organizationId}/${body.projectId}/credit_used_${userId}`;
     this.logger.error(`${tag(taskId)} ❌ failed: ${err.message}`, err.stack);
+    await this.generateHelperService.logError(
+      'GenerateVideoService',
+      userId,
+      err.message,
+      err.stack ?? '',
+      { taskId, model: body.model, organizationId: body.organizationId },
+    );
 
     await this.updateTaskStatus(taskId, {
       status: 'failed',
@@ -889,6 +904,31 @@ export class VideoProcessor extends WorkerHost {
       httpsAgent: this.agent,
     });
     return { status: String(res.data?.status ?? ''), data: res.data };
+  }
+
+  /** GET สถานะได้ 4xx (ไม่ใช่ 429) = retry ก็ไม่หาย เช่น 404 Task not found — ปิดงานด้วยข้อความจริงทันที */
+  private async failIfRejected(
+    ctx: VideoTaskContext,
+    error: unknown,
+  ): Promise<boolean> {
+    const status = (error as { response?: { status?: number } }).response
+      ?.status;
+    if (!status || status < 400 || status >= 500 || status === 429) {
+      return false;
+    }
+    const apiBody = (error as { response?: { data?: any } }).response?.data;
+    const message = unwrapProviderMessage(
+      String(
+        apiBody?.error?.message ??
+          apiBody?.message ??
+          (error as Error).message,
+      ),
+    );
+    this.logger.error(
+      `${tag(ctx.taskId)} ❌ status request rejected: API ${status}: ${message}`,
+    );
+    await this.failOnce(ctx, new Error(message));
+    return true;
   }
 
   @Span()

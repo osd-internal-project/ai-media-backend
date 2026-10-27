@@ -412,7 +412,29 @@ export class GenerateHelperService {
     }
   }
 
+  /** โยง taskId ภายใน (temp-…) กับ id ฝั่ง provider ลง gallery + log — ล้มแค่ log เพราะงานที่ provider ยังวิ่งอยู่ */
+  async saveProviderTaskId(
+    taskId: string,
+    providerTaskId: string,
+  ): Promise<void> {
+    try {
+      await this.galleryRepo.updateMany({
+        where: { taskId },
+        data: { providerTaskId },
+      });
+      await this.prisma.log.updateMany({
+        where: { taskId },
+        data: { providerTaskId },
+      });
+    } catch (e) {
+      Logger.error(
+        `[${taskId}] save providerTaskId=${providerTaskId} failed: ${e}`,
+      );
+    }
+  }
+
   async logError(
+    serviceName: string,
     userId: string,
     message: string,
     stack: string,
@@ -421,7 +443,7 @@ export class GenerateHelperService {
     try {
       await this.errorLogRepo.create({
         data: {
-          serviceName: 'GenerateImageService',
+          serviceName,
           severity: 'ERROR',
           message,
           stackTrace: stack,

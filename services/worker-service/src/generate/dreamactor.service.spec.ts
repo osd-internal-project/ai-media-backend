@@ -81,6 +81,7 @@ describe('DreamactorProcessor', () => {
     order = [];
     helper = {
       logAudit: jest.fn(),
+      saveProviderTaskId: jest.fn(),
       logError: jest.fn(),
       updateUsedCreditSuccess: jest
         .fn()
@@ -137,6 +138,7 @@ describe('DreamactorProcessor', () => {
     await processor.process(job);
 
     expect(axiosPost).toHaveBeenCalledTimes(3);
+    expect(helper.saveProviderTaskId).toHaveBeenCalledWith('t1', 'cv-1');
     expect(axiosPost.mock.calls[2][1]).toEqual({
       req_key: 'jimeng_dream_actor',
       task_id: 'cv-1',
@@ -186,6 +188,7 @@ describe('DreamactorProcessor', () => {
 
     expect(axiosPost).toHaveBeenCalledTimes(1);
     expect(axiosPost.mock.calls[0][0]).toBe('https://gw/poll');
+    expect(helper.saveProviderTaskId).not.toHaveBeenCalled();
     expect(helper.logAudit).not.toHaveBeenCalled();
   });
 

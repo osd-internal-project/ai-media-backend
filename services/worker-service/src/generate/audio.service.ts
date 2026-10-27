@@ -535,6 +535,7 @@ export class AudioProcessor extends WorkerHost implements OnModuleDestroy {
     this.logger.error(`${tag(taskId)} ❌ failed: ${error.message}`, error.stack);
     try {
       await this.generateHelperService.logError(
+        'GenerateAudioService',
         userId,
         error.message,
         error.stack,

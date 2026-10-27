@@ -81,6 +81,7 @@ describe('OmnihumenProcessor', () => {
     order = [];
     helper = {
       logAudit: jest.fn(),
+      saveProviderTaskId: jest.fn(),
       updateUsedCreditSuccess: jest
         .fn()
         .mockResolvedValue({ usedCreditAllowance: 5, holdCreditAllowance: 0 }),
@@ -135,6 +136,7 @@ describe('OmnihumenProcessor', () => {
     await processor.process(job);
 
     expect(axiosPost).toHaveBeenCalledTimes(3);
+    expect(helper.saveProviderTaskId).toHaveBeenCalledWith('t1', 'cv-1');
     expect(axiosPost.mock.calls[2][1]).toEqual({
       req_key: 'realman_avatar',
       task_id: 'cv-1',
@@ -175,6 +177,7 @@ describe('OmnihumenProcessor', () => {
 
     expect(axiosPost).toHaveBeenCalledTimes(1);
     expect(axiosPost.mock.calls[0][0]).toBe('https://gw/poll');
+    expect(helper.saveProviderTaskId).not.toHaveBeenCalled();
     expect(helper.logAudit).not.toHaveBeenCalled();
   });
 
