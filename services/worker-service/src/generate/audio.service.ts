@@ -27,6 +27,7 @@ import { Prisma } from '@prisma/client';
 import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
 import { unwrapProviderMessage } from './video.service';
+import { userFacingMessage } from './user-facing-error';
 
 /** Seed Audio ตอบแบบ sync (≤120s เสียง) — กันไม่ให้ worker slot ค้างถ้า gateway ไม่ตอบ */
 const AUDIO_API_TIMEOUT_MS = 5 * 60 * 1000;
@@ -544,7 +545,7 @@ export class AudioProcessor extends WorkerHost implements OnModuleDestroy {
       await this.updateTaskStatus(taskId, {
         status: 'failed',
         failedAt: new Date().toISOString(),
-        error: error.message,
+        error: userFacingMessage(error),
       });
       const creditForFailure = await this.generateHelperService.getUsedCredit(
         0,
@@ -579,8 +580,8 @@ export class AudioProcessor extends WorkerHost implements OnModuleDestroy {
     }
     await this.publishToCore(clientId, 'worker:audio-error', {
       taskId,
-      error: error.message,
-      message: error.message,
+      error: userFacingMessage(error),
+      message: userFacingMessage(error),
       timestamp: new Date().toISOString(),
       projectId: body.projectId,
       type: 'audio',

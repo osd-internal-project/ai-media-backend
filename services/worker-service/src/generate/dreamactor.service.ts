@@ -22,6 +22,7 @@ import axios from 'axios';
 import * as https from 'https';
 import { GenerateHelperService } from './generate-helper.service';
 import { VideoStorageService } from './video-storage.service';
+import { userFacingMessage } from './user-facing-error';
 
 interface DreamactorProcessJob {
   taskId: string;
@@ -511,17 +512,17 @@ export class DreamactorProcessor extends WorkerHost {
     await this.updateTaskStatus(taskId, {
       status: 'failed',
       failedAt: new Date().toISOString(),
-      error: error.message,
+      error: userFacingMessage(error),
     });
 
     // ส่ง error event ไปยัง Core Service
     await this.publishToCore(clientId, 'worker:dreamactor-error', {
       taskId,
-      error: error.message,
+      error: userFacingMessage(error),
       timestamp: new Date().toISOString(),
       type: 'dreamactor',
       projectId: body.projectId,
-      message: error.message,
+      message: userFacingMessage(error),
     });
 
     // บันทึก error log

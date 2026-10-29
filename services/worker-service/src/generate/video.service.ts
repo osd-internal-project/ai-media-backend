@@ -36,6 +36,7 @@ import { GenerateHelperService } from './generate-helper.service';
 import { VideoStorageService } from './video-storage.service';
 import { ByteplusAssetService, TaskAssets } from './byteplus-asset.service';
 import { acquireVideoSlot, releaseVideoSlot, slotLimit } from './video-slot';
+import { userFacingMessage } from './user-facing-error';
 
 /** ctx ของงานที่ส่งแล้ว — finalize ต้องใช้ แต่ callback ส่งมาแค่ taskId */
 const VIDEO_CTX_TTL_SEC = 24 * 60 * 60;
@@ -703,15 +704,15 @@ export class VideoProcessor extends WorkerHost {
     await this.updateTaskStatus(taskId, {
       status: 'failed',
       failedAt: new Date().toISOString(),
-      error: err.message,
+      error: userFacingMessage(err),
     });
     await this.publishToCore(clientId, 'worker:video-error', {
       taskId,
-      error: err.message,
+      error: userFacingMessage(err),
       timestamp: new Date().toISOString(),
       type: 'video',
       projectId: body.projectId,
-      message: err.message,
+      message: userFacingMessage(err),
     });
     await this.logrepo.updateMany({
       where: { taskId },

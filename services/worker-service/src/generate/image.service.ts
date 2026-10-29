@@ -44,6 +44,7 @@ import { Span } from 'nestjs-otel';
 import { Prisma } from '@prisma/client';
 import { tosConfigs } from 'src/configs';
 import { GenerateHelperService } from './generate-helper.service';
+import { userFacingMessage } from './user-facing-error';
 
 /** sweeper รอบละ 10 นาที — ปิด gallery PENDING ที่เกิน 30 นาทีแล้ว job ไม่อยู่ในคิว (pod ตาย / stalled) */
 const IMAGE_SWEEP_EVERY_MS = 10 * 60 * 1000;
@@ -509,7 +510,7 @@ export class ImageProcessor extends WorkerHost {
       await this.updateTaskStatus(taskId, {
         status: 'failed',
         failedAt: new Date().toISOString(),
-        error: error.message,
+        error: userFacingMessage(error),
       });
       // a retry may still succeed and charge — refunding now would make it free
       const isFinalAttempt =
@@ -535,11 +536,11 @@ export class ImageProcessor extends WorkerHost {
       // ส่ง error event ไปยัง Core Service
       await this.publishToCore(clientId, 'worker:image-error', {
         taskId,
-        error: error.message,
+        error: userFacingMessage(error),
         timestamp: new Date().toISOString(),
         projectId: body.projectId,
         type: 'image',
-        message: error.message,
+        message: userFacingMessage(error),
       });
       await this.saveGallery({
         taskId,

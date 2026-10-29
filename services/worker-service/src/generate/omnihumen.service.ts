@@ -22,6 +22,7 @@ import axios from 'axios';
 import * as https from 'https';
 import { GenerateHelperService } from './generate-helper.service';
 import { VideoStorageService } from './video-storage.service';
+import { userFacingMessage } from './user-facing-error';
 
 // Local Multer file shape — the ambient `Express.Multer.File` namespace isn't
 // resolved in this build context (mirrors video.service.ts).
@@ -515,17 +516,17 @@ export class OmnihumenProcessor extends WorkerHost {
     await this.updateTaskStatus(taskId, {
       status: 'failed',
       failedAt: new Date().toISOString(),
-      error: error.message,
+      error: userFacingMessage(error),
     });
 
     // ส่ง error event ไปยัง Core Service
     await this.publishToCore(clientId, 'worker:omnihumen-error', {
       taskId,
-      error: error.message,
+      error: userFacingMessage(error),
       timestamp: new Date().toISOString(),
       type: 'omnihumen',
       projectId: body.projectId,
-      message: error.message,
+      message: userFacingMessage(error),
     });
 
     // บันทึก error log

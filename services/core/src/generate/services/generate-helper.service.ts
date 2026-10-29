@@ -18,6 +18,18 @@ import {
   Logger,
 } from '@nestjs/common';
 import axios from 'axios';
+import { Prisma } from '@prisma/client';
+
+/**
+ * Credit amounts always bind as numeric. A plain JS number lets Prisma pick int or float per
+ * call, and the per-connection statement cache then rejects the other kind (22P03).
+ */
+/** 'video' → 'Video', for audit entity and error-log service names */
+const typeLabel = (type: string) =>
+  type.charAt(0).toUpperCase() + type.slice(1);
+
+const credit = (amount: number | null) =>
+  amount === null ? null : new Prisma.Decimal(amount);
 interface FieldMapping {
   to: string; // ชื่อ field ใน payload
   from: string | string[]; // ชื่อ field จาก body (1 หรือหลาย field)
@@ -119,7 +131,7 @@ export class GenerateHelperService {
       },
     });
 
-    return { user, projectMember };
+    return { user, projectMember, organizationId: project?.organizationId };
   }
 
   public async logAudit(
@@ -127,13 +139,14 @@ export class GenerateHelperService {
     action: string,
     details: any,
     entityId: string,
+    type: string,
   ) {
     try {
       await this.auditLogRepo.create({
         data: {
           userId,
           action: 'CREATE',
-          entityName: 'GenerateImage',
+          entityName: `Generate${typeLabel(type)}`,
           entityId,
           newValues: details,
         } as any,
@@ -144,6 +157,7 @@ export class GenerateHelperService {
   }
 
   private async logError(
+    type: string,
     userId: string,
     message: string,
     stack: string,
@@ -152,7 +166,7 @@ export class GenerateHelperService {
     try {
       await this.errorLogRepo.create({
         data: {
-          serviceName: 'GenerateImageService',
+          serviceName: `Generate${typeLabel(type)}Service`,
           severity: 'ERROR',
           message,
           stackTrace: stack,
@@ -165,9 +179,9 @@ export class GenerateHelperService {
     }
   }
 
-  public handleGenerationError(error: any, userId: string) {
+  public handleGenerationError(error: any, userId: string, type: string) {
     Logger.error(
-      `Error generate image: ${
+      `Error generate ${type}: ${
         error?.response?.data?.error_description || error.message
       }`,
       error?.response?.data ? JSON.stringify(error.response.data) : error.stack,
@@ -176,11 +190,11 @@ export class GenerateHelperService {
       const { data } = error.response;
       const message = data?.error?.message || '';
 
-      this.logError(userId, message, error.stack, data);
+      this.logError(type, userId, message, error.stack, data);
       throw new ConflictException(message);
     }
 
-    throw new InternalServerErrorException('Failed to generate image');
+    throw new InternalServerErrorException(`Failed to generate ${type}`);
   }
 
   public buildGenerateConfig(body: {
@@ -225,9 +239,13 @@ export class GenerateHelperService {
   ): Promise<boolean> {
     const rows = await this.prisma.$executeRaw`
       UPDATE project_member
-         SET hold_credit_allowance = hold_credit_allowance + ${amount}
+         SET hold_credit_allowance = hold_credit_allowance + ${credit(
+           amount,
+         )}::numeric
        WHERE project_id = ${projectId} AND user_id = ${userId}
-         AND used_credit_allowance + hold_credit_allowance + ${amount}
+         AND used_credit_allowance + hold_credit_allowance + ${credit(
+           amount,
+         )}::numeric
              <= COALESCE(limit_credit_allowance, 0)`;
     return rows > 0;
   }
@@ -240,7 +258,9 @@ export class GenerateHelperService {
   ) {
     await this.prisma.$executeRaw`
       UPDATE project_member
-         SET hold_credit_allowance = GREATEST(hold_credit_allowance - ${holdCreditAllowance}, 0)
+         SET hold_credit_allowance = GREATEST(hold_credit_allowance - ${credit(
+           holdCreditAllowance,
+         )}::numeric, 0)
        WHERE project_id = ${projectId} AND user_id = ${userId}`;
   }
 

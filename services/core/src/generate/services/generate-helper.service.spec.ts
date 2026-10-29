@@ -55,3 +55,19 @@ describe('GenerateHelperService.validateUserAndProject', () => {
     expect(projectMember).toBeNull();
   });
 });
+
+describe('GenerateHelperService project org + error labels', () => {
+  it("returns the project's organization so the caller can check the selected org", async () => {
+    const { organizationId } = await makeService('active').validateUserAndProject(
+      'kc-1',
+      'proj',
+    );
+    expect(organizationId).toBe('org-1');
+  });
+
+  it('names the generation type in the error, not always image', () => {
+    expect(() =>
+      makeService('active').handleGenerationError(new Error('db down'), 'u-1', 'video'),
+    ).toThrow('Failed to generate video');
+  });
+});

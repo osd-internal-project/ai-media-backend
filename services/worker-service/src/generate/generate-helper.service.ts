@@ -24,6 +24,7 @@ import {
   PrismaService,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 /** Member counters after a settle/refund — what callers publish as used credit */
 export interface MemberCredit {
@@ -32,9 +33,63 @@ export interface MemberCredit {
 }
 
 // longer than any job can live (retries + sweeper) so a late path still sees the claim
-const SETTLEMENT_TTL_SECONDS = 7 * 24 * 60 * 60;
-const settlementKey = (taskId: string) => `credit:settled:${taskId}`;
+export const SETTLEMENT_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const settlementKey = (taskId: string) => `credit:settled:${taskId}`;
+export const unsettledKey = (taskId: string) => `credit:unsettled:${taskId}`;
+const CHARGE_ATTEMPTS = 3;
+const CHARGE_RETRY_MS = 500;
 
+/**
+ * Credit amounts always bind as numeric. A plain JS number lets Prisma pick int or float per
+ * call, and the per-connection statement cache then rejects the other kind (22P03).
+ */
+const credit = (amount: number | null) =>
+  amount === null ? null : new Prisma.Decimal(amount);
+
+export interface CreditCharge {
+  taskId: string;
+  userId: string;
+  organizationId: string;
+  projectId: string;
+  trueAmount: number;
+  held: number;
+}
+
+/** One transaction; SET expressions read the pre-update row, so the cycle/on-top split is atomic */
+export const chargeCredit = (
+  prisma: Pick<PrismaClient, '$transaction' | '$executeRaw'>,
+  { userId, organizationId, projectId, trueAmount, held }: CreditCharge,
+) =>
+  prisma.$transaction([
+    prisma.$executeRaw`
+      UPDATE project_member
+         SET hold_credit_allowance = GREATEST(hold_credit_allowance - ${credit(
+           held,
+         )}::numeric, 0),
+             used_credit_allowance = used_credit_allowance + ${credit(
+               trueAmount,
+             )}::numeric
+       WHERE project_id = ${projectId} AND user_id = ${userId}`,
+    prisma.$executeRaw`
+      UPDATE project
+         SET used_credit_allowance = used_credit_allowance + ${credit(
+           trueAmount,
+         )}::numeric
+       WHERE id = ${projectId}`,
+    prisma.$executeRaw`
+      UPDATE credit_balances
+         SET current_cycle_balance = current_cycle_balance
+               - LEAST(GREATEST(current_cycle_balance, 0), ${credit(
+                 trueAmount,
+               )}::numeric),
+             on_top_balance = on_top_balance
+               - (${credit(
+                 trueAmount,
+               )}::numeric - LEAST(GREATEST(current_cycle_balance, 0), ${credit(
+      trueAmount,
+    )}::numeric))
+       WHERE organization_id = ${organizationId}`,
+  ]);
 @Injectable()
 export class GenerateHelperService {
   constructor(
@@ -69,7 +124,9 @@ export class GenerateHelperService {
     );
     if (claimed === 'OK') return true;
     Logger.warn(
-      `[credit][${taskId}] already ${await this.redis.get(key)} — skip ${outcome}`,
+      `[credit][${taskId}] already ${await this.redis.get(
+        key,
+      )} — skip ${outcome}`,
     );
     return false;
   }
@@ -101,12 +158,16 @@ export class GenerateHelperService {
         if (unitType === 'image') {
           await this.prisma.$executeRaw`
             UPDATE project_member
-               SET hold_image_allowance = GREATEST(hold_image_allowance - ${amount}, 0)
+               SET hold_image_allowance = GREATEST(hold_image_allowance - ${credit(
+                 amount,
+               )}::numeric, 0)
              WHERE project_id = ${projectId} AND user_id = ${userId}`;
         } else {
           await this.prisma.$executeRaw`
             UPDATE project_member
-               SET hold_credit_allowance = GREATEST(hold_credit_allowance - ${amount}, 0)
+               SET hold_credit_allowance = GREATEST(hold_credit_allowance - ${credit(
+                 amount,
+               )}::numeric, 0)
              WHERE project_id = ${projectId} AND user_id = ${userId}`;
         }
       } catch (err) {
@@ -119,9 +180,9 @@ export class GenerateHelperService {
   }
 
   /**
-   * Charge `trueAmount` to member, project and org and release the hold
-   * (`calculateAmount` = what core held, defaults to `trueAmount`) — one transaction,
-   * at most once per task. The org pays from the cycle balance first, then on-top.
+   * Charge `trueAmount` and release the hold (`calculateAmount` = what core held) at most once
+   * per task. Never throws: the output already exists, so after retries the charge is parked
+   * in `credit:unsettled:<taskId>` (hold kept) for scripts/settle-unsettled.ts.
    */
   async updateUsedCreditSuccess(
     taskId: string,
@@ -133,36 +194,57 @@ export class GenerateHelperService {
     calculateAmount?: number,
   ): Promise<MemberCredit> {
     if (await this.claimSettlement(taskId, 'charged')) {
-      const held = calculateAmount || trueAmount;
-      try {
-        // SET expressions read the pre-update row, so the cycle/on-top split is atomic
-        await this.prisma.$transaction([
-          this.prisma.$executeRaw`
-            UPDATE project_member
-               SET hold_credit_allowance = GREATEST(hold_credit_allowance - ${held}, 0),
-                   used_credit_allowance = used_credit_allowance + ${trueAmount}
-             WHERE project_id = ${projectId} AND user_id = ${userId}`,
-          this.prisma.$executeRaw`
-            UPDATE project
-               SET used_credit_allowance = used_credit_allowance + ${trueAmount}
-             WHERE id = ${projectId}`,
-          this.prisma.$executeRaw`
-            UPDATE credit_balances
-               SET current_cycle_balance = current_cycle_balance
-                     - LEAST(GREATEST(current_cycle_balance, 0), ${trueAmount}),
-                   on_top_balance = on_top_balance
-                     - (${trueAmount} - LEAST(GREATEST(current_cycle_balance, 0), ${trueAmount}))
-             WHERE organization_id = ${organizationId}`,
-        ]);
-      } catch (err) {
-        await this.redis.del(settlementKey(taskId));
-        Logger.error(`[credit][${taskId}] charge ${trueAmount} failed: ${err}`);
-        throw err;
+      const charge: CreditCharge = {
+        taskId,
+        userId,
+        organizationId,
+        projectId,
+        trueAmount,
+        held: calculateAmount || trueAmount,
+      };
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= CHARGE_ATTEMPTS; attempt++) {
+        try {
+          await chargeCredit(this.prisma, charge);
+          return this.memberCredit(userId, projectId);
+        } catch (err) {
+          lastError = err;
+          Logger.error(
+            `[credit][${taskId}] charge ${trueAmount} attempt ${attempt} failed: ${err}`,
+          );
+          if (attempt < CHARGE_ATTEMPTS)
+            await new Promise((r) => setTimeout(r, CHARGE_RETRY_MS * attempt));
+        }
       }
+      await this.parkUnsettled(charge, lastError);
     }
     return this.memberCredit(userId, projectId);
   }
 
+  private async parkUnsettled(charge: CreditCharge, error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    try {
+      // 'unsettled' keeps refund paths from releasing a hold that is still owed
+      await this.redis.set(
+        settlementKey(charge.taskId),
+        'unsettled',
+        'EX',
+        SETTLEMENT_TTL_SECONDS,
+      );
+      await this.redis.set(unsettledKey(charge.taskId), JSON.stringify(charge));
+    } catch (redisErr) {
+      Logger.error(
+        `[credit][${charge.taskId}] could not park unsettled charge: ${redisErr}`,
+      );
+    }
+    await this.logError(
+      'CreditSettlement',
+      charge.userId,
+      `credit unsettled: ${err.message}`,
+      err.stack ?? '',
+      charge,
+    );
+  }
 
   // async getUsedCredit(
   //   token: number,

@@ -21,10 +21,15 @@ const setup = (
     available?: { project: number; organization: number };
     reserved?: boolean;
     failAt?: 'gallery' | 'afterQueue';
+    projectOrg?: string;
   } = {},
 ) => {
   const helper = {
-    validateUserAndProject: jest.fn(async () => ({ user: { userId: 'u1' }, projectMember: member })),
+    validateUserAndProject: jest.fn(async () => ({
+      user: { userId: 'u1' },
+      projectMember: member,
+      organizationId: opts.projectOrg ?? 'org',
+    })),
     logAudit: jest.fn(),
     getUsedCredit: jest.fn(async () => ({ token: 0, credit: 20 })),
     getAvailableCredit: jest.fn(async () => opts.available ?? { project: 1000, organization: 1000 }),
@@ -90,6 +95,19 @@ describe('generation credit check + hold', () => {
     const res = await service.createGenerationTask(body, 'c1');
 
     expect(res).toEqual({ status: 400, data: message });
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('refuses a project from another org than the one selected, before holding credit', async () => {
+    const { service, helper, queue } = setup({ projectOrg: 'other-org' });
+
+    const res = await service.createGenerationTask(body, 'c1');
+
+    expect(res).toEqual({
+      status: 400,
+      data: 'Project does not belong to the selected organization, please reload',
+    });
+    expect(helper.reserveHold).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();
   });
 

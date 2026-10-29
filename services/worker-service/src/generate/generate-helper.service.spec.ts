@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { GenerateHelperService } from './generate-helper.service';
 
 /** Redis stub with the SET … NX semantics the settlement claim relies on */
@@ -5,8 +6,8 @@ const fakeRedis = () => {
   const store = new Map<string, string>();
   return {
     store,
-    set: jest.fn(async (key: string, value: string, ..._args: unknown[]) => {
-      if (store.has(key)) return null;
+    set: jest.fn(async (key: string, value: string, ...args: unknown[]) => {
+      if (args.includes('NX') && store.has(key)) return null;
       store.set(key, value);
       return 'OK';
     }),
@@ -15,7 +16,8 @@ const fakeRedis = () => {
   };
 };
 
-const setup = (opts: { failTransaction?: boolean } = {}) => {
+const setup = (opts: { failTransaction?: boolean; failTimes?: number } = {}) => {
+  let failuresLeft = opts.failTimes ?? 0;
   const redis = fakeRedis();
   // each tagged-template call is recorded as its SQL text (whitespace collapsed) + values
   const statements: { sql: string; values: unknown[] }[] = [];
@@ -25,7 +27,7 @@ const setup = (opts: { failTransaction?: boolean } = {}) => {
       return 1;
     }),
     $transaction: jest.fn(async (ops: Promise<unknown>[]) => {
-      if (opts.failTransaction) throw new Error('db down');
+      if (opts.failTransaction || failuresLeft-- > 0) throw new Error('db down');
       return Promise.all(ops);
     }),
   };
@@ -62,7 +64,23 @@ describe('GenerateHelperService credit settlement', () => {
       'credit_balances',
     ]);
     // releases what core held (40), charges the real cost (30)
-    expect(statements[0].values).toEqual([40, 30, 'proj', 'u1']);
+    expect(statements[0].values).toEqual([new Prisma.Decimal(40), new Prisma.Decimal(30), 'proj', 'u1']);
+  });
+
+  it('binds integer and fractional credit with one numeric type so a cached statement fits both', async () => {
+    const { service, statements } = setup();
+
+    await service.updateUsedCreditSuccess('t4', 'u1', 'org', 'proj', 'credit', 1807, 1807);
+    await service.updateUsedCreditSuccess('t5', 'u1', 'org', 'proj', 'credit', 817.625, 812);
+
+    const amounts = statements.flatMap((s) => s.values.filter((v) => typeof v !== 'string'));
+    expect(amounts.every((v) => Prisma.Decimal.isDecimal(v))).toBe(true);
+    expect(amounts.map(String)).toContain('817.625');
+    // every credit placeholder carries the cast, so the server never infers the type from a value
+    for (const s of statements) {
+      const decimals = s.values.filter((v) => Prisma.Decimal.isDecimal(v)).length;
+      expect(s.sql.split('?::numeric').length - 1).toBe(decimals);
+    }
   });
 
   it('a retry or a fail path after success does not charge or refund again', async () => {
@@ -83,19 +101,38 @@ describe('GenerateHelperService credit settlement', () => {
     await service.updateUsedCreditFail('t2', 'u1', 'org', 'proj', 'credit', 12);
 
     expect(statements).toHaveLength(1);
-    expect(statements[0].sql).toContain('GREATEST(hold_credit_allowance - ?, 0)');
+    expect(statements[0].sql).toContain('GREATEST(hold_credit_allowance - ?::numeric, 0)');
   });
 
-  it('a failed charge releases the claim so the task can still be refunded', async () => {
-    const { service, redis } = setup({ failTransaction: true });
+  it('a charge that keeps failing parks the debt and keeps the hold instead of failing the task', async () => {
+    const { service, redis, statements } = setup({ failTransaction: true });
 
-    await expect(
-      service.updateUsedCreditSuccess('t3', 'u1', 'org', 'proj', 'credit', 30),
-    ).rejects.toThrow('db down');
-    expect(redis.store.has('credit:settled:t3')).toBe(false);
+    const result = await service.updateUsedCreditSuccess('t3', 'u1', 'org', 'proj', 'credit', 30, 40);
 
-    await service.updateUsedCreditFail('t3', 'u1', 'org', 'proj', 'credit', 30);
-    expect(redis.store.get('credit:settled:t3')).toBe('refunded');
+    expect(result).toEqual({ usedCreditAllowance: 30, holdCreditAllowance: 0 });
+    expect(redis.store.get('credit:settled:t3')).toBe('unsettled');
+    expect(JSON.parse(redis.store.get('credit:unsettled:t3') ?? '{}')).toEqual({
+      taskId: 't3',
+      userId: 'u1',
+      organizationId: 'org',
+      projectId: 'proj',
+      trueAmount: 30,
+      held: 40,
+    });
+
+    const before = statements.length;
+    await service.updateUsedCreditFail('t3', 'u1', 'org', 'proj', 'credit', 40);
+    expect(statements).toHaveLength(before);
+  });
+
+  it('a charge that fails once is retried and applied once', async () => {
+    const { service, prisma, redis } = setup({ failTimes: 1 });
+
+    await service.updateUsedCreditSuccess('t6', 'u1', 'org', 'proj', 'credit', 30);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(redis.store.get('credit:settled:t6')).toBe('charged');
+    expect(redis.store.has('credit:unsettled:t6')).toBe(false);
   });
 });
 

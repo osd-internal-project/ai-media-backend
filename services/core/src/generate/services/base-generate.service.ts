@@ -285,19 +285,28 @@ export abstract class BaseGenerateService {
     }/${this.getCreditCacheKeyPrefix()}_${body.userId}`;
 
     try {
-      const { user, projectMember } =
+      const { user, projectMember, organizationId } =
         await this.generateHelperService.validateUserAndProject(
           body.userId,
           body.projectId,
         );
 
       if (!projectMember) return { status: 400, data: 'Team member not found' };
+      // body.organizationId picks the gateway key and the org that pays; a tab left on
+      // another org must not bill it for this project
+      if (organizationId && organizationId !== body.organizationId) {
+        return {
+          status: 400,
+          data: 'Project does not belong to the selected organization, please reload',
+        };
+      }
       if (user)
         await this.generateHelperService.logAudit(
           user.userId,
           'CREATE',
           body,
           taskId,
+          this.modelType,
         );
 
       const modelDetail = await this.masterModelTypeRepo.findOne({
@@ -436,7 +445,11 @@ export abstract class BaseGenerateService {
           body.projectId,
         );
       }
-      this.generateHelperService.handleGenerationError(error, body.userId);
+      this.generateHelperService.handleGenerationError(
+        error,
+        body.userId,
+        this.modelType,
+      );
       throw error;
     }
   }
