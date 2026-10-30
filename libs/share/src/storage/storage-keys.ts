@@ -99,3 +99,18 @@ export function buildOutputKey(
 ): string {
   return `${ROOT_DIR}/${organizationId}/${projectId}/${typeGenerate}-generate/${objectName}`;
 }
+
+/**
+ * สร้าง key ของสำเนา preview ที่ส่งไป Community — แยกจากไฟล์ต้นฉบับ ลบงานใน gallery แล้วยังอยู่
+ *
+ * @param ext นามสกุลไฟล์ รวมจุด เช่น `.mp4`
+ * @returns organize/{org}/community-publication/{publicationId}/{name}{ext}
+ */
+export function buildCommunityPreviewKey(
+  organizationId: string,
+  publicationId: string,
+  name: string,
+  ext = '',
+): string {
+  return `${ROOT_DIR}/${organizationId}/community-publication/${publicationId}/${name}${ext}`;
+}

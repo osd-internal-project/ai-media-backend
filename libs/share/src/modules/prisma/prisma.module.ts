@@ -60,6 +60,7 @@ import {
   ChatModelConfigRepository,
   AnnouncementRepository,
   CommunityPublicationRepository,
+  IntegrationApiKeyRepository,
 } from 'src/repositories';
 
 const services = [
@@ -123,6 +124,7 @@ const services = [
   ChatModelConfigRepository,
   AnnouncementRepository,
   CommunityPublicationRepository,
+  IntegrationApiKeyRepository,
 ];
 
 @Module({

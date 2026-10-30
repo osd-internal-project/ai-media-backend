@@ -55,5 +55,6 @@ export * from './photoEventTemplate.repository';
 export * from './photoEventPrintTemplate.repository';
 export * from './announcement.repository';
 export * from './communityPublication.repository';
+export * from './integrationApiKey.repository';
 export * from './photoEventPhoto.repository';
 export * from './photoEventGeneration.repository';

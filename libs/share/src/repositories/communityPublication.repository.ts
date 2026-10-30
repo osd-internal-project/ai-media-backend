@@ -51,6 +51,14 @@ export class CommunityPublicationRepository {
     return prisma.communityPublication.updateMany(data);
   }
 
+  async upsert(
+    data: Prisma.CommunityPublicationUpsertArgs,
+    option?: { prisma?: TQueryClient },
+  ) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.communityPublication.upsert(data);
+  }
+
   async delete(
     condition: Prisma.CommunityPublicationDeleteArgs,
     option?: { prisma?: TQueryClient },

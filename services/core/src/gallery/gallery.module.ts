@@ -8,5 +8,6 @@ import { PrismaModule, TosModule, StorageModule } from '@ai-media/share';
   imports: [PrismaModule, TosModule, StorageModule],
   controllers: [GalleryController],
   providers: [GalleryService, OrgGalleryService],
+  exports: [OrgGalleryService],
 })
 export class GalleryModule {}

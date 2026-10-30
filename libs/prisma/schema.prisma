@@ -38,6 +38,8 @@ model users {
   lastOn               DateTime?            @map("last_on")
   maxToken             Int?                 @default(0) @map("max_token")
   maxImages            Int?                 @default(0) @map("max_images")
+  /// ครั้งแรกที่ Community เรียก POST /community/link ด้วย token ของ user นี้
+  communityLinkedAt    DateTime?            @map("community_linked_at")
   apiKeys              String?              @map("api_keys") @db.Text
   token                String?              @db.VarChar(50)
   createdAt            DateTime             @default(now()) @map("created_at")
@@ -454,6 +456,22 @@ model CommunityPublication {
   @@index([organizationId, status])
   @@index([userId])
   @@map("community_publication")
+}
+
+/// key ที่ระบบภายนอก (เช่น Community) ใช้เรียก API ขาเข้า — เก็บแค่ sha256 ตัว key จริงแสดงครั้งเดียวตอนสร้าง
+model IntegrationApiKey {
+  id              String    @id @default(uuid())
+  name            String    @db.VarChar(100)
+  /// ต้นของ key ไว้ให้ admin จำได้ว่าเป็นตัวไหน
+  prefix          String    @db.VarChar(20)
+  keyHash         String    @unique @map("key_hash") @db.VarChar(64)
+  scopes          String[]  @default([])
+  createdByUserId String    @map("created_by_user_id") @db.VarChar(50)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  lastUsedAt      DateTime? @map("last_used_at")
+  revokedAt       DateTime? @map("revoked_at")
+
+  @@map("integration_api_key")
 }
 
 model MasterModelOption {

@@ -5,12 +5,19 @@ import { ByteplusWebhookController } from './byteplus-webhook/byteplus-webhook.c
 import { PhotoEventController } from './photo-event/photo-event.controller';
 import { PublicPhotoEventController } from './photo-event/public-photo-event.controller';
 import { PublicCommunityController } from './public-community/public-community.controller';
+import {
+  CommunityPublicationController,
+  CommunityWebhookController,
+  PublicCommunityPublicationController,
+} from './community-publication/community-publication.controller';
 import { WebsocketController } from './websocket/websocket.controller';
 
 /** route ที่ต้องเปิดเมื่อ AUTH_MODE=enforce — ถ้าใครลบ @Public() ออก webhook / หน้า public จะพังทันที */
 describe('core @Public routes', () => {
   it.each([
     ['PublicCommunityController', PublicCommunityController],
+    ['PublicCommunityPublicationController', PublicCommunityPublicationController],
+    ['CommunityWebhookController (api key)', CommunityWebhookController],
     ['PublicPhotoEventController', PublicPhotoEventController],
     ['PublicAnnouncementController', PublicAnnouncementController],
     ['ByteplusWebhookController', ByteplusWebhookController],
@@ -25,6 +32,9 @@ describe('core @Public routes', () => {
     ).toBeUndefined();
     expect(
       Reflect.getMetadata(IS_PUBLIC_KEY, AnnouncementController),
+    ).toBeUndefined();
+    expect(
+      Reflect.getMetadata(IS_PUBLIC_KEY, CommunityPublicationController),
     ).toBeUndefined();
   });
 });

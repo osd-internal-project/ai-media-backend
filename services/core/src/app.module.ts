@@ -12,6 +12,7 @@ import { GalleryModule } from './gallery/gallery.module';
 import { ActivityShareModule } from './activity-share/activity-share.module';
 import { CommunityPostModule } from './community-post/community-post.module';
 import { PublicCommunityModule } from './public-community/public-community.module';
+import { CommunityPublicationModule } from './community-publication/community-publication.module';
 import { ProjectMemberModule } from './project-member/project-member.module';
 import { MasteradataConfigApiModule } from './masteradata-config-api/masteradata-config-api.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -63,6 +64,7 @@ import { OpenTelemetryModule } from 'nestjs-otel';
     ActivityShareModule,
     CommunityPostModule,
     PublicCommunityModule,
+    CommunityPublicationModule,
     ProjectMemberModule,
     MasteradataConfigApiModule,
     MasterModelTypeModule,

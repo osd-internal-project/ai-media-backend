@@ -26,7 +26,7 @@ const galleryInclude = Prisma.validator<Prisma.GalleryInclude>()({
 
 type OrgGalleryRow = Prisma.GalleryGetPayload<{ include: typeof galleryInclude }>;
 
-const modelNameOf = (config: Prisma.JsonValue | null): string | null => {
+export const modelNameOf = (config: Prisma.JsonValue | null): string | null => {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return null;
   const name = config.modelName;
   return typeof name === 'string' ? name : null;
@@ -89,14 +89,36 @@ export class OrgGalleryService {
       this.galleryRepo.count({ where }),
     ]);
 
-    const allowedModels = await this.publishableModels(rows);
+    const blocks = await this.publishBlocks(rows, userId);
     const data = await Promise.all(
-      rows.map((row) => this.toItem(organizationId, userId, row, allowedModels)),
+      rows.map((row) => this.toItem(organizationId, row, blocks.get(row.id) ?? null)),
     );
     return { data, total, page, pageSize };
   }
 
-  private async publishableModels(rows: OrgGalleryRow[]): Promise<Set<string>> {
+  /** เหตุที่ userId เผยแพร่แต่ละแถวไม่ได้ — กฎเดียวกับปุ่มในหน้า Gallery และ POST /community/publications */
+  async publishBlocks(
+    rows: Pick<OrgGalleryRow, 'id' | 'userId' | 'generateConfig'>[],
+    userId: string,
+  ): Promise<Map<string, PublishBlock>> {
+    const allowedModels = await this.publishableModels(rows);
+    return new Map(
+      rows.map((row) => {
+        const modelName = modelNameOf(row.generateConfig);
+        const block: PublishBlock =
+          row.userId !== userId
+            ? 'NOT_OWNER'
+            : !modelName || !allowedModels.has(modelName)
+              ? 'MODEL_NOT_ALLOWED'
+              : null;
+        return [row.id, block];
+      }),
+    );
+  }
+
+  private async publishableModels(
+    rows: Pick<OrgGalleryRow, 'generateConfig'>[],
+  ): Promise<Set<string>> {
     const names = [
       ...new Set(
         rows
@@ -114,17 +136,9 @@ export class OrgGalleryService {
 
   private async toItem(
     organizationId: string,
-    userId: string,
     row: OrgGalleryRow,
-    allowedModels: Set<string>,
+    publishBlock: PublishBlock,
   ) {
-    const modelName = modelNameOf(row.generateConfig);
-    const publishBlock: PublishBlock =
-      row.userId !== userId
-        ? 'NOT_OWNER'
-        : !modelName || !allowedModels.has(modelName)
-          ? 'MODEL_NOT_ALLOWED'
-          : null;
     const [first] = resolveGalleryResultUrls(row);
     const [mediaUrl, thumbnailUrl] = await Promise.all([
       this.storageUrl.resolveOutputUrl(organizationId, row.projectId, row.typeGenerate, first),
@@ -137,7 +151,7 @@ export class OrgGalleryService {
       prompt: row.prompt,
       createdAt: row.createdAt,
       creator: row.users,
-      modelName,
+      modelName: modelNameOf(row.generateConfig),
       durationSec: durationOf(row.generateConfig),
       mediaUrl,
       thumbnailUrl,
