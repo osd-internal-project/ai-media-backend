@@ -157,6 +157,7 @@ model Gallery {
   generateAudio    Boolean? @default(false) @map("generate_audio")
   tokenUsed        Float?   @default(0) @map("token_used")
   ImageUsed        Int?     @default(0) @map("image_used")
+  publication      CommunityPublication?
 
   @@map("gallery")
 
@@ -412,8 +413,47 @@ model MasterModelType {
   isActive        Boolean  @default(false) @map("is_active")
   provider        String?  @map("provider") @db.VarChar(50)
   iconUrl         String?  @map("icon_url") @db.Text
+  /// อนุญาตให้นำผลงานของ model นี้ไปเผยแพร่ที่ Community — ปิดไว้ก่อนจนกว่า admin ตรวจ license
+  allowPublish    Boolean  @default(false) @map("allow_publish")
 
   @@map("master_model_type")
+}
+
+enum CommunityPublicationStatus {
+  PENDING
+  PUBLISHED
+  REJECTED
+  REMOVED
+  FAILED
+}
+
+enum CommunityVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+/// ผลงานจาก Gallery ที่ส่งไป Community — 1 แถวต่อ 1 gallery, เผยแพร่ซ้ำ = update แถวเดิม
+model CommunityPublication {
+  id              String                     @id @default(uuid())
+  /// SetNull: ลบงานใน gallery แล้ว preview ที่ copy ไว้ยังอยู่บน community
+  galleryId       String?                    @unique @map("gallery_id")
+  gallery         Gallery?                   @relation(fields: [galleryId], references: [id], onDelete: SetNull)
+  organizationId  String                     @map("organization_id") @db.VarChar(50)
+  userId          String                     @map("user_id") @db.VarChar(50)
+  status          CommunityPublicationStatus @default(PENDING)
+  visibility      CommunityVisibility        @default(PUBLIC)
+  includePrompt   Boolean                    @default(false) @map("include_prompt")
+  /// [{ key, thumbnailKey, typeGenerate, order }] — object key ของสำเนา public/ ไม่ใช่ไฟล์ต้นฉบับ
+  previewItems    Json                       @default("[]") @map("preview_items") @db.JsonB
+  communityItemId String?                    @map("community_item_id")
+  error           String?                    @db.Text
+  createdAt       DateTime                   @default(now()) @map("created_at")
+  updatedAt       DateTime                   @updatedAt @map("updated_at")
+  publishedAt     DateTime?                  @map("published_at")
+
+  @@index([organizationId, status])
+  @@index([userId])
+  @@map("community_publication")
 }
 
 model MasterModelOption {

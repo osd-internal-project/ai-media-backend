@@ -8,14 +8,21 @@ import {
   Delete,
   Query,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { GalleryService } from './gallery.service';
+import { OrgGalleryService } from './org-gallery.service';
+import { OrgGalleryQueryDto } from './dto/org-gallery-query.dto';
+import { AuthUser, CurrentUser } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { Response } from 'express';
 
 @Controller('gallery')
 export class GalleryController {
-  constructor(private readonly galleryService: GalleryService) {}
+  constructor(
+    private readonly galleryService: GalleryService,
+    private readonly orgGalleryService: OrgGalleryService,
+  ) {}
 
   @Post()
   create(@Body('body') createGalleryDto: Prisma.GalleryCreateInput) {
@@ -39,6 +46,17 @@ export class GalleryController {
     // Redirect straight to the presigned TOS URL — the file downloads from
     // object storage, so no media bytes are proxied through this pod.
     res.redirect(302, url);
+  }
+
+  // ต้องอยู่ก่อน ':projectId' ไม่งั้น 'org' ถูกจับเป็น projectId
+  @Get('org/:organizationId')
+  findByOrg(
+    @Param('organizationId') organizationId: string,
+    @Query() query: OrgGalleryQueryDto,
+    @CurrentUser() authUser: AuthUser | undefined,
+  ) {
+    if (!authUser) throw new UnauthorizedException();
+    return this.orgGalleryService.findByOrg(organizationId, authUser.userId, query);
   }
 
   @Get(':projectId')

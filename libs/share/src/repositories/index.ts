@@ -54,5 +54,6 @@ export * from './chatModelConfig.repository';
 export * from './photoEventTemplate.repository';
 export * from './photoEventPrintTemplate.repository';
 export * from './announcement.repository';
+export * from './communityPublication.repository';
 export * from './photoEventPhoto.repository';
 export * from './photoEventGeneration.repository';
