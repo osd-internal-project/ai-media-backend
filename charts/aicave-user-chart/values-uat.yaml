@@ -19,7 +19,7 @@ ingress:
 
 env:
   authMode: "report"
-  keycloakAllowedClients: "ai-cave-prod"
+  keycloakAllowedClients: "aicave-uat"
   nodeOptions: "--max-old-space-size=288"
   nodeEnv: "staging"
   port: "4000"
@@ -31,7 +31,7 @@ env:
   frontendUrl: "https://aicave-uat.osd.co.th"
   keycloakUrl: "https://auth-events-uat.osd.co.th"
   keycloakRealm: "eportal"
-  keycloakClientId: "ai-cave-prod"
+  keycloakClientId: "aicave-uat"
   keycloakRedirectUri: "https://aicave-uat.osd.co.th/callback"
   keycloakIdpMicrosoftAlias: "microsoft"
   llmGatewayUrl: "https://llmgateway.osd.co.th"

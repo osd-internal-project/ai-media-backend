@@ -21,7 +21,7 @@ ingress:
 
 env:
   authMode: "report"
-  keycloakAllowedClients: "ai-cave-prod"
+  keycloakAllowedClients: "aicave-uat"
   keycloakUrl: "https://auth-events-uat.osd.co.th"
   keycloakRealm: "eportal"
   nodeOptions: "--max-old-space-size=288"
