@@ -29,10 +29,10 @@ env:
   emailApiUrl: "http://aicave-email-api-service.aicave.svc.cluster.local:8974"
   coreApiUrl: "http://aicave-core-service.aicave.svc.cluster.local:8971/api"
   frontendUrl: "https://aicave-uat.osd.co.th"
-  keycloakUrl: "https://auth-events.osd.co.th"
+  keycloakUrl: "https://auth-events-uat.osd.co.th"
   keycloakRealm: "eportal"
   keycloakClientId: "ai-cave-prod"
-  keycloakRedirectUri: "https://www.aicave.ai/callback"
+  keycloakRedirectUri: "https://aicave-uat.osd.co.th/callback"
   keycloakIdpMicrosoftAlias: "microsoft"
   llmGatewayUrl: "https://llmgateway.osd.co.th"
   llmProjectId: "team-mrcx7er7"
@@ -51,3 +51,10 @@ resources:
   limits:
     memory: "384Mi"
     cpu: "750m"
+
+# Resolve the UAT Keycloak host through the in-cluster Traefik (ClusterIP) so pods do
+# not depend on public DNS / WAF for this name.
+hostAliases:
+  - ip: "100.96.0.228"
+    hostnames:
+      - "auth-events-uat.osd.co.th"

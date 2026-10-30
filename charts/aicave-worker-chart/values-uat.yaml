@@ -22,7 +22,7 @@ ingress:
 env:
   authMode: "report"
   keycloakAllowedClients: "ai-cave-prod"
-  keycloakUrl: "https://auth-events.osd.co.th"
+  keycloakUrl: "https://auth-events-uat.osd.co.th"
   keycloakRealm: "eportal"
   nodeOptions: "--max-old-space-size=288"
   nodeEnv: "staging"
@@ -50,3 +50,10 @@ resources:
   limits:
     memory: "384Mi"
     cpu: "750m"
+
+# Resolve the UAT Keycloak host through the in-cluster Traefik (ClusterIP) so pods do
+# not depend on public DNS / WAF for this name.
+hostAliases:
+  - ip: "100.96.0.228"
+    hostnames:
+      - "auth-events-uat.osd.co.th"

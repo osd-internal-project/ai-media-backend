@@ -19,6 +19,10 @@ spec:
     spec:
       imagePullSecrets:
         - name: {{ .Values.imagePullSecretName }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: {{ .Values.appName }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -97,6 +101,13 @@ spec:
           value: {{ .Values.env.redisHost | quote }}
         - name: REDIS_PORT
           value: {{ .Values.env.redisPort | quote }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis
+              key: redis-password
+              # no secret = Redis without a password (local/dev)
+              optional: true
         - name: EMAIL_API_URL
           value: {{ .Values.env.emailApiUrl | quote }}
         - name: RECEIVE_EMAIL

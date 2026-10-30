@@ -39,6 +39,13 @@ spec:
           value: {{ .Values.env.redisHost | quote }}
         - name: REDIS_PORT
           value: {{ .Values.env.redisPort | quote }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis
+              key: redis-password
+              # no secret = Redis without a password (local/dev)
+              optional: true
         - name: SMTP_HOST
           value: {{ .Values.env.smtpHost | quote }}
         - name: SMTP_PORT
