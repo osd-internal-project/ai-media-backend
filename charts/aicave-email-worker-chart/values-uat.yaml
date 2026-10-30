@@ -11,7 +11,7 @@ env:
   nodeOptions: "--max-old-space-size=288"
   nodeEnv: "staging"
   port: "5001"
-  redisHost: "my-redis-master.redis.svc.cluster.local"
+  redisHost: "my-redis-master"
   redisPort: "6379"
   smtpHost: "smtp.office365.com"
   smtpPort: "587"
@@ -29,3 +29,7 @@ resources:
   limits:
     memory: "384Mi"
     cpu: "750m"
+
+# No metrics-server on the UAT cluster: an HPA cannot read metrics and would force minReplicas.
+autoscaling:
+  enabled: false

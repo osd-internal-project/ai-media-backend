@@ -12,7 +12,7 @@ env:
   nodeOptions: "--max-old-space-size=288"
   nodeEnv: "staging"
   port: "5000"
-  redisHost: "my-redis-master.redis.svc.cluster.local"
+  redisHost: "my-redis-master"
   redisPort: "6379"
   # SMTP relay (Office 365 direct-send, unauthenticated). Reachable directly from the cluster.
   emailHost: "103.197.245.8"
@@ -27,3 +27,7 @@ resources:
   limits:
     memory: "384Mi"
     cpu: "750m"
+
+# No metrics-server on the UAT cluster: an HPA cannot read metrics and would force minReplicas.
+autoscaling:
+  enabled: false
