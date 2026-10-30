@@ -1,21 +1,21 @@
 # UAT Environment Values
 # Override specific values for UAT environment
 
-namespace: aicave-uat
-replicaCount: 2
+namespace: aicave
+replicaCount: 1
 
 image:
   tag: "1.0.4"
 
 ingress:
   hosts:
-    - host: uat.aicave.ai
+    - host: aicave-uat.osd.co.th
       paths:
-        - path: /public/api/v1/user(/|$)(.*)
-          pathType: ImplementationSpecific
+        - path: /public/api/v1/user
+          pathType: Prefix
   tls:
     enabled: true
-    secretName: aicave-console-tls-uat
+    secretName: aicave-tls
 
 env:
   authMode: "report"
@@ -25,11 +25,11 @@ env:
   port: "4000"
   nodeTlsRejectUnauthorized: "0"
   pathMountdirUpload: "./uploads"
-  pathDomain: "http://uat.aicave.ai"
-  emailApiUrl: "http://aicave-email-api-service.aicave-uat.svc.cluster.local:8974"
-  coreApiUrl: "http://aicave-core-service.aicave-uat.svc.cluster.local:8971/api"
-  frontendUrl: "https://uat.aicave.ai"
-  keycloakUrl: "https://id24-uat.aicave.ai"
+  pathDomain: "http://aicave-uat.osd.co.th"
+  emailApiUrl: "http://aicave-email-api-service.aicave.svc.cluster.local:8974"
+  coreApiUrl: "http://aicave-core-service.aicave.svc.cluster.local:8971/api"
+  frontendUrl: "https://aicave-uat.osd.co.th"
+  keycloakUrl: "https://auth-events.osd.co.th"
   keycloakRealm: "eportal"
   keycloakClientId: "ai-cave-prod"
   keycloakRedirectUri: "https://www.aicave.ai/callback"

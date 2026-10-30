@@ -1,42 +1,42 @@
 # UAT Environment Values
 # Override specific values for UAT environment
 
-namespace: aicave-uat
-replicaCount: 2
+namespace: aicave
+replicaCount: 1
 
 image:
   tag: "1.0.1"
 
 ingress:
   hosts:
-    - host: uat.aicave.ai
+    - host: aicave-uat.osd.co.th
       paths:
-        - path: /public/api/v1/worker(/|$)(.*)
-          pathType: ImplementationSpecific
+        - path: /public/api/v1/worker
+          pathType: Prefix
   tls:
     enabled: true
-    secretName: aicave-console-tls-uat
+    secretName: aicave-tls
   websocketBackendService: aicave-core-service
   websocketBackendPort: 8971
 
 env:
   authMode: "report"
   keycloakAllowedClients: "ai-cave-prod"
-  keycloakUrl: "https://id24-uat.aicave.ai"
+  keycloakUrl: "https://auth-events.osd.co.th"
   keycloakRealm: "eportal"
   nodeOptions: "--max-old-space-size=288"
   nodeEnv: "staging"
   port: "4000"
-  redisHost: "my-redis-master.aicave-uat.svc.cluster.local"
+  redisHost: "my-redis-master.aicave.svc.cluster.local"
   redisPort: "6379"
-  storagePath: "https://uat.aicave.ai/public/api/v1/s3"
+  storagePath: "https://aicave-uat.osd.co.th/public/api/v1/s3"
   tosBucket: "ai-cave"
   tosRegion: "ap-southeast-3"
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
   # TOS เรียก upload callback ที่ <workerPublicUrl>/upload/callback (ingress rewrite → /api)
-  workerPublicUrl: "https://uat.aicave.ai/public/api/v1/worker"
+  workerPublicUrl: "https://aicave-uat.osd.co.th/public/api/v1/worker"
   # Ark เรียก <byteplusCallbackBaseUrl>/webhooks/byteplus/video/:taskId ที่ core (ingress rewrite → /api)
-  byteplusCallbackBaseUrl: "https://uat.aicave.ai/public/api/v1/core"
+  byteplusCallbackBaseUrl: "https://aicave-uat.osd.co.th/public/api/v1/core"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL

@@ -1,38 +1,38 @@
 # UAT Environment Values
 # Override specific values for UAT environment
 
-namespace: aicave-uat
-replicaCount: 2
+namespace: aicave
+replicaCount: 1
 
 image:
   tag: "1.0.25"
 
 ingress:
   hosts:
-    - host: uat.aicave.ai
+    - host: aicave-uat.osd.co.th
       paths:
-        - path: /public/api/v1/core(/|$)(.*)
-          pathType: ImplementationSpecific
+        - path: /public/api/v1/core
+          pathType: Prefix
   tls:
     enabled: true
-    secretName: aicave-console-tls-uat
+    secretName: aicave-tls
 
 env:
   authMode: "report"
   keycloakAllowedClients: "ai-cave-prod"
-  keycloakUrl: "https://id24-uat.aicave.ai"
+  keycloakUrl: "https://auth-events.osd.co.th"
   keycloakRealm: "eportal"
   nodeOptions: "--max-old-space-size=288"
   nodeEnv: "staging"
   port: "4002"
   pathMountdirUpload: "./uploads"
-  storagePath: "https://uat.aicave.ai/public/api/v1/s3"
+  storagePath: "https://aicave-uat.osd.co.th/public/api/v1/s3"
   tosBucket: "ai-cave"
   tosRegion: "ap-southeast-3"
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
   redisHost: "my-redis-master"
   redisPort: "6379"
-  emailApiUrl: "http://aicave-email-api-service.aicave-uat.svc.cluster.local:8974"
+  emailApiUrl: "http://aicave-email-api-service.aicave.svc.cluster.local:8974"
   receiveEmail: "taksapongk@osd.co.th"
   llmGatewayUrl: "https://llmgateway.osd.co.th/api"
   llmProjectId: "team-mrcx7er7"

@@ -4,10 +4,12 @@ kind: Ingress
 metadata:
   name: {{ .Values.appName }}-ingress
   namespace: {{ .Values.namespace }}
-  {{- with .Values.ingress.annotations }}
   annotations:
+    {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- end }}
+    # /public/api/v1/<service>/... is rewritten to /api/... by this Middleware (Traefik has no regex rewrite annotation)
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Values.namespace }}-{{ .Values.appName }}-rewrite@kubernetescrd{{- if .Values.ingress.maxRequestBodyBytes }},{{ .Values.namespace }}-{{ .Values.appName }}-limit@kubernetescrd{{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   {{- if .Values.ingress.tls.enabled }}
@@ -42,12 +44,8 @@ metadata:
   name: {{ .Values.appName }}-ws-ingress
   namespace: {{ .Values.namespace }}
   annotations:
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
-    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
-    nginx.ingress.kubernetes.io/websocket-services: {{ .Values.ingress.websocketBackendService }}
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   {{- if .Values.ingress.tls.enabled }}
@@ -64,7 +62,7 @@ spec:
     http:
       paths:
       - path: /websockets
-        pathType: ImplementationSpecific
+        pathType: Prefix
         backend:
           service:
             name: {{ $.Values.ingress.websocketBackendService }}

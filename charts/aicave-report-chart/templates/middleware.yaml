@@ -1,0 +1,24 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ .Values.appName }}-rewrite
+  namespace: {{ .Values.namespace }}
+spec:
+  replacePathRegex:
+    # /public/api/v1/<service>, /public/api/v1/<service>/x  ->  /api/, /api/x
+    regex: ^{{ (index (index .Values.ingress.hosts 0).paths 0).path }}(/|$)(.*)
+    replacement: /api/$2
+{{- end }}
+{{- if and .Values.ingress.enabled .Values.ingress.maxRequestBodyBytes }}
+---
+# Replaces nginx proxy-body-size: requests larger than this get 413. Bodies above 1 MiB are buffered to disk by Traefik before forwarding.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ .Values.appName }}-limit
+  namespace: {{ .Values.namespace }}
+spec:
+  buffering:
+    maxRequestBodyBytes: {{ .Values.ingress.maxRequestBodyBytes | int64 }}
+{{- end }}

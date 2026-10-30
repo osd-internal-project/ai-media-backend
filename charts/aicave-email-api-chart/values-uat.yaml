@@ -1,9 +1,9 @@
 # UAT Environment Values
 # Override specific values for UAT environment
-# Accessed via: aicave-email-api-service.aicave-uat.svc.cluster.local:8974
+# Accessed via: aicave-email-api-service.aicave.svc.cluster.local:8974
 
-namespace: aicave-uat
-replicaCount: 2
+namespace: aicave
+replicaCount: 1
 
 image:
   tag: "1.0.1"

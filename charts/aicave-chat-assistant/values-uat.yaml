@@ -1,24 +1,24 @@
 # UAT Environment Values
-namespace: aicave-uat
-replicaCount: 2
+namespace: aicave
+replicaCount: 1
 
 image:
   tag: "1.0.0"
 
 ingress:
   hosts:
-    - host: uat.aicave.ai
+    - host: aicave-uat.osd.co.th
       paths:
-        - path: /public/api/v1/chat-assistant(/|$)(.*)
-          pathType: ImplementationSpecific
+        - path: /public/api/v1/chat-assistant
+          pathType: Prefix
   tls:
     enabled: true
-    secretName: aicave-console-tls-uat
+    secretName: aicave-tls
 
 env:
   authMode: "report"
   keycloakAllowedClients: "ai-cave-prod"
-  keycloakUrl: "https://id24-uat.aicave.ai"
+  keycloakUrl: "https://auth-events.osd.co.th"
   keycloakRealm: "eportal"
   nodeOptions: "--max-old-space-size=384"
   nodeEnv: "staging"
@@ -28,7 +28,7 @@ env:
   llmGatewayUrl: "https://llmgateway.osd.co.th"
   llmProjectId: "team-mrcx7er7"
   llmChatTimeoutMs: "60000"
-  corsAllowedOrigins: "https://uat.aicave.ai"
+  corsAllowedOrigins: "https://aicave-uat.osd.co.th"
   memoryMaxMessages: "20"
   memoryMaxTokenBudget: "8000"
 

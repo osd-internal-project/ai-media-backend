@@ -4,10 +4,12 @@ kind: Ingress
 metadata:
   name: {{ .Values.appName }}-ingress
   namespace: {{ .Values.namespace }}
-  {{- with .Values.ingress.annotations }}
   annotations:
+    {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- end }}
+    # /public/api/v1/<service>/... is rewritten to /api/... by this Middleware (Traefik has no regex rewrite annotation)
+    traefik.ingress.kubernetes.io/router.middlewares: {{ .Values.namespace }}-{{ .Values.appName }}-rewrite@kubernetescrd{{- if .Values.ingress.maxRequestBodyBytes }},{{ .Values.namespace }}-{{ .Values.appName }}-limit@kubernetescrd{{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   {{- if .Values.ingress.tls.enabled }}

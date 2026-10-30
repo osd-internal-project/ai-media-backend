@@ -1,8 +1,8 @@
 # UAT Environment Values
 # Override specific values for UAT environment
 
-namespace: aicave-uat
-replicaCount: 2
+namespace: aicave
+replicaCount: 1
 
 image:
   tag: "1.0.1"

@@ -21,16 +21,17 @@ service:
 
 ingress:
   enabled: true
-  className: nginx
+  className: traefik
+  # Traefik has no per-ingress body limit by default. Set a byte count to enforce one (nginx proxy-body-size equivalent).
+  # maxRequestBodyBytes: 0
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /api/$2
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
   hosts:
     - host: www.aicave.ai
       paths:
-        - path: /public/api/v1/report(/|$)(.*)
-          pathType: ImplementationSpecific
+        - path: /public/api/v1/report
+          pathType: Prefix
   tls:
     enabled: true
     secretName: aicave-console-tls

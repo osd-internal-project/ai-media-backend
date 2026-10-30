@@ -27,6 +27,8 @@ on:
 
 env:
   DEPLOY_ENV: ${{ inputs.deploy_env }}
+  # uat lives in its own cluster with the plain namespace name; other envs keep <namespace>-<env>
+  NAMESPACE: ${{ inputs.deploy_env == 'uat' && inputs.namespace || format('{0}-{1}', inputs.namespace, inputs.deploy_env) }}
 
 concurrency:
   group: deploy-${{ inputs.namespace }}-${{ inputs.image_name }}-${{ inputs.deploy_env }}
@@ -34,7 +36,8 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, k8s]
+    # uat runs on the runner of the UAT cluster (kube-osd-uat); other envs keep the existing runner
+    runs-on: ${{ inputs.deploy_env == 'uat' && fromJSON('["self-hosted", "Linux", "X64", "kube-osd-uat"]') || fromJSON('["self-hosted", "k8s"]') }}
     environment: ${{ inputs.deploy_env }}
 
     steps:
@@ -53,7 +56,7 @@ jobs:
             --docker-server=swr.ap-southeast-2.myhuaweicloud.com \
             --docker-username=ap-southeast-2@HPUAGIPPWFA7YCNYJIGE \
             --docker-password=${{ secrets.HUAWEI_REGISTRY_PASSWORD }} \
-            --namespace=${{ inputs.namespace }}-${{ env.DEPLOY_ENV }} \
+            --namespace=${{ env.NAMESPACE }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ---------------------------------------------------------------------
@@ -65,7 +68,7 @@ jobs:
           DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
           CHART="${{ inputs.chart_dir }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
-          NS="${{ inputs.namespace }}-${DEPLOY_ENV}"
+          NS="${{ env.NAMESPACE }}"
 
           STATUS=$(helm status ${RELEASE} -n ${NS} -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo "not-found")
           echo "Current Helm status for ${RELEASE}: ${STATUS}"
@@ -116,7 +119,7 @@ jobs:
             --set secretEnv.OMISE_SECRET_KEY=${{ secrets.OMISE_SECRET_KEY }} \
             --set secretEnv.LLM_ADMIN_TOKEN=${{ secrets.LLM_ADMIN_TOKEN }} \
             --set secretEnv.INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }} \
-            --namespace ${{ inputs.namespace }}-${DEPLOY_ENV} \
+            --namespace ${{ env.NAMESPACE }} \
             --wait \
             --timeout 5m \
             --atomic \
@@ -132,8 +135,8 @@ jobs:
           DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
           CHART="${{ inputs.chart_dir }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
-          kubectl rollout status deployment/${RELEASE} -n ${{ inputs.namespace }}-${DEPLOY_ENV}
-          kubectl get pods -n ${{ inputs.namespace }}-${DEPLOY_ENV} -l app=${RELEASE}
+          kubectl rollout status deployment/${RELEASE} -n ${{ env.NAMESPACE }}
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=${RELEASE}
 
       # ---------------------------------------------------------------------
       # Tag deployment for rollback reference
@@ -159,7 +162,7 @@ jobs:
         if: failure()
         run: |
           DEPLOY_ENV="${{ env.DEPLOY_ENV }}"
-          NS="${{ inputs.namespace }}-${DEPLOY_ENV}"
+          NS="${{ env.NAMESPACE }}"
           CHART="${{ inputs.chart_dir }}"
           RELEASE=$(grep '^name:' ${CHART}/Chart.yaml | awk '{print $2}')
 
