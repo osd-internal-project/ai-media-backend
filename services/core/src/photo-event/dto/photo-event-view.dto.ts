@@ -10,6 +10,8 @@ export interface PhotoEventTemplateView {
   promptTail: string | null;
   defaultPromptTail: string;
   imageUrls: string[];
+  /** รูปผลลัพธ์ตัวอย่าง — ใช้เป็น preview, ว่าง = ใช้ imageUrls[0] */
+  resultUrls: string[];
   sortOrder: number;
 }
 

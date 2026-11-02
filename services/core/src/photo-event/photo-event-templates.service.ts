@@ -37,7 +37,10 @@ export class PhotoEventTemplatesService {
         textPrompt: link.promptGuide.textPrompt ?? '',
         promptTail: link.promptTail,
         defaultPromptTail: PHOTO_EVENT_DEFAULT_PROMPT_TAIL,
-        imageUrls: await this.resolveImageUrls(link.promptGuide),
+        imageUrls: await this.resolveUrls(link.promptGuide.promptGuideImages),
+        resultUrls: await this.resolveUrls(
+          link.promptGuide.promptGuideResults,
+        ),
         sortOrder: link.sortOrder,
       })),
     );
@@ -88,10 +91,14 @@ export class PhotoEventTemplatesService {
   }
 
   /** storage key ของรูป template เรียงตาม index — ใช้เป็น reference image ตอน generate */
-  async findImagePaths(guide: PromptGuide): Promise<string[]> {
-    if (guide.promptGuideImages.length === 0) return [];
+  findImagePaths(guide: PromptGuide): Promise<string[]> {
+    return this.findPaths(guide.promptGuideImages);
+  }
+
+  private async findPaths(uids: string[]): Promise<string[]> {
+    if (uids.length === 0) return [];
     const images = await this.promptGuideImageRepo.findMany({
-      where: { uid: { in: guide.promptGuideImages }, status: 'completed' },
+      where: { uid: { in: uids }, status: 'completed' },
       orderBy: { index: 'asc' },
     });
     return images.map((image) => image.imagePath);
@@ -104,8 +111,8 @@ export class PhotoEventTemplatesService {
     return trimmed;
   }
 
-  private async resolveImageUrls(guide: PromptGuide): Promise<string[]> {
-    const paths = await this.findImagePaths(guide);
+  private async resolveUrls(uids: string[]): Promise<string[]> {
+    const paths = await this.findPaths(uids);
     const urls = await Promise.all(
       paths.map((path) => this.storageUrl.toDisplayUrl(path)),
     );
