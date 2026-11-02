@@ -53,8 +53,17 @@ export interface PreviewItem {
 
 export type PublishSkipReason = Exclude<PublishBlock, null> | 'NOT_FOUND';
 export type PublishResult =
-  | { galleryId: string; publicationId: string; status: typeof PENDING }
-  | { galleryId: string; publicationId: string; status: typeof FAILED; error: string }
+  | {
+      galleryId: string;
+      publicationId: string;
+      status: typeof CommunityPublicationStatus.PENDING;
+    }
+  | {
+      galleryId: string;
+      publicationId: string;
+      status: typeof CommunityPublicationStatus.FAILED;
+      error: string;
+    }
   | { galleryId: string; status: 'SKIPPED'; reason: PublishSkipReason };
 
 /** event → สถานะใหม่ และสถานะที่เปลี่ยนจากได้ (webhook มาซ้ำหรือช้าต้องไม่ปลุกงานที่ถอดแล้ว) */
