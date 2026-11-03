@@ -41,7 +41,14 @@ export interface PublicPhotoEventView {
   id: string;
   imageUrl: string;
   createdAt: Date;
+  /** template ที่ active ของ event — null = ใช้ layout default ฝั่ง frontend */
+  printDesign: PrintDesignView | null;
 }
+
+export type PrintDesignView = Pick<
+  PhotoEventPrintTemplateView,
+  'layout' | 'assetUrls'
+>;
 
 export interface PhotoEventPrintTemplateView {
   id: string;
