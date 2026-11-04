@@ -31,6 +31,7 @@ const fakePublications = () => {
       return { count: 1 };
     }),
     findOne: jest.fn(async ({ where }) => rows.get(where.id) ?? null),
+    findMany: jest.fn(),
   };
 };
 
@@ -171,6 +172,72 @@ describe('CommunityPublicationService', () => {
     it('REJECTED keeps the reason for the creator', async () => {
       await service.applyWebhook({ aicavePublicationId: 'pub-1', event: 'REJECTED', reason: 'nsfw' });
       expect(publications.rows.get('pub-1')).toMatchObject({ status: 'REJECTED', error: 'nsfw' });
+    });
+  });
+  describe('listPublic', () => {
+    const feedRow = (id: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      organizationId: 'o1',
+      includePrompt: false,
+      previewItems: [{ key: 'k0', thumbnailKey: null, typeGenerate: 'image', order: 0 }],
+      publishedAt: new Date('2026-11-01T00:00:00Z'),
+      updatedAt: new Date('2026-11-02T00:00:00Z'),
+      gallery: { prompt: 'a cat', generateConfig: { modelName: 'seedream' } },
+      ...extra,
+    });
+
+    it('asks only for PUBLISHED + PUBLIC work and returns stable links', async () => {
+      publications.findMany.mockResolvedValue([feedRow('pub-9', { includePrompt: true })]);
+      const result = await service.listPublic({ updatedSince: '2026-11-01T00:00:00Z' });
+
+      expect(publications.findMany.mock.calls[0][0]).toMatchObject({
+        where: {
+          status: 'PUBLISHED',
+          visibility: 'PUBLIC',
+          updatedAt: { gte: new Date('2026-11-01T00:00:00Z') },
+        },
+        take: 51,
+      });
+      expect(result).toEqual({
+        items: [
+          {
+            id: 'pub-9',
+            organizationId: 'o1',
+            type: 'image',
+            modelName: 'seedream',
+            prompt: 'a cat',
+            media: [
+              {
+                type: 'image',
+                url: 'https://api.aicave.ai/public/community-publication/pub-9/media/0',
+                thumbnailUrl: 'https://api.aicave.ai/public/community-publication/pub-9/media/0?thumbnail=1',
+              },
+            ],
+            publishedAt: new Date('2026-11-01T00:00:00Z'),
+            updatedAt: new Date('2026-11-02T00:00:00Z'),
+          },
+        ],
+        nextCursor: null,
+      });
+    });
+
+    it('hides the prompt unless the creator chose to show it, and survives a deleted gallery', async () => {
+      publications.findMany.mockResolvedValue([feedRow('a'), feedRow('b', { gallery: null, includePrompt: true })]);
+      const { items } = await service.listPublic({});
+      expect(items.map((i) => [i.prompt, i.modelName])).toEqual([
+        [null, 'seedream'],
+        [null, null],
+      ]);
+    });
+
+    it('returns a cursor when there is another page and resumes after it', async () => {
+      publications.findMany.mockResolvedValue([feedRow('a'), feedRow('b'), feedRow('c')]);
+      const first = await service.listPublic({ limit: 2 });
+      expect(first.items.map((i) => i.id)).toEqual(['a', 'b']);
+      expect(first.nextCursor).toBe('b');
+
+      await service.listPublic({ limit: 2, cursor: 'b' });
+      expect(publications.findMany.mock.calls[1][0]).toMatchObject({ cursor: { id: 'b' }, skip: 1, take: 3 });
     });
   });
 });

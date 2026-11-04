@@ -13,7 +13,7 @@ import { IntegrationApiKeyRepository } from '../repositories/integrationApiKey.r
 
 export const API_KEY_HEADER = 'x-api-key';
 export const API_KEY_SCOPES = 'auth:apiKeyScopes';
-export const INTEGRATION_API_KEY_SCOPES = ['webhook', 'original'] as const;
+export const INTEGRATION_API_KEY_SCOPES = ['webhook', 'original', 'media:read'] as const;
 export type IntegrationApiKeyScope = (typeof INTEGRATION_API_KEY_SCOPES)[number];
 
 /** scope ที่ key ต้องมีครบจึงเรียก route นี้ได้ — ใช้คู่กับ `@Public()` + `@UseGuards(ApiKeyGuard)` */

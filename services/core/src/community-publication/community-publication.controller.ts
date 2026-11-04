@@ -21,7 +21,11 @@ import {
   Public,
 } from '@ai-media/share';
 import { CommunityPublicationService } from './community-publication.service';
-import { CommunityWebhookDto, PublishToCommunityDto } from './dto/community-publication.dto';
+import {
+  CommunityWebhookDto,
+  ListPublicPublicationsQueryDto,
+  PublishToCommunityDto,
+} from './dto/community-publication.dto';
 
 const requireUser = (user: AuthUser | undefined): AuthUser => {
   if (!user) throw new UnauthorizedException();
@@ -63,6 +67,20 @@ export class CommunityWebhookController {
   @Post()
   receive(@Body() dto: CommunityWebhookDto) {
     return this.service.applyWebhook(dto);
+  }
+}
+
+/** ระบบภายนอกดึงรายการงาน public ทุก org ด้วย `x-api-key` scope `media:read` */
+@Public()
+@UseGuards(ApiKeyGuard)
+@Controller('integration/publications')
+export class IntegrationPublicationController {
+  constructor(private readonly service: CommunityPublicationService) {}
+
+  @ApiKeyScopes('media:read')
+  @Get()
+  list(@Query() query: ListPublicPublicationsQueryDto) {
+    return this.service.listPublic(query);
   }
 }
 

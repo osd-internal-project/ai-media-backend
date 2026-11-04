@@ -1,14 +1,20 @@
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { CommunityVisibility } from '@prisma/client';
 import { INTEGRATION_API_KEY_SCOPES, IntegrationApiKeyScope } from '@ai-media/share';
@@ -52,6 +58,24 @@ export class CommunityWebhookDto {
   @IsString()
   @MaxLength(1000)
   reason?: string;
+}
+
+/** feed งาน public สำหรับระบบภายนอก — เรียงตาม updatedAt แล้วเดินต่อด้วย cursor */
+export class ListPublicPublicationsQueryDto {
+  @IsOptional()
+  @IsDateString()
+  updatedSince?: string;
+
+  @IsOptional()
+  @IsUUID()
+  cursor?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
 
 export class CreateIntegrationApiKeyDto {

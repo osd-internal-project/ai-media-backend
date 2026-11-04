@@ -30,10 +30,11 @@ import {
 } from '@ai-media/share';
 import { communityConfigs, tosConfigs } from '../configs';
 import { modelNameOf, OrgGalleryService, PublishBlock } from '../gallery/org-gallery.service';
-import { CommunityClient } from './community.client';
+import { CommunityClient, CommunityItemMedia } from './community.client';
 import {
   CommunityWebhookDto,
   CommunityWebhookEvent,
+  ListPublicPublicationsQueryDto,
   PublishToCommunityDto,
 } from './dto/community-publication.dto';
 
@@ -80,6 +81,23 @@ const galleryInclude = Prisma.validator<Prisma.GalleryInclude>()({
   users: { select: { token: true, fullname: true } },
 });
 type PublishRow = Prisma.GalleryGetPayload<{ include: typeof galleryInclude }>;
+
+const feedInclude = Prisma.validator<Prisma.CommunityPublicationInclude>()({
+  gallery: { select: { prompt: true, generateConfig: true } },
+});
+type FeedRow = Prisma.CommunityPublicationGetPayload<{ include: typeof feedInclude }>;
+const FEED_DEFAULT_LIMIT = 50;
+
+export interface PublicPublication {
+  id: string;
+  organizationId: string;
+  type: string | null;
+  modelName: string | null;
+  prompt: string | null;
+  media: CommunityItemMedia[];
+  publishedAt: Date | null;
+  updatedAt: Date;
+}
 
 const isPreviewItem = (value: unknown): value is PreviewItem =>
   typeof value === 'object' &&
@@ -203,6 +221,30 @@ export class CommunityPublicationService {
     if (!current) throw new NotFoundException('Publication not found');
     if (current.status === to) return { status: to };
     throw new ConflictException(`Cannot apply ${dto.event} to a ${current.status} publication`);
+  }
+
+  /** งานที่ Community อนุมัติและเปิด PUBLIC ทุก org — คืนเป็น link คงที่ ไม่ใช่ไฟล์ */
+  async listPublic(
+    query: ListPublicPublicationsQueryDto,
+  ): Promise<{ items: PublicPublication[]; nextCursor: string | null }> {
+    const limit = query.limit ?? FEED_DEFAULT_LIMIT;
+    const rows = (await this.publicationRepo.findMany({
+      where: {
+        status: PUBLISHED,
+        visibility: 'PUBLIC',
+        ...(query.updatedSince && { updatedAt: { gte: new Date(query.updatedSince) } }),
+      },
+      include: feedInclude,
+      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+      take: limit + 1,
+      ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
+      // repository รับ FindManyArgs แบบไม่ generic จึงเสีย type ของ include
+    })) as FeedRow[];
+    const page = rows.slice(0, limit);
+    return {
+      items: page.map((row) => this.toPublicPublication(row)),
+      nextCursor: rows.length > limit ? page[page.length - 1].id : null,
+    };
   }
 
   /** Community เรียกด้วย token ของ user เอง — คืนตัวตน creator และ org ที่สังกัด */
@@ -341,6 +383,24 @@ export class CommunityPublicationService {
       item.thumbnailKey ? [item.key, item.thumbnailKey] : [item.key],
     );
     await Promise.all(keys.map((key) => this.tos.deleteObject(this.bucket, key)));
+  }
+
+  private toPublicPublication(row: FeedRow): PublicPublication {
+    const items = readPreviewItems(row.previewItems);
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      type: items[0] ? toGenerationTypeKey(items[0].typeGenerate) : null,
+      modelName: modelNameOf(row.gallery?.generateConfig ?? null),
+      prompt: row.includePrompt ? (row.gallery?.prompt ?? null) : null,
+      media: items.map((item, index) => ({
+        type: toGenerationTypeKey(item.typeGenerate) ?? item.typeGenerate,
+        url: this.previewUrl(row.id, index, false),
+        thumbnailUrl: this.previewUrl(row.id, index, true),
+      })),
+      publishedAt: row.publishedAt,
+      updatedAt: row.updatedAt,
+    };
   }
 
   private previewUrl(publicationId: string, index: number, thumbnail: boolean): string {

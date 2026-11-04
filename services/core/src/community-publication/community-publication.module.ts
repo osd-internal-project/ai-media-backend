@@ -7,6 +7,7 @@ import { CommunityClient } from './community.client';
 import {
   CommunityPublicationController,
   CommunityWebhookController,
+  IntegrationPublicationController,
   PublicCommunityPublicationController,
 } from './community-publication.controller';
 import { CommunityPublicationService } from './community-publication.service';
@@ -28,6 +29,7 @@ import {
     CommunityWebhookController,
     PublicCommunityPublicationController,
     IntegrationApiKeyController,
+    IntegrationPublicationController,
   ],
   providers: [CommunityPublicationService, CommunityClient, IntegrationApiKeyService, ApiKeyGuard],
 })

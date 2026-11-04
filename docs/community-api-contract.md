@@ -129,6 +129,55 @@ event twice returns `200` again. Errors:
 | `404` | No publication with that ID. |
 | `409` | The event does not apply to the current status, for example `APPROVED` after the creator removed the work. Do not retry. |
 
+### GET /integration/publications
+
+Lists every work that Community approved and that is visible to everyone
+(`PUBLISHED` and `PUBLIC`), across all organizations. Use it to backfill or to
+reconcile with the `PUT` calls. Authenticate with an API key that has scope `media:read`:
+
+```
+x-api-key: aick_…
+```
+
+| Query | Notes |
+|---|---|
+| `updatedSince` | Optional ISO date. Returns only works updated at or after this time. |
+| `cursor` | Optional. The `nextCursor` from the previous page. |
+| `limit` | Optional, 1 to 100. Default 50. |
+
+Response `200`. Results are sorted by `updatedAt`, then `id`:
+
+```json
+{
+  "items": [
+    {
+      "id": "6f1c…",
+      "organizationId": "org-…",
+      "type": "image",
+      "modelName": "seedream-4-0",
+      "prompt": null,
+      "media": [
+        {
+          "type": "image",
+          "url": "https://api.aicave.ai/public/community-publication/6f1c…/media/0",
+          "thumbnailUrl": "https://api.aicave.ai/public/community-publication/6f1c…/media/0?thumbnail=1"
+        }
+      ],
+      "publishedAt": "2026-11-01T08:00:00.000Z",
+      "updatedAt": "2026-11-01T08:00:00.000Z"
+    }
+  ],
+  "nextCursor": null
+}
+```
+
+The response holds links, not files. The `media[].url` rules are the same as for
+`PUT /items`. The feed lists only published works, so a work that was removed drops
+out of it. To find works that are gone, compare the full list of `id`s.
+
+Errors: `400` for invalid query values. `401` when the key is missing, unknown or
+revoked. `403` when the key lacks scope `media:read`.
+
 ### Original files (Phase 2)
 
 Phase 1 has no endpoint for original files. Phase 2 adds
@@ -141,6 +190,7 @@ an order ID and returns a short-lived signed URL.
 |---|---|
 | Keycloak client for Community in `eportal`, ID added to `KEYCLOAK_ALLOWED_CLIENTS` | AI Cave |
 | API key with scope `webhook` issued at Admin → API Keys, sent over a secure channel | AI Cave |
+| API key with scope `media:read` for each system that reads the public feed | AI Cave |
 | `COMMUNITY_API_BASE_URL` and `COMMUNITY_API_KEY` set on core | AI Cave, values from Community |
 | `COMMUNITY_PUBLIC_API_BASE_URL` set on core (origin of the media URLs) | AI Cave |
 | `PUT` / `DELETE /items/{id}` implemented and idempotent | Community |
