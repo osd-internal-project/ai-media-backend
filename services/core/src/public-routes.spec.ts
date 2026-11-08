@@ -7,7 +7,7 @@ import { PublicPhotoEventController } from './photo-event/public-photo-event.con
 import { PublicCommunityController } from './public-community/public-community.controller';
 import {
   CommunityPublicationController,
-  CommunityWebhookController,
+  IntegrationPublicationController,
   PublicCommunityPublicationController,
 } from './community-publication/community-publication.controller';
 import { WebsocketController } from './websocket/websocket.controller';
@@ -17,7 +17,7 @@ describe('core @Public routes', () => {
   it.each([
     ['PublicCommunityController', PublicCommunityController],
     ['PublicCommunityPublicationController', PublicCommunityPublicationController],
-    ['CommunityWebhookController (api key)', CommunityWebhookController],
+    ['IntegrationPublicationController (api key)', IntegrationPublicationController],
     ['PublicPhotoEventController', PublicPhotoEventController],
     ['PublicAnnouncementController', PublicAnnouncementController],
     ['ByteplusWebhookController', ByteplusWebhookController],

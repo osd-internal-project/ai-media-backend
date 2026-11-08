@@ -1,4 +1,3 @@
-import { ConflictException } from '@nestjs/common';
 import { CommunityPublicationService } from './community-publication.service';
 
 type Row = {
@@ -32,6 +31,7 @@ const fakePublications = () => {
     }),
     findOne: jest.fn(async ({ where }) => rows.get(where.id) ?? null),
     findMany: jest.fn(),
+    count: jest.fn(),
   };
 };
 
@@ -46,20 +46,19 @@ const gallery = (id: string, userId: string) => ({
   imageUrl: null,
   thumbnailUrl: `${id}.jpg`,
   generateConfig: { modelName: 'seedance' },
-  users: { token: `sub-${userId}`, fullname: userId },
 });
 
 describe('CommunityPublicationService', () => {
   let publications: ReturnType<typeof fakePublications>;
   let copyObject: jest.Mock;
-  let upsertItem: jest.Mock;
+  let orgFindMany: jest.Mock;
   let service: CommunityPublicationService;
   const me = { userId: 'me', token: 'sub-me', role: 'USER' };
 
   beforeEach(() => {
     publications = fakePublications();
     copyObject = jest.fn().mockResolvedValue({ ok: true });
-    upsertItem = jest.fn().mockResolvedValue('foundise-1');
+    orgFindMany = jest.fn().mockResolvedValue([{ organizationId: 'o1', name: 'Studio A' }]);
     service = new CommunityPublicationService(
       publications as never,
       {
@@ -70,6 +69,7 @@ describe('CommunityPublicationService', () => {
         ]),
       } as never,
       { findOne: jest.fn().mockResolvedValue({ role: 'MEMBER' }) } as never,
+      { findMany: orgFindMany } as never,
       {} as never,
       {
         publishBlocks: jest.fn(
@@ -83,8 +83,7 @@ describe('CommunityPublicationService', () => {
       } as never,
       {} as never,
       { copyObject, deleteObject: jest.fn() } as never,
-      { upsertItem, deleteItem: jest.fn() } as never,
-      { publicApiBaseUrl: 'https://api.aicave.ai/', foundiseApiBaseUrl: '', foundiseApiKey: '' },
+      { publicApiBaseUrl: 'https://api.aicave.ai/' },
     );
   });
 
@@ -99,32 +98,31 @@ describe('CommunityPublicationService', () => {
   it('publishes only my work on allowed models and says why the rest were skipped', async () => {
     const results = await publish(['mine', 'blocked', 'theirs', 'ghost']);
     expect(results).toEqual([
-      { galleryId: 'mine', publicationId: 'pub-1', status: 'PENDING' },
+      { galleryId: 'mine', publicationId: 'pub-1', status: 'PUBLISHED' },
       { galleryId: 'blocked', status: 'SKIPPED', reason: 'MODEL_NOT_ALLOWED' },
       { galleryId: 'theirs', status: 'SKIPPED', reason: 'NOT_OWNER' },
       { galleryId: 'ghost', status: 'SKIPPED', reason: 'NOT_FOUND' },
     ]);
   });
 
-  it('copies the files to a separate preview prefix and sends stable public URLs', async () => {
+  it('copies the files to a separate preview prefix and publishes right away', async () => {
     await publish(['mine']);
     expect(copyObject.mock.calls.map((c) => [c[1], c[2]])).toEqual([
       ['organize/o1/p1/video-generate/mine.mp4', 'organize/o1/community-publication/pub-1/0.mp4'],
       ['organize/o1/p1/video-generate/mine.jpg', 'organize/o1/community-publication/pub-1/thumbnail.jpg'],
     ]);
-    expect(upsertItem.mock.calls[0][0]).toMatchObject({
-      aicavePublicationId: 'pub-1',
-      creator: { keycloakSub: 'sub-me', fullname: 'me' },
-      prompt: null,
-      media: [
+    expect(publications.rows.get('pub-1')).toMatchObject({
+      status: 'PUBLISHED',
+      publishedAt: expect.any(Date),
+      previewItems: [
         {
-          type: 'video',
-          url: 'https://api.aicave.ai/public/community-publication/pub-1/media/0',
-          thumbnailUrl: 'https://api.aicave.ai/public/community-publication/pub-1/media/0?thumbnail=1',
+          key: 'organize/o1/community-publication/pub-1/0.mp4',
+          thumbnailKey: 'organize/o1/community-publication/pub-1/thumbnail.jpg',
+          typeGenerate: 'video',
+          order: 0,
         },
       ],
     });
-    expect(publications.rows.get('pub-1')?.communityItemId).toBe('foundise-1');
   });
 
   it('publishing the same work twice keeps one publication', async () => {
@@ -133,47 +131,13 @@ describe('CommunityPublicationService', () => {
     expect(publications.rows.size).toBe(1);
   });
 
-  it('marks the publication FAILED with the reason when Community is unreachable', async () => {
-    upsertItem.mockRejectedValue(new Error('connect ECONNREFUSED'));
-    const [result] = await publish(['mine']);
-    expect(result).toEqual({
-      galleryId: 'mine',
-      publicationId: 'pub-1',
-      status: 'FAILED',
-      error: 'connect ECONNREFUSED',
-    });
-    expect(publications.rows.get('pub-1')).toMatchObject({ status: 'FAILED', error: 'connect ECONNREFUSED' });
-  });
-
-  it('marks FAILED when a file copy fails instead of sending a broken link', async () => {
+  it('marks FAILED when a file copy fails so a broken link never reaches the feed', async () => {
     copyObject.mockResolvedValue(undefined);
     const [result] = await publish(['mine']);
     expect(result).toMatchObject({ status: 'FAILED' });
-    expect(upsertItem).not.toHaveBeenCalled();
+    expect(publications.rows.get('pub-1')).toMatchObject({ status: 'FAILED', error: expect.stringContaining('copy failed') });
   });
 
-  describe('webhook', () => {
-    beforeEach(() => publish(['mine']));
-
-    it('APPROVED makes it PUBLISHED, and a repeat is harmless', async () => {
-      const event = { aicavePublicationId: 'pub-1', event: 'APPROVED' as const };
-      await expect(service.applyWebhook(event)).resolves.toEqual({ status: 'PUBLISHED' });
-      await expect(service.applyWebhook(event)).resolves.toEqual({ status: 'PUBLISHED' });
-    });
-
-    it('a late APPROVED does not bring back removed work', async () => {
-      await service.applyWebhook({ aicavePublicationId: 'pub-1', event: 'REMOVED' });
-      await expect(
-        service.applyWebhook({ aicavePublicationId: 'pub-1', event: 'APPROVED' }),
-      ).rejects.toBeInstanceOf(ConflictException);
-      expect(publications.rows.get('pub-1')?.status).toBe('REMOVED');
-    });
-
-    it('REJECTED keeps the reason for the creator', async () => {
-      await service.applyWebhook({ aicavePublicationId: 'pub-1', event: 'REJECTED', reason: 'nsfw' });
-      expect(publications.rows.get('pub-1')).toMatchObject({ status: 'REJECTED', error: 'nsfw' });
-    });
-  });
   describe('listPublic', () => {
     const feedRow = (id: string, extra: Record<string, unknown> = {}) => ({
       id,
@@ -186,23 +150,30 @@ describe('CommunityPublicationService', () => {
       ...extra,
     });
 
-    it('asks only for PUBLISHED + PUBLIC work and returns stable links', async () => {
+    beforeEach(() => publications.count.mockResolvedValue(1));
+
+    it('asks only for PUBLISHED + PUBLIC work and returns stable links with the org name', async () => {
       publications.findMany.mockResolvedValue([feedRow('pub-9', { includePrompt: true })]);
       const result = await service.listPublic({ updatedSince: '2026-11-01T00:00:00Z' });
 
+      const where = {
+        status: 'PUBLISHED',
+        visibility: 'PUBLIC',
+        updatedAt: { gte: new Date('2026-11-01T00:00:00Z') },
+      };
       expect(publications.findMany.mock.calls[0][0]).toMatchObject({
-        where: {
-          status: 'PUBLISHED',
-          visibility: 'PUBLIC',
-          updatedAt: { gte: new Date('2026-11-01T00:00:00Z') },
-        },
-        take: 51,
+        where,
+        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+        take: 50,
+        skip: 0,
       });
+      expect(publications.count).toHaveBeenCalledWith({ where });
       expect(result).toEqual({
         items: [
           {
             id: 'pub-9',
             organizationId: 'o1',
+            organizationName: 'Studio A',
             type: 'image',
             modelName: 'seedream',
             prompt: 'a cat',
@@ -217,7 +188,9 @@ describe('CommunityPublicationService', () => {
             updatedAt: new Date('2026-11-02T00:00:00Z'),
           },
         ],
-        nextCursor: null,
+        total: 1,
+        take: 50,
+        skip: 0,
       });
     });
 
@@ -230,14 +203,30 @@ describe('CommunityPublicationService', () => {
       ]);
     });
 
-    it('returns a cursor when there is another page and resumes after it', async () => {
-      publications.findMany.mockResolvedValue([feedRow('a'), feedRow('b'), feedRow('c')]);
-      const first = await service.listPublic({ limit: 2 });
-      expect(first.items.map((i) => i.id)).toEqual(['a', 'b']);
-      expect(first.nextCursor).toBe('b');
+    it('pages with take/skip and filters one organization', async () => {
+      publications.findMany.mockResolvedValue([feedRow('c')]);
+      publications.count.mockResolvedValue(3);
+      const result = await service.listPublic({ organizationId: 'o1', take: 2, skip: 2 });
 
-      await service.listPublic({ limit: 2, cursor: 'b' });
-      expect(publications.findMany.mock.calls[1][0]).toMatchObject({ cursor: { id: 'b' }, skip: 1, take: 3 });
+      expect(publications.findMany.mock.calls[0][0]).toMatchObject({
+        where: { organizationId: 'o1' },
+        take: 2,
+        skip: 2,
+      });
+      expect(result).toMatchObject({ total: 3, take: 2, skip: 2 });
+    });
+
+    it('gives a null org name when the organization is gone, and skips the lookup on an empty page', async () => {
+      orgFindMany.mockResolvedValue([]);
+      publications.findMany.mockResolvedValue([feedRow('a')]);
+      const { items } = await service.listPublic({});
+      expect(items[0].organizationName).toBeNull();
+
+      orgFindMany.mockClear();
+      publications.findMany.mockResolvedValue([]);
+      publications.count.mockResolvedValue(0);
+      await expect(service.listPublic({})).resolves.toMatchObject({ items: [], total: 0 });
+      expect(orgFindMany).not.toHaveBeenCalled();
     });
   });
 });

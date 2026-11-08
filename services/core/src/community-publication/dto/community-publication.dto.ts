@@ -11,7 +11,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -37,45 +36,29 @@ export class PublishToCommunityDto {
   includePrompt: boolean;
 }
 
-export const COMMUNITY_WEBHOOK_EVENTS = ['APPROVED', 'REJECTED', 'REMOVED'] as const;
-export type CommunityWebhookEvent = (typeof COMMUNITY_WEBHOOK_EVENTS)[number];
-
-/** Community แจ้งผลการตรวจ / การถอดงาน — สัญญาอยู่ใน docs/community-api-contract.md */
-export class CommunityWebhookDto {
-  @IsString()
-  @IsNotEmpty()
-  aicavePublicationId: string;
-
-  @IsIn(COMMUNITY_WEBHOOK_EVENTS as unknown as string[])
-  event: CommunityWebhookEvent;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  communityItemId?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  reason?: string;
-}
-
-/** feed งาน public สำหรับระบบภายนอก — เรียงตาม updatedAt แล้วเดินต่อด้วย cursor */
+/** feed งาน public สำหรับระบบภายนอก — ใหม่สุดก่อน แบ่งหน้าด้วย take/skip */
 export class ListPublicPublicationsQueryDto {
   @IsOptional()
   @IsDateString()
   updatedSince?: string;
 
   @IsOptional()
-  @IsUUID()
-  cursor?: string;
+  @IsString()
+  @MaxLength(50)
+  organizationId?: string;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
-  limit?: number;
+  take?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  skip?: number;
 }
 
 export class CreateIntegrationApiKeyDto {

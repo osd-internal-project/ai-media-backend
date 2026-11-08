@@ -3,10 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { ApiKeyGuard, PrismaModule, StorageModule, TosModule } from '@ai-media/share';
 import { communityConfigs } from '../configs';
 import { GalleryModule } from '../gallery/gallery.module';
-import { CommunityClient } from './community.client';
 import {
   CommunityPublicationController,
-  CommunityWebhookController,
   IntegrationPublicationController,
   PublicCommunityPublicationController,
 } from './community-publication.controller';
@@ -26,11 +24,10 @@ import {
   ],
   controllers: [
     CommunityPublicationController,
-    CommunityWebhookController,
     PublicCommunityPublicationController,
     IntegrationApiKeyController,
     IntegrationPublicationController,
   ],
-  providers: [CommunityPublicationService, CommunityClient, IntegrationApiKeyService, ApiKeyGuard],
+  providers: [CommunityPublicationService, IntegrationApiKeyService, ApiKeyGuard],
 })
 export class CommunityPublicationModule {}

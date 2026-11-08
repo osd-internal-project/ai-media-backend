@@ -1,9 +1,11 @@
 # AI Cave ↔ Community API contract
 
-Status: draft for agreement with the Community (Foundise) team. Version 0.1, 2026-10-30.
+Status: draft for agreement with the Community (Foundise) team. Version 0.2, 2026-11-08.
 
 This document defines every call between AI Cave core and Community in Phase 1
-(publish only, no sales). Field names are case-sensitive. All bodies are JSON (UTF-8).
+(publish only, no sales). AI Cave does not call Community. When a creator publishes a
+work from an organization gallery, AI Cave copies it to a separate store and lists it
+right away. Community pulls the list with an API key. Field names are case-sensitive. All bodies are JSON (UTF-8).
 
 ## Identity
 
@@ -13,58 +15,6 @@ person on both sides when the Keycloak `sub` matches. AI Cave sends `sub` as
 
 Community gets its own Keycloak client in `eportal`. AI Cave accepts its user tokens
 after the client ID is added to `KEYCLOAK_ALLOWED_CLIENTS` on core.
-
-## AI Cave → Community
-
-AI Cave calls the base URL that Community provides (`COMMUNITY_API_BASE_URL`), with
-header `x-api-key: <key issued by Community>`. Timeout is 15 seconds.
-
-### PUT /items/{aicavePublicationId}
-
-Creates or replaces one published work. AI Cave sends the same ID again when the
-creator publishes the same work again, so the call must be idempotent: the same ID
-updates the same item.
-
-```json
-{
-  "aicavePublicationId": "6f1c…",
-  "creator": { "keycloakSub": "1b2c…", "fullname": "Somchai" },
-  "organizationId": "org-…",
-  "visibility": "PUBLIC",
-  "type": "video",
-  "modelName": "seedance-1-0-pro",
-  "prompt": null,
-  "media": [
-    {
-      "type": "video",
-      "url": "https://api.aicave.ai/public/community-publication/6f1c…/media/0",
-      "thumbnailUrl": "https://api.aicave.ai/public/community-publication/6f1c…/media/0?thumbnail=1"
-    }
-  ],
-  "createdAt": "2026-10-30T08:00:00.000Z"
-}
-```
-
-| Field | Notes |
-|---|---|
-| `visibility` | `PUBLIC` shows the work to everyone. `PRIVATE` shows it to the creator only. |
-| `type` | `image`, `video`, `omnihuman`, `dreamactor` or `audio`. |
-| `prompt` | `null` unless the creator chose to show it. Do not request it separately. |
-| `media[].url` | Stable URL. It answers `302` to a short-lived signed URL, so fetch with redirects on. Store the stable URL, not the signed one. |
-| `media[].thumbnailUrl` | Same rule. Returns `404` when the work has no thumbnail, for example audio. |
-
-Response: any `2xx`. If the body has a string `id`, AI Cave stores it as the
-Community item ID. Any other status marks the work `FAILED` on AI Cave with the
-error text, and the creator can publish again.
-
-The media URLs answer only while the work is waiting for review or published. After
-rejection or removal they return `404`.
-
-### DELETE /items/{aicavePublicationId}
-
-AI Cave calls this when the creator or an organization admin removes the work.
-Answer `2xx`, or `404` when the item is already gone. AI Cave then deletes its
-preview copies.
 
 ## Community → AI Cave
 
@@ -95,45 +45,10 @@ No body. Response `200`:
 Errors: `401` when the token is missing, expired or from a client AI Cave does not
 accept. `404` when the user does not exist in AI Cave.
 
-### POST /community/webhook
-
-Reports a review result or a removal on the Community side. Authenticate with the API
-key that an AI Cave admin issues (scope `webhook`):
-
-```
-x-api-key: aick_…
-```
-
-```json
-{
-  "aicavePublicationId": "6f1c…",
-  "event": "APPROVED",
-  "communityItemId": "item-123",
-  "reason": null
-}
-```
-
-| `event` | Effect on AI Cave |
-|---|---|
-| `APPROVED` | Waiting for review becomes published. |
-| `REJECTED` | The work becomes rejected. `reason` is shown to the creator. |
-| `REMOVED` | Community took the work down. |
-
-Response `200` with `{ "status": "PUBLISHED" }` (the new status). Sending the same
-event twice returns `200` again. Errors:
-
-| Status | Meaning |
-|---|---|
-| `401` | Header missing, key unknown or revoked. |
-| `403` | Key lacks scope `webhook`. |
-| `404` | No publication with that ID. |
-| `409` | The event does not apply to the current status, for example `APPROVED` after the creator removed the work. Do not retry. |
-
 ### GET /integration/publications
 
-Lists every work that Community approved and that is visible to everyone
-(`PUBLISHED` and `PUBLIC`), across all organizations. Use it to backfill or to
-reconcile with the `PUT` calls. Authenticate with an API key that has scope `media:read`:
+Lists the works that are published and visible to everyone (`PUBLISHED` and
+`PUBLIC`), newest first. Authenticate with an API key that has scope `media:read`:
 
 ```
 x-api-key: aick_…
@@ -141,11 +56,12 @@ x-api-key: aick_…
 
 | Query | Notes |
 |---|---|
+| `organizationId` | Optional. Returns only the works of this organization. Leave it out for every organization. |
 | `updatedSince` | Optional ISO date. Returns only works updated at or after this time. |
-| `cursor` | Optional. The `nextCursor` from the previous page. |
-| `limit` | Optional, 1 to 100. Default 50. |
+| `take` | Optional, 1 to 100. Default 50. |
+| `skip` | Optional, 0 or more. Default 0. |
 
-Response `200`. Results are sorted by `updatedAt`, then `id`:
+Response `200`. Results are sorted by `publishedAt`, then `id`, both descending:
 
 ```json
 {
@@ -153,6 +69,7 @@ Response `200`. Results are sorted by `updatedAt`, then `id`:
     {
       "id": "6f1c…",
       "organizationId": "org-…",
+      "organizationName": "Studio A",
       "type": "image",
       "modelName": "seedream-4-0",
       "prompt": null,
@@ -167,13 +84,27 @@ Response `200`. Results are sorted by `updatedAt`, then `id`:
       "updatedAt": "2026-11-01T08:00:00.000Z"
     }
   ],
-  "nextCursor": null
+  "total": 1,
+  "take": 50,
+  "skip": 0
 }
 ```
 
-The response holds links, not files. The `media[].url` rules are the same as for
-`PUT /items`. The feed lists only published works, so a work that was removed drops
-out of it. To find works that are gone, compare the full list of `id`s.
+| Field | Notes |
+|---|---|
+| `organizationName` | `null` when the organization no longer exists. |
+| `type` | `image`, `video`, `omnihuman`, `dreamactor` or `audio`. |
+| `prompt` | `null` unless the creator chose to show it. |
+| `media[].url` | Stable URL that you can put in `<img src>`. It answers `302` to a short-lived signed URL, so fetch with redirects on. Store the stable URL, not the signed one. |
+| `media[].thumbnailUrl` | Same rule. Returns `404` when the work has no thumbnail, for example audio. |
+| `total` | Number of works that match the query, for paging. |
+
+The response holds links, not files. When the creator or an organization admin removes
+a work, it drops out of the list and its media URLs return `404`. To find works that
+are gone, compare the full list of `id`s.
+
+Works published while you page can shift items across page edges. Use `updatedSince`
+for incremental syncs.
 
 Errors: `400` for invalid query values. `401` when the key is missing, unknown or
 revoked. `403` when the key lacks scope `media:read`.
@@ -188,10 +119,7 @@ an order ID and returns a short-lived signed URL.
 
 | Item | Owner |
 |---|---|
-| Keycloak client for Community in `eportal`, ID added to `KEYCLOAK_ALLOWED_CLIENTS` | AI Cave |
-| API key with scope `webhook` issued at Admin → API Keys, sent over a secure channel | AI Cave |
-| API key with scope `media:read` for each system that reads the public feed | AI Cave |
-| `COMMUNITY_API_BASE_URL` and `COMMUNITY_API_KEY` set on core | AI Cave, values from Community |
+| Keycloak client for Community in `eportal`, ID added to `KEYCLOAK_ALLOWED_CLIENTS` (only for `POST /community/link`) | AI Cave |
+| API key with scope `media:read` issued at Admin → API Keys, sent over a secure channel | AI Cave |
 | `COMMUNITY_PUBLIC_API_BASE_URL` set on core (origin of the media URLs) | AI Cave |
-| `PUT` / `DELETE /items/{id}` implemented and idempotent | Community |
-| Webhook calls on review and removal | Community |
+| Poll `GET /integration/publications` | Community |

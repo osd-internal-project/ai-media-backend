@@ -42,9 +42,6 @@ export const communityConfigs = registerAs('community', () => ({
    * และหลัง ingress ที่ตั้ง x-forwarded-* ถูกต้อง)
    */
   publicApiBaseUrl: process.env.COMMUNITY_PUBLIC_API_BASE_URL ?? '',
-  /** API ของ Community (Foundise) ที่ core ส่งงานที่เผยแพร่ไปให้ — ว่าง = เผยแพร่จะ FAILED พร้อมเหตุผล */
-  foundiseApiBaseUrl: process.env.COMMUNITY_API_BASE_URL ?? '',
-  foundiseApiKey: process.env.COMMUNITY_API_KEY ?? '',
 }));
 
 // llmConfigs ถูกลบออก — ไม่เคยถูก register ใน ConfigModule และไม่มีที่ไหนอ่านเลย

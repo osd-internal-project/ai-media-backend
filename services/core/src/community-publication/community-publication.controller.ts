@@ -22,7 +22,6 @@ import {
 } from '@ai-media/share';
 import { CommunityPublicationService } from './community-publication.service';
 import {
-  CommunityWebhookDto,
   ListPublicPublicationsQueryDto,
   PublishToCommunityDto,
 } from './dto/community-publication.dto';
@@ -56,21 +55,7 @@ export class CommunityPublicationController {
   }
 }
 
-/** ระบบ Community เรียกด้วย `x-api-key` ที่ SUPER_ADMIN ออกให้ */
-@Public()
-@UseGuards(ApiKeyGuard)
-@Controller('community/webhook')
-export class CommunityWebhookController {
-  constructor(private readonly service: CommunityPublicationService) {}
-
-  @ApiKeyScopes('webhook')
-  @Post()
-  receive(@Body() dto: CommunityWebhookDto) {
-    return this.service.applyWebhook(dto);
-  }
-}
-
-/** ระบบภายนอกดึงรายการงาน public ทุก org ด้วย `x-api-key` scope `media:read` */
+/** Community / ระบบภายนอกดึงงาน public ด้วย `x-api-key` scope `media:read` — take/skip, กรอง org ได้ */
 @Public()
 @UseGuards(ApiKeyGuard)
 @Controller('integration/publications')

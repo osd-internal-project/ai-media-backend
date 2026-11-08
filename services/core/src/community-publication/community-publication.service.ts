@@ -1,6 +1,4 @@
 import {
-  BadGatewayException,
-  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -11,6 +9,7 @@ import { ConfigType } from '@nestjs/config';
 import {
   CommunityPublication,
   CommunityPublicationStatus,
+  Gallery,
   Prisma,
 } from '@prisma/client';
 import { extname } from 'path';
@@ -19,6 +18,7 @@ import {
   CommunityPublicationRepository,
   GalleryRepository,
   OrganizationMemberRepository,
+  OrganizationRepository,
   StorageUrlService,
   TosService,
   UsersRepository,
@@ -30,18 +30,15 @@ import {
 } from '@ai-media/share';
 import { communityConfigs, tosConfigs } from '../configs';
 import { modelNameOf, OrgGalleryService, PublishBlock } from '../gallery/org-gallery.service';
-import { CommunityClient, CommunityItemMedia } from './community.client';
 import {
-  CommunityWebhookDto,
-  CommunityWebhookEvent,
   ListPublicPublicationsQueryDto,
   PublishToCommunityDto,
 } from './dto/community-publication.dto';
 
-const { PENDING, PUBLISHED, REJECTED, REMOVED, FAILED } = CommunityPublicationStatus;
+const { PENDING, PUBLISHED, REMOVED, FAILED } = CommunityPublicationStatus;
 const MANAGE_ROLES = ['OWNER', 'ADMIN'];
 const PREVIEW_THUMBNAIL_WIDTH = 480;
-/** สถานะที่ Community ยังต้องเปิดไฟล์ preview ได้ (ตรวจงาน / แสดงผล) */
+/** สถานะที่ยังเปิดไฟล์ preview ได้ — PENDING คือกำลัง copy หรือแถวเก่าก่อนเลิก webhook */
 const SERVABLE: CommunityPublicationStatus[] = [PENDING, PUBLISHED];
 
 /** สำเนาใน `community-publication/` — ไม่ใช่ไฟล์ต้นฉบับ */
@@ -57,7 +54,7 @@ export type PublishResult =
   | {
       galleryId: string;
       publicationId: string;
-      status: typeof CommunityPublicationStatus.PENDING;
+      status: typeof CommunityPublicationStatus.PUBLISHED;
     }
   | {
       galleryId: string;
@@ -67,34 +64,28 @@ export type PublishResult =
     }
   | { galleryId: string; status: 'SKIPPED'; reason: PublishSkipReason };
 
-/** event → สถานะใหม่ และสถานะที่เปลี่ยนจากได้ (webhook มาซ้ำหรือช้าต้องไม่ปลุกงานที่ถอดแล้ว) */
-const WEBHOOK_TRANSITIONS: Record<
-  CommunityWebhookEvent,
-  { to: CommunityPublicationStatus; from: CommunityPublicationStatus[] }
-> = {
-  APPROVED: { to: PUBLISHED, from: [PENDING] },
-  REJECTED: { to: REJECTED, from: [PENDING, PUBLISHED] },
-  REMOVED: { to: REMOVED, from: [PENDING, PUBLISHED] },
-};
-
-const galleryInclude = Prisma.validator<Prisma.GalleryInclude>()({
-  users: { select: { token: true, fullname: true } },
-});
-type PublishRow = Prisma.GalleryGetPayload<{ include: typeof galleryInclude }>;
+type PublishRow = Gallery;
 
 const feedInclude = Prisma.validator<Prisma.CommunityPublicationInclude>()({
   gallery: { select: { prompt: true, generateConfig: true } },
 });
 type FeedRow = Prisma.CommunityPublicationGetPayload<{ include: typeof feedInclude }>;
-const FEED_DEFAULT_LIMIT = 50;
+const FEED_DEFAULT_TAKE = 50;
+
+export interface PublicationMedia {
+  type: string;
+  url: string;
+  thumbnailUrl: string | null;
+}
 
 export interface PublicPublication {
   id: string;
   organizationId: string;
+  organizationName: string | null;
   type: string | null;
   modelName: string | null;
   prompt: string | null;
-  media: CommunityItemMedia[];
+  media: PublicationMedia[];
   publishedAt: Date | null;
   updatedAt: Date;
 }
@@ -119,30 +110,29 @@ export class CommunityPublicationService {
     private readonly publicationRepo: CommunityPublicationRepository,
     private readonly galleryRepo: GalleryRepository,
     private readonly orgMemberRepo: OrganizationMemberRepository,
+    private readonly orgRepo: OrganizationRepository,
     private readonly usersRepo: UsersRepository,
     private readonly orgGallery: OrgGalleryService,
     private readonly storageUrl: StorageUrlService,
     private readonly tos: TosService,
-    private readonly client: CommunityClient,
     @Inject(communityConfigs.KEY)
     private readonly config: ConfigType<typeof communityConfigs>,
   ) {}
 
   /**
-   * เผยแพร่งานของตัวเองทีละชิ้น — ชิ้นที่ไม่ผ่านกฎถูกข้ามพร้อมเหตุผล ไม่ล้มทั้งชุด
+   * เผยแพร่งานของตัวเองทีละชิ้น (copy ลง community-publication/ แล้ว PUBLISHED ทันที Community มาดึงเอง)
+   * ชิ้นที่ไม่ผ่านกฎถูกข้ามพร้อมเหตุผล ไม่ล้มทั้งชุด
    * กดซ้ำใช้แถวเดิม (galleryId unique) และ copy ทับ key เดิม
    */
   async publish(user: AuthUser, dto: PublishToCommunityDto): Promise<PublishResult[]> {
     await this.memberRoleOrFail(dto.organizationId, user.userId);
-    const rows = (await this.galleryRepo.findMany({
+    const rows = await this.galleryRepo.findMany({
       where: {
         id: { in: dto.galleryIds },
         project: { organizationId: dto.organizationId },
         OR: [{ genneratedStatus: 'SUCCESS' }, { genneratedStatus: null }],
       },
-      include: galleryInclude,
-      // repository รับ GalleryFindManyArgs แบบไม่ generic จึงเสีย type ของ include
-    })) as PublishRow[];
+    });
     const byId = new Map(rows.map((row) => [row.id, row]));
     const blocks = await this.orgGallery.publishBlocks(rows, user.userId);
 
@@ -158,7 +148,7 @@ export class CommunityPublicationService {
     return results;
   }
 
-  /** ถอดจาก Community — เจ้าของงาน หรือ OWNER/ADMIN ของ org */
+  /** ถอดจาก feed — เจ้าของงาน หรือ OWNER/ADMIN ของ org */
   async unpublish(user: AuthUser, id: string): Promise<CommunityPublication> {
     const publication = await this.publicationRepo.findOne({ where: { id } });
     if (!publication) throw new NotFoundException('Publication not found');
@@ -170,11 +160,6 @@ export class CommunityPublicationService {
     }
     if (publication.status === REMOVED) return publication;
 
-    try {
-      await this.client.deleteItem(publication.id);
-    } catch (error) {
-      throw new BadGatewayException(`Community did not remove the item: ${describe(error)}`);
-    }
     await this.deletePreviews(readPreviewItems(publication.previewItems));
     return this.publicationRepo.update({
       where: { id },
@@ -201,49 +186,35 @@ export class CommunityPublicationService {
     return url;
   }
 
-  /** ผลตรวจ / การถอดจากฝั่ง Community — ส่งซ้ำได้ ผลเท่าเดิม */
-  async applyWebhook(dto: CommunityWebhookDto): Promise<{ status: CommunityPublicationStatus }> {
-    const { to, from } = WEBHOOK_TRANSITIONS[dto.event];
-    const { count } = await this.publicationRepo.updateMany({
-      where: { id: dto.aicavePublicationId, status: { in: from } },
-      data: {
-        status: to,
-        ...(to === PUBLISHED && { publishedAt: new Date(), error: null }),
-        ...(to === REJECTED && { error: dto.reason ?? null }),
-        ...(dto.communityItemId && { communityItemId: dto.communityItemId }),
-      },
-    });
-    if (count === 1) return { status: to };
-
-    const current = await this.publicationRepo.findOne({
-      where: { id: dto.aicavePublicationId },
-    });
-    if (!current) throw new NotFoundException('Publication not found');
-    if (current.status === to) return { status: to };
-    throw new ConflictException(`Cannot apply ${dto.event} to a ${current.status} publication`);
-  }
-
-  /** งานที่ Community อนุมัติและเปิด PUBLIC ทุก org — คืนเป็น link คงที่ ไม่ใช่ไฟล์ */
+  /** งาน PUBLISHED + PUBLIC (ทุก org หรือ org เดียว) ใหม่สุดก่อน — คืนเป็น link คงที่ ไม่ใช่ไฟล์ */
   async listPublic(
     query: ListPublicPublicationsQueryDto,
-  ): Promise<{ items: PublicPublication[]; nextCursor: string | null }> {
-    const limit = query.limit ?? FEED_DEFAULT_LIMIT;
-    const rows = (await this.publicationRepo.findMany({
-      where: {
-        status: PUBLISHED,
-        visibility: 'PUBLIC',
-        ...(query.updatedSince && { updatedAt: { gte: new Date(query.updatedSince) } }),
-      },
-      include: feedInclude,
-      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
-      take: limit + 1,
-      ...(query.cursor && { cursor: { id: query.cursor }, skip: 1 }),
-      // repository รับ FindManyArgs แบบไม่ generic จึงเสีย type ของ include
-    })) as FeedRow[];
-    const page = rows.slice(0, limit);
+  ): Promise<{ items: PublicPublication[]; total: number; take: number; skip: number }> {
+    const take = query.take ?? FEED_DEFAULT_TAKE;
+    const skip = query.skip ?? 0;
+    const where: Prisma.CommunityPublicationWhereInput = {
+      status: PUBLISHED,
+      visibility: 'PUBLIC',
+      ...(query.organizationId && { organizationId: query.organizationId }),
+      ...(query.updatedSince && { updatedAt: { gte: new Date(query.updatedSince) } }),
+    };
+    const [rows, total] = await Promise.all([
+      this.publicationRepo.findMany({
+        where,
+        include: feedInclude,
+        orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
+        take,
+        skip,
+        // repository รับ FindManyArgs แบบไม่ generic จึงเสีย type ของ include
+      }) as Promise<FeedRow[]>,
+      this.publicationRepo.count({ where }),
+    ]);
+    const orgNames = await this.orgNames(rows.map((row) => row.organizationId));
     return {
-      items: page.map((row) => this.toPublicPublication(row)),
-      nextCursor: rows.length > limit ? page[page.length - 1].id : null,
+      items: rows.map((row) => this.toPublicPublication(row, orgNames.get(row.organizationId) ?? null)),
+      total,
+      take,
+      skip,
     };
   }
 
@@ -305,30 +276,13 @@ export class CommunityPublicationService {
       await this.publicationRepo.update({
         where: { id: publication.id },
         // interface ไม่มี index signature จึงไม่เข้ากับ InputJsonValue ทั้งที่เป็น JSON ล้วน
-        data: { previewItems: previewItems as unknown as Prisma.InputJsonValue },
+        data: {
+          previewItems: previewItems as unknown as Prisma.InputJsonValue,
+          status: PUBLISHED,
+          publishedAt: new Date(),
+        },
       });
-      const communityItemId = await this.client.upsertItem({
-        aicavePublicationId: publication.id,
-        creator: { keycloakSub: row.users.token, fullname: row.users.fullname },
-        organizationId,
-        visibility: dto.visibility,
-        type: toGenerationTypeKey(row.typeGenerate),
-        modelName: modelNameOf(row.generateConfig),
-        prompt: dto.includePrompt ? row.prompt : null,
-        media: previewItems.map((item, index) => ({
-          type: toGenerationTypeKey(item.typeGenerate) ?? item.typeGenerate,
-          url: this.previewUrl(publication.id, index, false),
-          thumbnailUrl: this.previewUrl(publication.id, index, true),
-        })),
-        createdAt: row.createdAt.toISOString(),
-      });
-      if (communityItemId) {
-        await this.publicationRepo.update({
-          where: { id: publication.id },
-          data: { communityItemId },
-        });
-      }
-      return { galleryId: row.id, publicationId: publication.id, status: PENDING };
+      return { galleryId: row.id, publicationId: publication.id, status: PUBLISHED };
     } catch (error) {
       const message = describe(error);
       this.logger.error(`publish ${publication.id} failed: ${message}`);
@@ -385,11 +339,21 @@ export class CommunityPublicationService {
     await Promise.all(keys.map((key) => this.tos.deleteObject(this.bucket, key)));
   }
 
-  private toPublicPublication(row: FeedRow): PublicPublication {
+  private async orgNames(organizationIds: string[]): Promise<Map<string, string>> {
+    if (organizationIds.length === 0) return new Map();
+    const orgs = await this.orgRepo.findMany({
+      where: { organizationId: { in: [...new Set(organizationIds)] } },
+      select: { organizationId: true, name: true },
+    });
+    return new Map(orgs.map((org) => [org.organizationId, org.name]));
+  }
+
+  private toPublicPublication(row: FeedRow, organizationName: string | null): PublicPublication {
     const items = readPreviewItems(row.previewItems);
     return {
       id: row.id,
       organizationId: row.organizationId,
+      organizationName,
       type: items[0] ? toGenerationTypeKey(items[0].typeGenerate) : null,
       modelName: modelNameOf(row.gallery?.generateConfig ?? null),
       prompt: row.includePrompt ? (row.gallery?.prompt ?? null) : null,

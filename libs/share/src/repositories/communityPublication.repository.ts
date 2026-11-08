@@ -4,7 +4,7 @@ import { TQueryClient } from '../modules/prisma/types';
 import { Prisma } from '@prisma/client';
 
 /**
- * Repository สำหรับตาราง community_publication (ผลงานที่ส่งไป Community)
+ * Repository สำหรับตาราง community_publication (ผลงานที่เผยแพร่ให้ Community ดึง)
  * ห่อ PrismaService ตามแพทเทิร์นเดียวกับ repository อื่นในโปรเจกต์
  */
 @Injectable()
@@ -17,6 +17,14 @@ export class CommunityPublicationRepository {
   ) {
     const prisma = option?.prisma ?? this.prisma;
     return prisma.communityPublication.findMany(condition);
+  }
+
+  async count(
+    condition: Prisma.CommunityPublicationCountArgs,
+    option?: { prisma?: TQueryClient },
+  ) {
+    const prisma = option?.prisma ?? this.prisma;
+    return prisma.communityPublication.count(condition);
   }
 
   async findOne(
