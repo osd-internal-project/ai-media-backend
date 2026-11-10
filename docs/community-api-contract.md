@@ -80,6 +80,7 @@ Response `200`. Results are sorted by `publishedAt`, then `id`, both descending:
           "thumbnailUrl": "https://api.aicave.ai/public/community-publication/6f1c…/media/0?thumbnail=1"
         }
       ],
+      "visibility": "PUBLIC",
       "publishedAt": "2026-11-01T08:00:00.000Z",
       "updatedAt": "2026-11-01T08:00:00.000Z"
     }
@@ -95,6 +96,7 @@ Response `200`. Results are sorted by `publishedAt`, then `id`, both descending:
 | `organizationName` | `null` when the organization no longer exists. |
 | `type` | `image`, `video`, `omnihuman`, `dreamactor` or `audio`. |
 | `prompt` | `null` unless the creator chose to show it. |
+| `visibility` | `PUBLIC` (everyone on Community) or `PRIVATE` (only the creator). This endpoint returns only `PUBLIC`. |
 | `media[].url` | Stable URL that you can put in `<img src>`. It answers `302` to a short-lived signed URL, so fetch with redirects on. Store the stable URL, not the signed one. |
 | `media[].thumbnailUrl` | Same rule. Returns `404` when the work has no thumbnail, for example audio. |
 | `total` | Number of works that match the query, for paging. |
@@ -109,6 +111,23 @@ for incremental syncs.
 Errors: `400` for invalid query values. `401` when the key is missing, unknown or
 revoked. `403` when the key lacks scope `media:read`.
 
+### GET /integration/me/publications
+
+Lists the published works (`PUBLISHED`) that the signed-in user created, both `PUBLIC`
+and `PRIVATE`. Community decides who sees a `PRIVATE` work: show it only to its creator.
+Send both the user's Keycloak token and the API key:
+
+```
+Authorization: Bearer <user access token>
+x-api-key: aick_…
+```
+
+Takes the same query parameters (`organizationId`, `updatedSince`, `take`, `skip`) and
+returns the same response shape as `GET /integration/publications`.
+
+Errors: `400` for invalid query values. `401` when the token or the key is missing,
+expired, unknown or revoked. `403` when the key lacks scope `media:read`.
+
 ### Original files (Phase 2)
 
 Phase 1 has no endpoint for original files. Phase 2 adds
@@ -119,7 +138,8 @@ an order ID and returns a short-lived signed URL.
 
 | Item | Owner |
 |---|---|
-| Keycloak client for Community in `eportal`, ID added to `KEYCLOAK_ALLOWED_CLIENTS` (only for `POST /community/link`) | AI Cave |
+| Keycloak client for Community in `eportal`, ID added to `KEYCLOAK_ALLOWED_CLIENTS` (for `POST /community/link` and `GET /integration/me/publications`) | AI Cave |
 | API key with scope `media:read` issued at Admin → API Keys, sent over a secure channel | AI Cave |
 | `COMMUNITY_PUBLIC_API_BASE_URL` set on core (origin of the media URLs) | AI Cave |
 | Poll `GET /integration/publications` | Community |
+| Call `GET /integration/me/publications` with the user's token for "my works" | Community |

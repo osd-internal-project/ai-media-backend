@@ -72,12 +72,13 @@ describe('CommunityPublicationService', () => {
       { findMany: orgFindMany } as never,
       {} as never,
       {
+        orgWideOrFail: jest.fn().mockResolvedValue(true),
         publishBlocks: jest.fn(
           async () =>
             new Map([
               ['mine', null],
               ['blocked', 'MODEL_NOT_ALLOWED'],
-              ['theirs', 'NOT_OWNER'],
+              ['theirs', 'ROLE_NOT_ALLOWED'],
             ]),
         ),
       } as never,
@@ -95,12 +96,12 @@ describe('CommunityPublicationService', () => {
       includePrompt: false,
     });
 
-  it('publishes only my work on allowed models and says why the rest were skipped', async () => {
+  it('publishes allowed items and says why the rest were skipped', async () => {
     const results = await publish(['mine', 'blocked', 'theirs', 'ghost']);
     expect(results).toEqual([
       { galleryId: 'mine', publicationId: 'pub-1', status: 'PUBLISHED' },
       { galleryId: 'blocked', status: 'SKIPPED', reason: 'MODEL_NOT_ALLOWED' },
-      { galleryId: 'theirs', status: 'SKIPPED', reason: 'NOT_OWNER' },
+      { galleryId: 'theirs', status: 'SKIPPED', reason: 'ROLE_NOT_ALLOWED' },
       { galleryId: 'ghost', status: 'SKIPPED', reason: 'NOT_FOUND' },
     ]);
   });
@@ -143,6 +144,7 @@ describe('CommunityPublicationService', () => {
       id,
       organizationId: 'o1',
       includePrompt: false,
+      visibility: 'PUBLIC',
       previewItems: [{ key: 'k0', thumbnailKey: null, typeGenerate: 'image', order: 0 }],
       publishedAt: new Date('2026-11-01T00:00:00Z'),
       updatedAt: new Date('2026-11-02T00:00:00Z'),
@@ -184,6 +186,7 @@ describe('CommunityPublicationService', () => {
                 thumbnailUrl: 'https://api.aicave.ai/public/community-publication/pub-9/media/0?thumbnail=1',
               },
             ],
+            visibility: 'PUBLIC',
             publishedAt: new Date('2026-11-01T00:00:00Z'),
             updatedAt: new Date('2026-11-02T00:00:00Z'),
           },
@@ -227,6 +230,16 @@ describe('CommunityPublicationService', () => {
       publications.count.mockResolvedValue(0);
       await expect(service.listPublic({})).resolves.toMatchObject({ items: [], total: 0 });
       expect(orgFindMany).not.toHaveBeenCalled();
+    });
+
+    it("listMine returns only the token user's PUBLISHED work, PUBLIC and PRIVATE alike", async () => {
+      publications.findMany.mockResolvedValue([feedRow('a'), feedRow('b', { visibility: 'PRIVATE' })]);
+      const { items } = await service.listMine(me, { organizationId: 'o1' });
+
+      const where = { status: 'PUBLISHED', userId: 'me', organizationId: 'o1' };
+      expect(publications.findMany.mock.calls[0][0].where).toEqual(where);
+      expect(publications.count).toHaveBeenCalledWith({ where });
+      expect(items.map((i) => i.visibility)).toEqual(['PUBLIC', 'PRIVATE']);
     });
   });
 });

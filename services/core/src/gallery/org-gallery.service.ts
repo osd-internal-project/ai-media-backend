@@ -4,19 +4,20 @@ import {
   GalleryRepository,
   MasterdataModelTypeRepository,
   OrganizationMemberRepository,
+  AuthUser,
   StorageUrlService,
   buildOutputKey,
   dbValuesForKey,
   resolveGalleryResultUrls,
   toGenerationTypeKey,
 } from '@ai-media/share';
-import { OrgGalleryQueryDto } from './dto/org-gallery-query.dto';
+import { OrgGalleryQueryDto, PublishStatusFilter } from './dto/org-gallery-query.dto';
 
 const ORG_WIDE_ROLES = ['OWNER', 'ADMIN'];
 const THUMBNAIL_WIDTH = 480;
 
 /** เหตุที่กดเผยแพร่ไม่ได้ — null = เผยแพร่ได้ */
-export type PublishBlock = 'NOT_OWNER' | 'MODEL_NOT_ALLOWED' | null;
+export type PublishBlock = 'ROLE_NOT_ALLOWED' | 'MODEL_NOT_ALLOWED' | null;
 
 const galleryInclude = Prisma.validator<Prisma.GalleryInclude>()({
   project: { select: { organizationId: true } },
@@ -38,6 +39,16 @@ const durationOf = (config: Prisma.JsonValue | null): number | null => {
   return Number.isFinite(duration) && duration > 0 ? duration : null;
 };
 
+const publishStatusWhere = (status: PublishStatusFilter): Prisma.GalleryWhereInput => {
+  if (status === 'NONE') return { publication: { is: null } };
+  if (status === 'UNPUBLISHED') {
+    return {
+      OR: [{ publication: { is: null } }, { publication: { is: { status: { not: 'PUBLISHED' } } } }],
+    };
+  }
+  return { publication: { is: { status } } };
+};
+
 @Injectable()
 export class OrgGalleryService {
   constructor(
@@ -48,36 +59,40 @@ export class OrgGalleryService {
   ) {}
 
   /**
-   * ผลงานสำเร็จทุก project ของ org — OWNER/ADMIN เห็นทั้ง org, role อื่นเห็นเฉพาะของตัวเอง
-   * @throws ForbiddenException เมื่อไม่ใช่สมาชิกของ org
+   * SUPER_ADMIN หรือ OWNER/ADMIN ของ org = เห็นและเผยแพร่งานทั้ง org; role อื่นเห็นเฉพาะของตัวเองและเผยแพร่ไม่ได้
+   * @throws ForbiddenException เมื่อไม่ใช่ SUPER_ADMIN และไม่ใช่สมาชิกของ org
    */
-  async findByOrg(organizationId: string, userId: string, query: OrgGalleryQueryDto) {
+  async orgWideOrFail(organizationId: string, user: AuthUser): Promise<boolean> {
+    if (user.role === 'SUPER_ADMIN') return true;
     const member = await this.orgMemberRepo.findOne({
-      where: { organizationId, userId },
+      where: { organizationId, userId: user.userId },
     });
     if (!member) {
       throw new ForbiddenException('Not a member of this organization');
     }
-    const orgWide = ORG_WIDE_ROLES.includes(member.role);
+    return ORG_WIDE_ROLES.includes(member.role);
+  }
+
+  /** ผลงานสำเร็จทุก project ของ org — ขอบเขตตาม orgWideOrFail */
+  async findByOrg(organizationId: string, user: AuthUser, query: OrgGalleryQueryDto) {
+    const orgWide = await this.orgWideOrFail(organizationId, user);
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 24;
 
-    const where: Prisma.GalleryWhereInput = {
+    const base: Prisma.GalleryWhereInput = {
       project: { organizationId },
       // แถวเก่าบางแถวไม่มีสถานะ — เก็บไว้แบบเดียวกับ hideFailed ของ All Activity
       OR: [{ genneratedStatus: 'SUCCESS' }, { genneratedStatus: null }],
       ...(orgWide
         ? query.memberId && { userId: query.memberId }
-        : { userId }),
+        : { userId: user.userId }),
       ...(query.type && { typeGenerate: { in: dbValuesForKey(query.type) } }),
-      ...(query.publishStatus === 'NONE' && { publication: { is: null } }),
-      ...(query.publishStatus &&
-        query.publishStatus !== 'NONE' && {
-          publication: { is: { status: query.publishStatus } },
-        }),
     };
+    const where = query.publishStatus
+      ? { AND: [base, publishStatusWhere(query.publishStatus)] }
+      : base;
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, all, published] = await Promise.all([
       this.galleryRepo.findMany({
         where,
         include: galleryInclude,
@@ -87,27 +102,35 @@ export class OrgGalleryService {
         // repository รับ GalleryFindManyArgs แบบไม่ generic จึงเสีย type ของ include
       }) as Promise<OrgGalleryRow[]>,
       this.galleryRepo.count({ where }),
+      this.galleryRepo.count({ where: base }),
+      this.galleryRepo.count({ where: { AND: [base, publishStatusWhere('PUBLISHED')] } }),
     ]);
 
-    const blocks = await this.publishBlocks(rows, userId);
+    const blocks = await this.publishBlocks(rows, orgWide);
     const data = await Promise.all(
       rows.map((row) => this.toItem(organizationId, row, blocks.get(row.id) ?? null)),
     );
-    return { data, total, page, pageSize };
+    return {
+      data,
+      total,
+      page,
+      pageSize,
+      counts: { all, published, unpublished: all - published },
+    };
   }
 
-  /** เหตุที่ userId เผยแพร่แต่ละแถวไม่ได้ — กฎเดียวกับปุ่มในหน้า Gallery และ POST /community/publications */
+  /** เหตุที่เผยแพร่แต่ละแถวไม่ได้ — กฎเดียวกับปุ่มในหน้า Gallery และ POST /community/publications */
   async publishBlocks(
-    rows: Pick<OrgGalleryRow, 'id' | 'userId' | 'generateConfig'>[],
-    userId: string,
+    rows: Pick<OrgGalleryRow, 'id' | 'generateConfig'>[],
+    canPublish: boolean,
   ): Promise<Map<string, PublishBlock>> {
     const allowedModels = await this.publishableModels(rows);
     return new Map(
       rows.map((row) => {
         const modelName = modelNameOf(row.generateConfig);
         const block: PublishBlock =
-          row.userId !== userId
-            ? 'NOT_OWNER'
+          !canPublish
+            ? 'ROLE_NOT_ALLOWED'
             : !modelName || !allowedModels.has(modelName)
               ? 'MODEL_NOT_ALLOWED'
               : null;

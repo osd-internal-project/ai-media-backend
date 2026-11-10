@@ -5,6 +5,7 @@ import { communityConfigs } from '../configs';
 import { GalleryModule } from '../gallery/gallery.module';
 import {
   CommunityPublicationController,
+  IntegrationMyPublicationController,
   IntegrationPublicationController,
   PublicCommunityPublicationController,
 } from './community-publication.controller';
@@ -27,6 +28,7 @@ import {
     PublicCommunityPublicationController,
     IntegrationApiKeyController,
     IntegrationPublicationController,
+    IntegrationMyPublicationController,
   ],
   providers: [CommunityPublicationService, IntegrationApiKeyService, ApiKeyGuard],
 })

@@ -3,9 +3,10 @@ import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { CommunityPublicationStatus } from '@prisma/client';
 import { GENERATION_TYPE_KEYS, GenerationTypeKey } from '@ai-media/share';
 
-/** 'NONE' = งานที่ยังไม่เคยส่งไป Community */
+/** 'NONE' = ยังไม่เคยส่งไป Community; 'UNPUBLISHED' = ทุกอย่างที่ยังไม่ PUBLISHED (รวม NONE) */
 export const PUBLISH_STATUS_FILTERS = [
   'NONE',
+  'UNPUBLISHED',
   ...Object.values(CommunityPublicationStatus),
 ] as const;
 export type PublishStatusFilter = (typeof PUBLISH_STATUS_FILTERS)[number];

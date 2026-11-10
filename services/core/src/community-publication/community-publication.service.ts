@@ -9,6 +9,7 @@ import { ConfigType } from '@nestjs/config';
 import {
   CommunityPublication,
   CommunityPublicationStatus,
+  CommunityVisibility,
   Gallery,
   Prisma,
 } from '@prisma/client';
@@ -86,6 +87,7 @@ export interface PublicPublication {
   modelName: string | null;
   prompt: string | null;
   media: PublicationMedia[];
+  visibility: CommunityVisibility;
   publishedAt: Date | null;
   updatedAt: Date;
 }
@@ -120,12 +122,12 @@ export class CommunityPublicationService {
   ) {}
 
   /**
-   * เผยแพร่งานของตัวเองทีละชิ้น (copy ลง community-publication/ แล้ว PUBLISHED ทันที Community มาดึงเอง)
+   * เผยแพร่งานใน org ทีละชิ้น (เฉพาะ SUPER_ADMIN / OWNER / ADMIN) (copy ลง community-publication/ แล้ว PUBLISHED ทันที Community มาดึงเอง)
    * ชิ้นที่ไม่ผ่านกฎถูกข้ามพร้อมเหตุผล ไม่ล้มทั้งชุด
    * กดซ้ำใช้แถวเดิม (galleryId unique) และ copy ทับ key เดิม
    */
   async publish(user: AuthUser, dto: PublishToCommunityDto): Promise<PublishResult[]> {
-    await this.memberRoleOrFail(dto.organizationId, user.userId);
+    const canPublish = await this.orgGallery.orgWideOrFail(dto.organizationId, user);
     const rows = await this.galleryRepo.findMany({
       where: {
         id: { in: dto.galleryIds },
@@ -134,7 +136,7 @@ export class CommunityPublicationService {
       },
     });
     const byId = new Map(rows.map((row) => [row.id, row]));
-    const blocks = await this.orgGallery.publishBlocks(rows, user.userId);
+    const blocks = await this.orgGallery.publishBlocks(rows, canPublish);
 
     const results: PublishResult[] = [];
     // ทีละชิ้น: แต่ละชิ้น copy หลายไฟล์บน TOS อยู่แล้ว
@@ -187,14 +189,23 @@ export class CommunityPublicationService {
   }
 
   /** งาน PUBLISHED + PUBLIC (ทุก org หรือ org เดียว) ใหม่สุดก่อน — คืนเป็น link คงที่ ไม่ใช่ไฟล์ */
-  async listPublic(
+  listPublic(query: ListPublicPublicationsQueryDto) {
+    return this.listFeed({ status: PUBLISHED, visibility: 'PUBLIC' }, query);
+  }
+
+  /** งาน PUBLISHED ที่ user เป็นคนสร้าง ทั้ง PUBLIC และ PRIVATE — Community กรอง visibility เอง */
+  listMine(user: AuthUser, query: ListPublicPublicationsQueryDto) {
+    return this.listFeed({ status: PUBLISHED, userId: user.userId }, query);
+  }
+
+  private async listFeed(
+    scope: Prisma.CommunityPublicationWhereInput,
     query: ListPublicPublicationsQueryDto,
   ): Promise<{ items: PublicPublication[]; total: number; take: number; skip: number }> {
     const take = query.take ?? FEED_DEFAULT_TAKE;
     const skip = query.skip ?? 0;
     const where: Prisma.CommunityPublicationWhereInput = {
-      status: PUBLISHED,
-      visibility: 'PUBLIC',
+      ...scope,
       ...(query.organizationId && { organizationId: query.organizationId }),
       ...(query.updatedSince && { updatedAt: { gte: new Date(query.updatedSince) } }),
     };
@@ -362,6 +373,7 @@ export class CommunityPublicationService {
         url: this.previewUrl(row.id, index, false),
         thumbnailUrl: this.previewUrl(row.id, index, true),
       })),
+      visibility: row.visibility,
       publishedAt: row.publishedAt,
       updatedAt: row.updatedAt,
     };

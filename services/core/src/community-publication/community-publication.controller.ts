@@ -69,6 +69,19 @@ export class IntegrationPublicationController {
   }
 }
 
+/** Community ดึงงานที่ user เป็นคนสร้าง — ต้องมีทั้ง Keycloak token ของ user และ `x-api-key` scope `media:read` */
+@UseGuards(ApiKeyGuard)
+@Controller('integration/me/publications')
+export class IntegrationMyPublicationController {
+  constructor(private readonly service: CommunityPublicationService) {}
+
+  @ApiKeyScopes('media:read')
+  @Get()
+  list(@CurrentUser() user: AuthUser | undefined, @Query() query: ListPublicPublicationsQueryDto) {
+    return this.service.listMine(requireUser(user), query);
+  }
+}
+
 /** URL คงที่ของไฟล์ preview — 302 ไป presigned ใหม่ทุกครั้ง แบบเดียวกับ public/community/:slug/media */
 @Public()
 @Controller('public/community-publication')

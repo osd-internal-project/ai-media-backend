@@ -56,7 +56,7 @@ export class GalleryController {
     @CurrentUser() authUser: AuthUser | undefined,
   ) {
     if (!authUser) throw new UnauthorizedException();
-    return this.orgGalleryService.findByOrg(organizationId, authUser.userId, query);
+    return this.orgGalleryService.findByOrg(organizationId, authUser, query);
   }
 
   @Get(':projectId')
