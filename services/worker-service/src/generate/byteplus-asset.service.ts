@@ -22,18 +22,40 @@ interface OpenApiResponse {
   Result?: Record<string, unknown>;
 }
 
-type AssetErrorKind = 'auth' | 'rate' | 'rejected' | 'timeout' | 'other';
+type AssetErrorKind =
+  | 'auth'
+  | 'rate'
+  | 'rejected'
+  | 'missing'
+  | 'timeout'
+  | 'other';
 
 /** error ภายใน — message มีรายละเอียด provider (ห้ามส่งถึงผู้ใช้), kind ใช้เลือกข้อความผู้ใช้ */
 export class AssetApiError extends Error {
-  constructor(message: string, readonly kind: AssetErrorKind) {
+  constructor(
+    message: string,
+    readonly kind: AssetErrorKind,
+    readonly code?: string,
+  ) {
     super(message);
+  }
+}
+
+/** error ที่ส่งออกจาก service — message = ข้อความผู้ใช้, kind/code ไว้บันทึกลง error_logs (code ไม่มี key) */
+export class AssetStepError extends Error {
+  constructor(
+    readonly kind: AssetErrorKind,
+    readonly code: string | undefined,
+  ) {
+    super(USER_MESSAGES[kind]);
   }
 }
 
 const USER_MESSAGES: Record<AssetErrorKind, string> = {
   rejected:
     "Your reference image couldn't be used. Please try a different image.",
+  missing:
+    'Your reference image is no longer available. Please remove it and upload it again.',
   timeout: 'Preparing your reference image took too long. Please try again.',
   rate: 'The service is busy right now. Please try again in a moment.',
   auth: "We couldn't prepare your reference image right now. Please try again later.",
@@ -43,9 +65,12 @@ const USER_MESSAGES: Record<AssetErrorKind, string> = {
 
 const AUTH_CODES = /InvalidAccessKey|SignatureDoesNotMatch|AccessDenied/i;
 const RATE_CODES = /Limit|Throttl/i;
+// Ark fetches the presigned TOS URL itself; this code means the object is gone (seen on prod: "fetch object not found")
+const MISSING_CODES = /DownloadFailed/i;
 
 const classify = (status: number | undefined, code = ''): AssetErrorKind => {
   if (status === 401 || status === 403 || AUTH_CODES.test(code)) return 'auth';
+  if (MISSING_CODES.test(code)) return 'missing';
   if (status === 429 || RATE_CODES.test(code)) return 'rate';
   return 'other';
 };
@@ -108,7 +133,8 @@ export class ByteplusAssetService {
         }),
       );
     } catch (error) {
-      const kind = error instanceof AssetApiError ? error.kind : 'other';
+      const apiError = error instanceof AssetApiError ? error : undefined;
+      const kind = apiError?.kind ?? 'other';
       // รายละเอียดเต็มไว้ debug ใน log เท่านั้น — ผู้ใช้เห็นแค่ USER_MESSAGES
       this.logger.error(
         `[${taskId}] ❌ asset step failed (${kind}): ${
@@ -116,7 +142,7 @@ export class ByteplusAssetService {
         }`,
       );
       await this.cleanup(taskId, assets);
-      throw new Error(USER_MESSAGES[kind]);
+      throw new AssetStepError(kind, apiError?.code);
     }
     this.logger.log(
       `[${taskId}] ${assets.assetIds.length} image(s) → asset group=${assets.groupId}`,
@@ -237,6 +263,7 @@ export class ByteplusAssetService {
         throw new AssetApiError(
           `${action}: ${apiError.Code} ${apiError.Message}`,
           classify(res.status, apiError.Code),
+          apiError.Code,
         );
       }
       return res.data?.Result ?? {};
@@ -250,6 +277,7 @@ export class ByteplusAssetService {
           apiError ? `${apiError.Code} ${apiError.Message}` : error.message
         }`,
         classify(status, apiError?.Code),
+        apiError?.Code ?? (status ? `HTTP ${status}` : undefined),
       );
     }
   }

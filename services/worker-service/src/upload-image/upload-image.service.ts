@@ -10,6 +10,7 @@ import { appConfigs, tosConfigs } from '../configs';
 import {
   AuthUser,
   GalleryRepository,
+  LogRepository,
   PromptGuideImageRepository,
   RefImageRepository,
   StorageUrlService,
@@ -74,7 +75,21 @@ export class UploadImageService {
     private readonly storageUrl: StorageUrlService,
     private readonly access: UploadAccessService,
     private readonly galleryRepository: GalleryRepository,
+    private readonly logRepository: LogRepository,
   ) {}
+
+  /** key ที่ประวัติ (log.reference_images) ยังชี้อยู่ — ลบไฟล์แล้วรูป ref ในประวัติจะเป็น "No Image" */
+  private async referencedKeys(keys: string[]): Promise<Set<string>> {
+    if (keys.length === 0) return new Set();
+    const rows = await this.logRepository.findMany({
+      where: { referenceImages: { hasSome: keys } },
+      select: { referenceImages: true },
+    });
+    const wanted = new Set(keys);
+    return new Set(
+      rows.flatMap((r) => r.referenceImages).filter((k) => wanted.has(k)),
+    );
+  }
 
   async deleteImage(uid: string, user?: AuthUser) {
     const bucketName = tosConfigs().tosBucket;
@@ -87,12 +102,29 @@ export class UploadImageService {
       throw new ConflictException('File not found');
     }
     await this.access.assertCanManageRef(user, file);
+    if ((await this.referencedKeys([file.imagePath])).size > 0) {
+      // เอาออกจากฟอร์มได้ แต่ไฟล์ต้องอยู่ต่อเพื่อประวัติ — completed = cron ไม่ลบ
+      await this.refImageRepository.updateMany({
+        where: { uid },
+        data: { status: 'completed' },
+      });
+      this.logger.log(
+        `📌 [ref] kept ${uid} (${file.imagePath}) — used by history, by ${
+          user?.userId ?? '-'
+        }`,
+      );
+      return;
+    }
     await this.refImageRepository.deleteMany({
       where: {
         uid: uid,
       },
     });
     await this.tosService.deleteObject(bucketName, file.imagePath);
+    // ref ที่ถูกลบแล้วยังถูกส่งไป generate ได้ (DownloadFailed บน prod) — log ไว้ไล่ว่าใครลบเมื่อไร
+    this.logger.log(
+      `🗑️ [ref] deleted ${uid} (${file.imagePath}) by ${user?.userId ?? '-'}`,
+    );
   }
   async uploadImageFromPrompt(
     userId: string,
@@ -163,6 +195,14 @@ export class UploadImageService {
     }
     await this.access.assertCanManagePromptGuideImage(user, file);
     const bucketname = tosConfigs().tosBucket;
+    if ((await this.referencedKeys([file.imagePath])).size > 0) {
+      await this.promptGuideImageRepository.updateMany({
+        where: { uid },
+        data: { status: 'completed' },
+      });
+      this.logger.log(`📌 [prompt-guide] kept ${uid} — used by history`);
+      return;
+    }
     await this.promptGuideImageRepository.deleteMany({
       where: {
         uid: uid,
@@ -445,9 +485,18 @@ export class UploadImageService {
         },
       },
     });
-    Logger.log(`Found ${files.length} files to delete`);
+    const used = await this.referencedKeys(files.map((f) => f.imagePath));
+    Logger.log(
+      `Found ${files.length} stale refs, ${used.size} kept for history`,
+    );
     for (const file of files) {
-      const ext = path.extname(file.imagePath);
+      if (used.has(file.imagePath)) {
+        await this.refImageRepository.updateMany({
+          where: { uid: file.uid },
+          data: { status: 'completed' },
+        });
+        continue;
+      }
       await this.tosService.deleteObject(
         tosConfigs().tosBucket,
         file.imagePath,
@@ -468,8 +517,15 @@ export class UploadImageService {
         },
       },
     });
-    // Logger.log(`Found ${files.length} files to delete`);
+    const used = await this.referencedKeys(files.map((f) => f.imagePath));
     for (const file of files) {
+      if (used.has(file.imagePath)) {
+        await this.promptGuideImageRepository.updateMany({
+          where: { uid: file.uid },
+          data: { status: 'completed' },
+        });
+        continue;
+      }
       await this.tosService.deleteObject(
         tosConfigs().tosBucket,
         file.imagePath,

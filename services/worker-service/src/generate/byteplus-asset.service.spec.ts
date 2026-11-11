@@ -188,6 +188,41 @@ describe('ByteplusAssetService', () => {
     expect((err as Error).message).not.toMatch(/AKAP|401|InvalidAccessKey/);
   });
 
+  it('400 DownloadFailed (object gone from TOS) → asks the user to upload again', async () => {
+    axiosPost.mockImplementation(async (url: string) => {
+      const action = new URL(url).searchParams.get('Action');
+      if (action === 'CreateAsset') {
+        throw {
+          isAxiosError: true,
+          message: 'Request failed with status code 400',
+          response: {
+            status: 400,
+            data: {
+              ResponseMetadata: {
+                Error: {
+                  Code: 'InvalidParameter.DownloadFailed',
+                  Message:
+                    'Failed to download media from the provided URL. tos: request error:  Message=fetch object not found',
+                },
+              },
+            },
+          },
+        };
+      }
+      return { data: { Result: { Id: 'group-1' } } };
+    });
+    const err = await service
+      .swapImagesToAssets(oneImage(), 't1')
+      .catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      message:
+        'Your reference image is no longer available. Please remove it and upload it again.',
+      kind: 'missing',
+      code: 'InvalidParameter.DownloadFailed',
+    });
+    expect(actions()).toContain('DeleteAssetGroup');
+  });
+
   it('429 rate limit → asks the user to retry in a moment, still cleans up', async () => {
     mockApi([]);
     axiosPost.mockImplementation(async (url: string) => {

@@ -25,6 +25,7 @@ import {
   UsersRepository,
   buildCommunityPreviewKey,
   buildOutputKey,
+  dbValuesForKey,
   isAbsoluteUrl,
   resolveGalleryResultUrls,
   toGenerationTypeKey,
@@ -208,6 +209,22 @@ export class CommunityPublicationService {
       ...scope,
       ...(query.organizationId && { organizationId: query.organizationId }),
       ...(query.updatedSince && { updatedAt: { gte: new Date(query.updatedSince) } }),
+      ...((query.publishedFrom || query.publishedTo) && {
+        publishedAt: {
+          ...(query.publishedFrom && { gte: new Date(query.publishedFrom) }),
+          ...(query.publishedTo && { lte: new Date(query.publishedTo) }),
+        },
+      }),
+      ...((query.type || query.modelName) && {
+        gallery: {
+          is: {
+            ...(query.type && { typeGenerate: { in: dbValuesForKey(query.type) } }),
+            ...(query.modelName && {
+              generateConfig: { path: ['modelName'], equals: query.modelName },
+            }),
+          },
+        },
+      }),
     };
     const [rows, total] = await Promise.all([
       this.publicationRepo.findMany({

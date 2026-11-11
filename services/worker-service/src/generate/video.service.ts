@@ -34,7 +34,11 @@ import axios from 'axios';
 import * as https from 'https';
 import { GenerateHelperService } from './generate-helper.service';
 import { VideoStorageService } from './video-storage.service';
-import { ByteplusAssetService, TaskAssets } from './byteplus-asset.service';
+import {
+  AssetStepError,
+  ByteplusAssetService,
+  TaskAssets,
+} from './byteplus-asset.service';
 import { acquireVideoSlot, releaseVideoSlot, slotLimit } from './video-slot';
 import { userFacingMessage } from './user-facing-error';
 
@@ -698,7 +702,15 @@ export class VideoProcessor extends WorkerHost {
       userId,
       err.message,
       err.stack ?? '',
-      { taskId, model: body.model, organizationId: body.organizationId },
+      {
+        taskId,
+        model: body.model,
+        organizationId: body.organizationId,
+        ...(err instanceof AssetStepError && {
+          assetKind: err.kind,
+          providerCode: err.code,
+        }),
+      },
     );
 
     await this.updateTaskStatus(taskId, {

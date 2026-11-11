@@ -1,0 +1,17 @@
+2026-10-21T09:39:43.947413Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/1.cookie")}
+2026-10-21T09:39:43.948395Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-10-21T09:39:44.343218Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/2.cookie")}
+2026-10-21T09:39:44.343261Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2026-10-21T09:39:46.350404Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/.turbo/turbo-build.log")}
+2026-10-21T09:39:46.350488Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-10-21T09:39:48.349674Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/dist")}
+2026-10-21T09:39:48.349742Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-10-21T09:40:05.459603Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/dist")}
+2026-10-21T09:40:05.467005Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-10-21T09:40:08.661674Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2026-10-21T09:40:36.752660Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/3.cookie"), AnchoredSystemPathBuf("libs/share/.turbo/turbo-build.log")}
+2026-10-21T09:40:36.754077Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }, WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))
+2026-10-21T11:23:41.765835Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("services/core/package.json"), AnchoredSystemPathBuf("services/worker-service/package.json"), AnchoredSystemPathBuf("services/worker-service/.!45183!package.json"), AnchoredSystemPathBuf("services/core/.!45182!package.json")}
+2026-10-21T11:23:41.770110Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/worker-service"), path: AnchoredSystemPathBuf("services/worker-service") }, WorkspacePackage { name: Other("@ai-media/core"), path: AnchoredSystemPathBuf("services/core") }}))
+2026-10-21T11:23:42.334849Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("libs/share/.turbo/turbo-build.log")}
+2026-10-21T11:23:42.334934Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@ai-media/share"), path: AnchoredSystemPathBuf("libs/share") }}))

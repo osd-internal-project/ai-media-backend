@@ -58,6 +58,9 @@ x-api-key: aick_…
 |---|---|
 | `organizationId` | Optional. Returns only the works of this organization. Leave it out for every organization. |
 | `updatedSince` | Optional ISO date. Returns only works updated at or after this time. |
+| `type` | Optional. `image`, `video`, `omnihuman`, `dreamactor` or `audio`. |
+| `modelName` | Optional. Exact model name, for example `seedream-4-0`. |
+| `publishedFrom` / `publishedTo` | Optional ISO dates. Returns works published within this range, both ends included. |
 | `take` | Optional, 1 to 100. Default 50. |
 | `skip` | Optional, 0 or more. Default 0. |
 
@@ -122,7 +125,8 @@ Authorization: Bearer <user access token>
 x-api-key: aick_…
 ```
 
-Takes the same query parameters (`organizationId`, `updatedSince`, `take`, `skip`) and
+Takes the same query parameters (`organizationId`, `updatedSince`, `type`, `modelName`,
+`publishedFrom`, `publishedTo`, `take`, `skip`) and
 returns the same response shape as `GET /integration/publications`.
 
 Errors: `400` for invalid query values. `401` when the token or the key is missing,

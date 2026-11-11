@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   GalleryRepository,
+  LogRepository,
   PromptGuideImageRepository,
   RefImageRepository,
   StorageUrlService,
@@ -29,6 +30,7 @@ describe('UploadImageService direct upload', () => {
   let refRepo: RepoMock;
   let guideRepo: RepoMock;
   let galleryRepo: RepoMock & { findMany: jest.Mock };
+  let logRepo: { findMany: jest.Mock };
   let access: Record<
     'assertCanWrite' | 'assertCanManageRef' | 'assertCanManagePromptGuideImage' | 'assertSameUser',
     jest.Mock
@@ -53,6 +55,7 @@ describe('UploadImageService direct upload', () => {
     refRepo = makeRepo();
     guideRepo = makeRepo();
     galleryRepo = { ...makeRepo(), findMany: jest.fn().mockResolvedValue([]) };
+    logRepo = { findMany: jest.fn().mockResolvedValue([]) };
     access = {
       assertCanWrite: jest.fn(),
       assertCanManageRef: jest.fn(),
@@ -73,7 +76,35 @@ describe('UploadImageService direct upload', () => {
       // การตรวจสิทธิ์ทดสอบแยกใน upload-access.service.spec.ts
       access as never,
       galleryRepo as unknown as GalleryRepository,
+      logRepo as unknown as LogRepository,
     );
+  });
+
+  describe('deleteImage keeps refs that history still shows', () => {
+    const key = 'organize/org/proj/upload/rc-upload-1-34.png';
+    beforeEach(() => {
+      refRepo.findOne.mockResolvedValue({ uid: 'rc-upload-1-34', imagePath: key });
+    });
+
+    it('used by a log row → row marked completed, file stays on TOS', async () => {
+      logRepo.findMany.mockResolvedValue([{ referenceImages: [key, 'other'] }]);
+      await service.deleteImage('rc-upload-1-34');
+      expect(tos.deleteObject).not.toHaveBeenCalled();
+      expect(refRepo.deleteMany).not.toHaveBeenCalled();
+      expect(refRepo.updateMany).toHaveBeenCalledWith({
+        where: { uid: 'rc-upload-1-34' },
+        data: { status: 'completed' },
+      });
+    });
+
+    it('never used → row and file deleted', async () => {
+      logRepo.findMany.mockResolvedValue([]);
+      await service.deleteImage('rc-upload-1-34');
+      expect(tos.deleteObject).toHaveBeenCalledWith('bucket', key);
+      expect(refRepo.deleteMany).toHaveBeenCalledWith({
+        where: { uid: 'rc-upload-1-34' },
+      });
+    });
   });
 
   it('presign reserves an uploading row and returns a PUT url', async () => {

@@ -232,6 +232,31 @@ describe('CommunityPublicationService', () => {
       expect(orgFindMany).not.toHaveBeenCalled();
     });
 
+    it('searches by type, model and publish date range through the gallery', async () => {
+      publications.findMany.mockResolvedValue([]);
+      publications.count.mockResolvedValue(0);
+      await service.listPublic({
+        type: 'image',
+        modelName: 'seedream-4-0',
+        publishedFrom: '2026-11-01T00:00:00Z',
+        publishedTo: '2026-11-30T23:59:59Z',
+      });
+      expect(publications.findMany.mock.calls[0][0].where).toEqual({
+        status: 'PUBLISHED',
+        visibility: 'PUBLIC',
+        publishedAt: {
+          gte: new Date('2026-11-01T00:00:00Z'),
+          lte: new Date('2026-11-30T23:59:59Z'),
+        },
+        gallery: {
+          is: {
+            typeGenerate: { in: expect.arrayContaining(['image']) },
+            generateConfig: { path: ['modelName'], equals: 'seedream-4-0' },
+          },
+        },
+      });
+    });
+
     it("listMine returns only the token user's PUBLISHED work, PUBLIC and PRIVATE alike", async () => {
       publications.findMany.mockResolvedValue([feedRow('a'), feedRow('b', { visibility: 'PRIVATE' })]);
       const { items } = await service.listMine(me, { organizationId: 'o1' });

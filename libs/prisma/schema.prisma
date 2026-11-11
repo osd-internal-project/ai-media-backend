@@ -1,12 +1,13 @@
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["interactiveTransactions"]
+  previewFeatures = ["interactiveTransactions", "postgresqlExtensions"]
   binaryTargets   = ["native"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [citext]
 }
 
 enum LogSeverity {
@@ -30,7 +31,7 @@ model users {
   userId               String               @unique @default(uuid()) @map("user_id") @db.VarChar(50)
   username             String               @unique @db.VarChar(100)
   fullname             String               @db.VarChar(200)
-  email                String               @db.VarChar(200)
+  email                String               @unique @db.Citext
   tier                 String               @default("free") @db.VarChar(200)
   description          String?              @db.Text
   phoneNumber          String               @default("phone_number") @map("phone_number") @db.VarChar(50)
@@ -55,7 +56,6 @@ model users {
 
   // index ตาม source/improvements P1-5 (query จริงใน services)
   @@index([token])
-  @@index([email])
 }
 
 model Project {

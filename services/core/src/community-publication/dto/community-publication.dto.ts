@@ -16,7 +16,12 @@ import {
   Min,
 } from 'class-validator';
 import { CommunityVisibility } from '@prisma/client';
-import { INTEGRATION_API_KEY_SCOPES, IntegrationApiKeyScope } from '@ai-media/share';
+import {
+  GENERATION_TYPE_KEYS,
+  GenerationTypeKey,
+  INTEGRATION_API_KEY_SCOPES,
+  IntegrationApiKeyScope,
+} from '@ai-media/share';
 
 export class PublishToCommunityDto {
   @IsString()
@@ -46,6 +51,24 @@ export class ListPublicPublicationsQueryDto {
   @IsString()
   @MaxLength(50)
   organizationId?: string;
+
+  @IsOptional()
+  @IsIn(GENERATION_TYPE_KEYS)
+  type?: GenerationTypeKey;
+
+  /** ตรงตัวกับ generateConfig.modelName เช่น seedream-4-0 */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  modelName?: string;
+
+  @IsOptional()
+  @IsDateString()
+  publishedFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  publishedTo?: string;
 
   @IsOptional()
   @Type(() => Number)
