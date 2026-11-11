@@ -23,10 +23,10 @@
                     <tr>
                         <td style="padding:32px 32px 8px;">
                             <h1 style="margin:0 0 8px; font-size:22px; line-height:1.4; font-weight:700; color:#111827; text-align:center;">
-                                คุณได้รับสิทธิ์เข้าใช้งาน AI Cave : {{teamName}} แล้ว
+                                {{#if isExistingUser}}ทีม {{teamName}} ถูกเพิ่มในบัญชี AI Cave ของคุณแล้ว{{else}}คุณได้รับสิทธิ์เข้าใช้งาน AI Cave : {{teamName}} แล้ว{{/if}}
                             </h1>
                             <p style="margin:0 0 24px; font-size:15px; line-height:1.6; color:#4b5563; text-align:center;">
-                                สามารถเข้าใช้งานได้ตามขั้นตอนด้านล่าง
+                                {{#if isExistingUser}}ใช้บัญชีเดิมของคุณเข้าใช้งานได้ทันที ไม่ต้องสมัครใหม่{{else}}สามารถเข้าใช้งานได้ตามขั้นตอนด้านล่าง{{/if}}
                             </p>
 
                             <!-- Account info -->
@@ -41,6 +41,61 @@
                                 </tr>
                             </table>
 
+                            {{#if isExistingUser}}
+                            <!-- Steps (existing account) -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;">
+                                <tr>
+                                    <td valign="top" style="width:36px; padding-bottom:14px;">
+                                        <div style="width:26px; height:26px; line-height:26px; border-radius:13px; background-color:#000080; color:#ffffff; font-size:14px; font-weight:700; text-align:center;">1</div>
+                                    </td>
+                                    <td valign="top" style="padding-bottom:14px; font-size:15px; line-height:1.6; color:#374151;">
+                                        เข้าสู่ระบบด้วยชื่อผู้ใช้หรืออีเมล และรหัสผ่านเดิมของคุณ
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td valign="top" style="width:36px;">
+                                        <div style="width:26px; height:26px; line-height:26px; border-radius:13px; background-color:#000080; color:#ffffff; font-size:14px; font-weight:700; text-align:center;">2</div>
+                                    </td>
+                                    <td valign="top" style="font-size:15px; line-height:1.6; color:#374151;">
+                                        เลือก <strong style="color:#000080;">{{teamName}}</strong> จากเมนู Organization มุมซ้ายบน
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Primary: log in -->
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:28px auto 16px;">
+                                <tr>
+                                    <td align="center" bgcolor="#000080" style="border-radius:8px;">
+                                        <a href="{{login_url}}" target="_blank" style="display:inline-block; min-width:200px; padding:14px 32px; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:8px;"><span style="color:#ffffff;">เข้าสู่ระบบ</span></a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Secondary: set password — same size as the primary so it is not missed -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:24px;">
+                                <tr>
+                                    <td align="center" style="padding:18px 16px 8px; font-size:15px; line-height:1.6; font-weight:600; color:#111827;">
+                                        ลืมรหัสผ่าน หรือยังไม่เคยตั้งรหัสผ่าน?
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding:0 16px 8px;">
+                                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                                            <tr>
+                                                <td align="center" bgcolor="#ffffff" style="border:2px solid #000080; border-radius:8px;">
+                                                    <a href="{{action_url}}" target="_blank" style="display:inline-block; min-width:196px; padding:12px 32px; font-size:16px; font-weight:700; color:#000080; text-decoration:none; border-radius:8px;"><span style="color:#000080;">ตั้งรหัสผ่าน</span></a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding:0 16px 16px; font-size:13px; line-height:1.6; color:#6b7280;">
+                                        ลิงก์มีอายุ {{expires_in}} รหัสใหม่ใช้ได้กับทุกทีมในบัญชีของคุณ
+                                    </td>
+                                </tr>
+                            </table>
+                            {{else}}
                             <!-- Steps -->
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;">
                                 <tr>
@@ -87,13 +142,21 @@
                                 <a href="{{action_url}}" style="color:#000080;">{{action_url}}</a>
                             </p>
 
+                            {{/if}}
+
                             <!-- English -->
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #e5e7eb;">
                                 <tr>
                                     <td style="padding:20px 0 8px; font-size:13px; line-height:1.6; color:#6b7280;">
+                                        {{#if isExistingUser}}
+                                        <strong>{{teamName}}</strong> has been added to your AI Cave account.
+                                        Sign in at <a href="{{login_url}}" style="color:#000080;">{{login_url}}</a> with your existing password,
+                                        then pick the team from the Organization menu. Forgot your password? Use the set-password button above (valid for {{expires_in}}).
+                                        {{else}}
                                         You've been granted access to AI Cave : <strong>{{teamName}}</strong>.
                                         Use the button above to set your password (link valid for {{expires_in}}),
                                         then sign in again at <a href="{{login_url}}" style="color:#000080;">{{login_url}}</a>.
+                                        {{/if}}
                                     </td>
                                 </tr>
                             </table>

@@ -153,10 +153,17 @@ export class OrganizationBulkMemberService {
       where: { organizationId, id: { in: memberIds } },
       select: { userId: true },
     });
+    const userIds = members.map((m) => m.userId);
     const users = await this.usersRepo.findMany({
-      where: { userId: { in: members.map((m) => m.userId) } },
-      select: { username: true, email: true },
+      where: { userId: { in: userIds } },
+      select: { userId: true, username: true, email: true },
     });
+    // a membership elsewhere (incl. the personal org from self sign-up) means the user already has a working login
+    const otherMemberships = await this.organizationMemberRepo.findMany({
+      where: { userId: { in: userIds }, organizationId: { not: organizationId } },
+      select: { userId: true },
+    });
+    const existingUserIds = new Set(otherMemberships.map((m) => m.userId));
 
     let sent = 0;
     const failed: { email: string; reason: string }[] = [];
@@ -166,7 +173,12 @@ export class OrganizationBulkMemberService {
         continue;
       }
       try {
-        await this.sendAccessEmail(org.name, user.username, user.email);
+        await this.sendAccessEmail(
+          org.name,
+          user.username,
+          user.email,
+          existingUserIds.has(user.userId),
+        );
         sent += 1;
       } catch (error) {
         this.logger.error(
@@ -189,6 +201,7 @@ export class OrganizationBulkMemberService {
     teamName: string,
     username: string,
     email: string,
+    isExistingUser: boolean,
   ) {
     const token = uuidv4();
     await this.requestChangePasswordRepo.create({
@@ -210,7 +223,8 @@ export class OrganizationBulkMemberService {
           teamName,
           username,
           email,
-          expires_in: `${ACCESS_LINK_TTL_DAYS} days`,
+          isExistingUser,
+          expires_in:`${ACCESS_LINK_TTL_DAYS} days`,
           action_url: `${configs().frontendUrl}/change-password?token=${token}`,
           login_url: `${configs().frontendUrl}/login`,
         },

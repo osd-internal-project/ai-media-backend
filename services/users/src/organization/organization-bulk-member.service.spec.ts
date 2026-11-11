@@ -509,10 +509,13 @@ describe('OrganizationBulkMemberService', () => {
 
     it('counts access emails the email-api did not send as failed', async () => {
       db.org = { organizationId: ORG, maxUserAccess: 10, name: 'Team' } as FakeDb['org'];
-      memberRepo.findMany.mockResolvedValue([{ userId: 'u-a' }, { userId: 'u-b' }]);
+      memberRepo.findMany
+        .mockResolvedValueOnce([{ userId: 'u-a' }, { userId: 'u-b' }])
+        // bob also belongs to another org → already has an account
+        .mockResolvedValueOnce([{ userId: 'u-b' }]);
       usersRepo.findMany.mockResolvedValue([
-        { username: 'alice', email: 'alice@example.com' },
-        { username: 'bob', email: 'bob@example.com' },
+        { userId: 'u-a', username: 'alice', email: 'alice@example.com' },
+        { userId: 'u-b', username: 'bob', email: 'bob@example.com' },
       ]);
       http.post
         .mockReturnValueOnce(of({ data: { success: true } }))
@@ -532,8 +535,14 @@ describe('OrganizationBulkMemberService', () => {
         context: {
           teamName: 'Team',
           username: 'alice',
+          isExistingUser: false,
           login_url: expect.stringMatching(/\/login$/),
         },
+      });
+      expect(http.post.mock.calls[1][1].context.isExistingUser).toBe(true);
+      expect(memberRepo.findMany.mock.calls[1][0].where).toEqual({
+        userId: { in: ['u-a', 'u-b'] },
+        organizationId: { not: ORG },
       });
     });
   });

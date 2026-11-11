@@ -1,7 +1,7 @@
 {
   "name": "@ai-media/email-api",
   "description": "",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "",
   "dependencies": {
     "@ai-media/share": "0.0.2",
