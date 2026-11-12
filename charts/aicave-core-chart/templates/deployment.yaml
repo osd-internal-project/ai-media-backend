@@ -60,6 +60,8 @@ spec:
           value: {{ .Values.env.pathMountdirUpload | quote }}
         - name: STORAGE_PATH
           value: {{ .Values.env.storagePath | quote }}
+        - name: COMMUNITY_PUBLIC_API_BASE_URL
+          value: {{ .Values.env.communityPublicApiBaseUrl | quote }}
         - name: BYTEPLUS_ACCESS_KEY
           valueFrom:
             secretKeyRef:

@@ -27,6 +27,7 @@ env:
   port: "4002"
   pathMountdirUpload: "./uploads"
   storagePath: "https://uat.aicave.ai/public/api/v1/s3"
+  communityPublicApiBaseUrl: "https://uat.aicave.ai/public/api/v1/core"
   tosBucket: "ai-cave"
   tosRegion: "ap-southeast-3"
   tosEndpoint: "tos-ap-southeast-3.bytepluses.com"
