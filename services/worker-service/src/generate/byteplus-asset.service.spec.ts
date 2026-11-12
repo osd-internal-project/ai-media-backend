@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ByteplusAssetService } from './byteplus-asset.service';
+import { AssetStepError, ByteplusAssetService } from './byteplus-asset.service';
 
 jest.mock('axios');
 const axiosPost = axios.post as jest.Mock;
@@ -186,6 +186,35 @@ describe('ByteplusAssetService', () => {
       "We couldn't prepare your reference image right now. Please try again later.",
     );
     expect((err as Error).message).not.toMatch(/AKAP|401|InvalidAccessKey/);
+    // detail goes to error_logs: keeps the cause, hides the key
+    expect((err as AssetStepError).detail).toContain('401 InvalidAccessKey');
+    expect((err as AssetStepError).detail).not.toMatch(/AKAP/);
+  });
+
+  it('network failure with empty message → keeps the errno code for error_logs', async () => {
+    axiosPost.mockRejectedValue({
+      isAxiosError: true,
+      message: '',
+      code: 'ETIMEDOUT',
+      cause: {
+        errors: [
+          { code: 'ETIMEDOUT', address: '49.231.112.88' },
+          { code: 'ENETUNREACH', address: '2405:9800:b::31e7:7008' },
+        ],
+      },
+    });
+    const logError = jest.spyOn(service['logger'], 'error');
+    const err = await service
+      .swapImagesToAssets(oneImage(), 't1')
+      .catch((e: AssetStepError) => e);
+    expect(err).toBeInstanceOf(AssetStepError);
+    expect((err as AssetStepError).code).toBe('ETIMEDOUT');
+    expect((err as AssetStepError).detail).toContain(
+      'ETIMEDOUT 49.231.112.88 ENETUNREACH 2405:9800:b::31e7:7008',
+    );
+    expect(logError.mock.calls[0][0]).toContain(
+      'CreateAssetGroup:  ETIMEDOUT ETIMEDOUT 49.231.112.88 ENETUNREACH 2405:9800:b::31e7:7008',
+    );
   });
 
   it('400 DownloadFailed (object gone from TOS) → asks the user to upload again', async () => {

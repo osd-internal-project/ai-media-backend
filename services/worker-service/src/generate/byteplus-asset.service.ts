@@ -41,13 +41,17 @@ export class AssetApiError extends Error {
   }
 }
 
-/** error ที่ส่งออกจาก service — message = ข้อความผู้ใช้, kind/code ไว้บันทึกลง error_logs (code ไม่มี key) */
+/** error ที่ส่งออกจาก service — message = ข้อความผู้ใช้, kind/code/detail ไว้บันทึกลง error_logs (detail ปิด token แล้ว) */
 export class AssetStepError extends Error {
+  readonly detail: string;
   constructor(
     readonly kind: AssetErrorKind,
     readonly code: string | undefined,
+    detail = '',
   ) {
     super(USER_MESSAGES[kind]);
+    // provider echoes the access key, e.g. "security token[AKAP...] is invalid"
+    this.detail = detail.replace(/token\s*\[[^\]]*\]/gi, 'token[redacted]');
   }
 }
 
@@ -134,15 +138,17 @@ export class ByteplusAssetService {
       );
     } catch (error) {
       const apiError = error instanceof AssetApiError ? error : undefined;
-      const kind = apiError?.kind ?? 'other';
-      // รายละเอียดเต็มไว้ debug ใน log เท่านั้น — ผู้ใช้เห็นแค่ USER_MESSAGES
+      const stepError = new AssetStepError(
+        apiError?.kind ?? 'other',
+        apiError?.code,
+        (error as Error).message,
+      );
+      // รายละเอียดเต็ม (ปิด key แล้ว) ไป log + error_logs — ผู้ใช้เห็นแค่ USER_MESSAGES
       this.logger.error(
-        `[${taskId}] ❌ asset step failed (${kind}): ${
-          (error as Error).message
-        }`,
+        `[${taskId}] ❌ asset step failed (${stepError.kind}): ${stepError.detail}`,
       );
       await this.cleanup(taskId, assets);
-      throw new AssetStepError(kind, apiError?.code);
+      throw stepError;
     }
     this.logger.log(
       `[${taskId}] ${assets.assetIds.length} image(s) → asset group=${assets.groupId}`,
@@ -272,12 +278,19 @@ export class ByteplusAssetService {
       const status = error.response?.status;
       const apiError = (error.response?.data as OpenApiResponse | undefined)
         ?.ResponseMetadata?.Error;
+      // no response = network failure; Node's dual-stack connect gives AggregateError with an empty message — keep code + per-address errors
+      const attempts = (
+        (error.cause as { errors?: NodeJS.ErrnoException[] } | undefined)
+          ?.errors ?? []
+      ).map((e) => `${e.code} ${(e as { address?: string }).address ?? ''}`);
       throw new AssetApiError(
         `${action}: ${status ?? ''} ${
-          apiError ? `${apiError.Code} ${apiError.Message}` : error.message
+          apiError
+            ? `${apiError.Code} ${apiError.Message}`
+            : [error.code, error.message, ...attempts].filter(Boolean).join(' ')
         }`,
         classify(status, apiError?.Code),
-        apiError?.Code ?? (status ? `HTTP ${status}` : undefined),
+        apiError?.Code ?? (status ? `HTTP ${status}` : error.code),
       );
     }
   }

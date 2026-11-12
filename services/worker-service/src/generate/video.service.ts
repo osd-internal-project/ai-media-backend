@@ -709,6 +709,7 @@ export class VideoProcessor extends WorkerHost {
         ...(err instanceof AssetStepError && {
           assetKind: err.kind,
           providerCode: err.code,
+          providerDetail: err.detail,
         }),
       },
     );
