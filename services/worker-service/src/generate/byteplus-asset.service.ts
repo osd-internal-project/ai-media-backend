@@ -279,10 +279,11 @@ export class ByteplusAssetService {
       const apiError = (error.response?.data as OpenApiResponse | undefined)
         ?.ResponseMetadata?.Error;
       // no response = network failure; Node's dual-stack connect gives AggregateError with an empty message — keep code + per-address errors
-      const attempts = (
-        (error.cause as { errors?: NodeJS.ErrnoException[] } | undefined)
-          ?.errors ?? []
-      ).map((e) => `${e.code} ${(e as { address?: string }).address ?? ''}`);
+      // as: CI resolves an older axios whose AxiosError type has no `cause`; Node sets it at runtime
+      const { cause } = error as Error & {
+        cause?: { errors?: NodeJS.ErrnoException[] };
+      };
+      const attempts = (cause?.errors ?? []).map((e) => `${e.code} ${(e as { address?: string }).address ?? ''}`);
       throw new AssetApiError(
         `${action}: ${status ?? ''} ${
           apiError
