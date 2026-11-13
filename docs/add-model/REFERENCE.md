@@ -72,7 +72,7 @@ DB row → `payloadBuilders` ที่ worker → `model-registry.ts` + `*-form-
 | ไฟล์ | คีย์ที่ลงทะเบียนอยู่ตอนนี้ |
 |---|---|
 | `video.service.ts` | `seedance1`, `seedance2` |
-| `image.service.ts` | `seedream1`, `seedream2` (Seedream 5.0 Pro — ห้ามส่ง `sequential_image_generation*` / `stream`) |
+| `image.service.ts` | `seedream1`, `seedream2` (Seedream 5.0 Pro — ห้ามส่ง `sequential_image_generation*` / `stream`), `seedream3` (Seedream 5.5 — เหมือน seedream2 + `output_format: png` + `background`) |
 | `omnihumen.service.ts` | `omnihuman` |
 | `dreamactor.service.ts` | `dreamactor` |
 

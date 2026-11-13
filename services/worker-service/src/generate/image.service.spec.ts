@@ -229,6 +229,29 @@ describe('ImageProcessor seedream2 payload', () => {
     expect(storageUrl.toProviderUrls).toHaveBeenCalledWith(refs.slice(0, 10));
     expect(payload.image).toHaveLength(10);
   });
+
+  it('seedream3 sends png and a transparent background', async () => {
+    const payload = await builder.buildPayload(
+      { ...body, model: 'dola-seedream-5-5-261028', background: 'transparent' },
+      { type: 'seedream3' },
+    );
+    expect(payload).toEqual({
+      model: 'dola-seedream-5-5-261028',
+      prompt: 'a cat',
+      response_format: 'url',
+      size: '2048x2048',
+      watermark: false,
+      output_format: 'png',
+      background: 'transparent',
+    });
+  });
+
+  it('seedream3 omits background when none is chosen', async () => {
+    const payload = await builder.buildPayload(body, { type: 'seedream3' });
+    expect(payload).not.toHaveProperty('background');
+    expect(payload).not.toHaveProperty('sequential_image_generation');
+    expect(payload).not.toHaveProperty('stream');
+  });
 });
 
 describe('ImageProcessor stage events', () => {

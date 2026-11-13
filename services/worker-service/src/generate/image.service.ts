@@ -265,7 +265,9 @@ export class ImageProcessor extends WorkerHost {
           type: 'image',
         });
 
-        const objectName = `${uuidv4()}.jpg`;
+        // ไฟล์ที่มี alpha ต้องเป็น .png ไม่งั้นโปรแกรมที่เชื่อนามสกุลจะเปิดเป็น jpg แล้วพื้นหลังหาย
+        const ext = body.background === 'transparent' ? 'png' : 'jpg';
+        const objectName = `${uuidv4()}.${ext}`;
         const bucketname = tosConfigs().tosBucket;
         const imagePath = buildOutputKey(
           body.organizationId,
@@ -848,6 +850,7 @@ export class ImageProcessor extends WorkerHost {
   > = {
     seedream1: this.buildSeedream1Payload.bind(this),
     seedream2: this.buildSeedream2Payload.bind(this),
+    seedream3: this.buildSeedream3Payload.bind(this),
   };
 
   private async buildSeedream1Payload(
@@ -908,6 +911,19 @@ export class ImageProcessor extends WorkerHost {
       // พารามิเตอร์นี้คือ sendConfig อยู่แล้ว (ไม่ใช่ modelDetail ที่ห่อ sendConfig)
       watermark: modelDetail?.watermark ?? false,
       ...(images && images.length > 0 && { image: images }),
+    };
+  }
+
+  // Seedream 5.5: ข้อจำกัดเดียวกับ 5.0 Pro + รองรับพื้นหลังโปร่งใส
+  // บังคับ png เพราะ background "transparent" คู่กับ jpeg แล้ว provider ตอบ error
+  private async buildSeedream3Payload(
+    body: RequestImageGenerateDto,
+    modelDetail: any,
+  ) {
+    return {
+      ...(await this.buildSeedream2Payload(body, modelDetail)),
+      output_format: 'png',
+      ...(body.background && { background: body.background }),
     };
   }
 }

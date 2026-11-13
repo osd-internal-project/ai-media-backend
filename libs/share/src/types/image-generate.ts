@@ -16,4 +16,5 @@ export class RequestImageGenerateDto {
   height: number;
   imageGenerateType: string;
   organizationId?: string;
+  background?: 'auto' | 'transparent';
 }
