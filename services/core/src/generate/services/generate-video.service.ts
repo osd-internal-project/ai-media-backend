@@ -118,7 +118,12 @@ export class GenerateVideoService extends BaseGenerateService {
   }
 
   protected calculateCreditToken(body: RequestVideoGenerateDto): number {
-    return (body.width * body.height * body.duration * 24) / 1024;
+    // the provider bills reference-video seconds on top of the output length
+    const refVideoSeconds = (body.files ?? [])
+      .filter((f) => f.type === 'video')
+      .reduce((sum, f) => sum + (Number(f.duration) || 0), 0);
+    const seconds = Number(body.duration) + refVideoSeconds;
+    return (body.width * body.height * seconds * 24) / 1024;
   }
 
   @Span()

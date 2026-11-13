@@ -19,5 +19,6 @@ export class RequestVideoGenerateDto {
   draft: boolean;
   resolution: string;
   organizationId?: string;
-  files: { type: 'image' | 'video' | 'audio'; url: string }[];
+  /** `duration` (seconds) is sent for video refs so the credit hold counts them */
+  files: { type: 'image' | 'video' | 'audio'; url: string; duration?: number }[];
 }

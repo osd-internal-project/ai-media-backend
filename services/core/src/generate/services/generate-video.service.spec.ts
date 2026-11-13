@@ -27,7 +27,7 @@ const makeService = (exec: jest.Mock) => {
       afterEnqueue: (...args: unknown[]) => Promise<void>;
     }
   ).afterEnqueue.bind(service);
-  return { chain, afterEnqueue };
+  return { chain, afterEnqueue, service };
 };
 
 const body = { organizationId: 'org', projectId: 'proj' };
@@ -84,5 +84,31 @@ describe('unsupportedVideoOption', () => {
     expect(unsupportedVideoOption(v25, { resolution: '720p', duration: 3 })).not.toBeNull();
     expect(unsupportedVideoOption(v25, { resolution: '720p', duration: 30 })).toBeNull();
     expect(unsupportedVideoOption(v25, { resolution: '720p', duration: 4 })).toBeNull();
+  });
+});
+
+describe('GenerateVideoService.calculateCreditToken (credit hold)', () => {
+  const { service } = makeService(jest.fn());
+  const tokens = (b: unknown) =>
+    (
+      service as unknown as { calculateCreditToken: (b: unknown) => number }
+    ).calculateCreditToken(b);
+  const base = { width: 1280, height: 720, duration: 30 };
+
+  it('counts only the output length without reference videos', () => {
+    expect(tokens(base)).toBe(648000);
+    expect(tokens({ ...base, files: [{ type: 'image', url: 'a.jpg' }] })).toBe(648000);
+  });
+
+  it('adds reference-video seconds, as the provider bills them (log ec52829e: 1,296,900)', () => {
+    const files = [
+      { type: 'image', url: 'a.jpg' },
+      { type: 'video', url: 'v.mp4', duration: 30.04 },
+    ];
+    expect(Math.round(tokens({ ...base, files }))).toBe(1296864);
+  });
+
+  it('treats a video ref with unknown duration as 0 seconds', () => {
+    expect(tokens({ ...base, files: [{ type: 'video', url: 'v.mp4' }] })).toBe(648000);
   });
 });
