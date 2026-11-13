@@ -2,6 +2,18 @@ import axios from 'axios';
 import { AssetStepError, ByteplusAssetService } from './byteplus-asset.service';
 
 jest.mock('axios');
+// Lua scripts are covered by asset-quota.spec against a real Redis; here: an empty pool, no QPM pressure
+jest.mock('./asset-quota', () => ({
+  ...jest.requireActual('./asset-quota'),
+  takeAssetCreateTokens: jest.fn(),
+  reserveGroupSlots: jest.fn(),
+  lockGroupCreation: jest.fn(),
+  setCurrentGroup: jest.fn(),
+  unlockGroupCreation: jest.fn(),
+  retireGroup: jest.fn(),
+  releaseGroupSlots: jest.fn(),
+}));
+const quota = jest.requireMock('./asset-quota') as Record<string, jest.Mock>;
 const axiosPost = axios.post as jest.Mock;
 (axios.isAxiosError as unknown as jest.Mock).mockImplementation(
   (e: { isAxiosError?: boolean }) => Boolean(e?.isAxiosError),
@@ -38,7 +50,13 @@ describe('ByteplusAssetService', () => {
     process.env.BYTEPLUS_ACCESS_KEY = 'ak';
     process.env.BYTEPLUS_SECRET_KEY = 'sk';
     axiosPost.mockReset();
-    service = new ByteplusAssetService();
+    quota.takeAssetCreateTokens.mockReset().mockResolvedValue(true);
+    quota.reserveGroupSlots.mockReset().mockResolvedValue(null);
+    quota.lockGroupCreation.mockReset().mockResolvedValue(true);
+    quota.releaseGroupSlots.mockReset().mockResolvedValue(true);
+    quota.retireGroup.mockReset();
+    service = new ByteplusAssetService({} as never);
+    service.groupWaitMs = 0;
     service.pollIntervalMs = 0;
   });
 
@@ -80,6 +98,7 @@ describe('ByteplusAssetService', () => {
     expect(assets).toEqual({
       groupId: 'group-1',
       assetIds: expect.arrayContaining(['asset-1', 'asset-2']),
+      slots: 2,
     });
     const urls = payload.content.map(
       (c) => (c as { image_url?: { url: string } }).image_url?.url,
@@ -109,6 +128,30 @@ describe('ByteplusAssetService', () => {
     );
     expect(res).toBeNull();
     expect(axiosPost).not.toHaveBeenCalled();
+  });
+
+  it('asset Failed → provider reason reaches error_logs, presigned URL does not', async () => {
+    axiosPost.mockImplementation(async (url: string) => {
+      const action = new URL(url).searchParams.get('Action');
+      if (action === 'CreateAssetGroup')
+        return { data: { Result: { Id: 'g' } } };
+      if (action === 'CreateAsset') return { data: { Result: { Id: 'a1' } } };
+      return {
+        data: {
+          Result: {
+            Status: 'Failed',
+            URL: 'https://tos/x?X-Tos-Signature=secret',
+            Error: { Code: 'RealPersonNotVerified' },
+          },
+        },
+      };
+    });
+    const err = await service
+      .swapImagesToAssets(oneImage(), 't1')
+      .catch((e: AssetStepError) => e);
+    expect((err as AssetStepError).kind).toBe('rejected');
+    expect((err as AssetStepError).detail).toContain('RealPersonNotVerified');
+    expect((err as AssetStepError).detail).not.toContain('X-Tos-Signature');
   });
 
   it('asset Failed → throws and deletes what it created', async () => {
@@ -158,7 +201,7 @@ describe('ByteplusAssetService', () => {
         't1',
       ),
     ).rejects.toThrow(
-      "We couldn't prepare your reference image right now. Please try again later.",
+      'Something went wrong preparing your video. Please try again later.',
     );
   });
 
@@ -183,7 +226,7 @@ describe('ByteplusAssetService', () => {
       .swapImagesToAssets(oneImage(), 't1')
       .catch((e: Error) => e);
     expect((err as Error).message).toBe(
-      "We couldn't prepare your reference image right now. Please try again later.",
+      'Something went wrong preparing your video. Please try again later.',
     );
     expect((err as Error).message).not.toMatch(/AKAP|401|InvalidAccessKey/);
     // detail goes to error_logs: keeps the cause, hides the key
@@ -209,6 +252,14 @@ describe('ByteplusAssetService', () => {
       .catch((e: AssetStepError) => e);
     expect(err).toBeInstanceOf(AssetStepError);
     expect((err as AssetStepError).code).toBe('ETIMEDOUT');
+    // our network, not the image — user must not be told to change the image
+    expect((err as AssetStepError).kind).toBe('network');
+    expect((err as AssetStepError).message).toBe(
+      "We couldn't reach the video service. Please try again in a moment.",
+    );
+    expect((err as AssetStepError).detail).toMatch(
+      /host=open\.byteplusapi\.com \d+ms/,
+    );
     expect((err as AssetStepError).detail).toContain(
       'ETIMEDOUT 49.231.112.88 ENETUNREACH 2405:9800:b::31e7:7008',
     );
@@ -285,5 +336,71 @@ describe('ByteplusAssetService', () => {
       'DeleteAsset',
       'DeleteAssetGroup',
     ]);
+  });
+
+  describe('shared group pool + CreateAsset QPM', () => {
+    it('QPM reached → rate (queued), nothing sent to BytePlus', async () => {
+      quota.takeAssetCreateTokens.mockResolvedValue(false);
+      const err = await service
+        .swapImagesToAssets(oneImage(), 't1')
+        .catch((e: AssetStepError) => e);
+      expect((err as AssetStepError).kind).toBe('rate');
+      expect(axiosPost).not.toHaveBeenCalled();
+    });
+
+    it('reuses the current pool group instead of creating one per task', async () => {
+      mockApi(['Active']);
+      quota.reserveGroupSlots.mockResolvedValue('pool-g');
+      const assets = await service.swapImagesToAssets(oneImage(), 't1');
+      expect(assets).toMatchObject({ groupId: 'pool-g', slots: 1 });
+      expect(actions()).not.toContain('CreateAssetGroup');
+    });
+
+    it('cleanup keeps a group that is still in use, deletes it once retired and empty', async () => {
+      axiosPost.mockResolvedValue({ data: { Result: {} } });
+      quota.releaseGroupSlots.mockResolvedValueOnce(false);
+      await service.cleanup('t1', { groupId: 'g', assetIds: ['a1'], slots: 1 });
+      expect(actions()).toEqual(['DeleteAsset']);
+
+      axiosPost.mockClear();
+      quota.releaseGroupSlots.mockResolvedValueOnce(true);
+      await service.cleanup('t2', { groupId: 'g', assetIds: ['a2'], slots: 1 });
+      expect(actions()).toEqual(['DeleteAsset', 'DeleteAssetGroup']);
+    });
+
+    it('legacy per-task group (no slots) is still deleted', async () => {
+      axiosPost.mockResolvedValue({ data: { Result: {} } });
+      await service.cleanup('t1', { groupId: 'g', assetIds: [] });
+      expect(actions()).toEqual(['DeleteAssetGroup']);
+      expect(quota.releaseGroupSlots).not.toHaveBeenCalled();
+    });
+
+    it('CreateAsset says the group quota is exceeded → group retired, task queued', async () => {
+      axiosPost.mockImplementation(async (url: string) => {
+        const action = new URL(url).searchParams.get('Action');
+        if (action === 'CreateAssetGroup')
+          return { data: { Result: { Id: 'full-g' } } };
+        if (action === 'CreateAsset')
+          return {
+            data: {
+              ResponseMetadata: {
+                Error: {
+                  Code: 'QuotaExceeded.AssetCount',
+                  Message: 'too many assets',
+                },
+              },
+            },
+          };
+        return { data: { Result: {} } };
+      });
+      const err = await service
+        .swapImagesToAssets(oneImage(), 't1')
+        .catch((e: AssetStepError) => e);
+      expect((err as AssetStepError).kind).toBe('rate');
+      expect(quota.retireGroup).toHaveBeenCalledWith(
+        expect.anything(),
+        'full-g',
+      );
+    });
   });
 });

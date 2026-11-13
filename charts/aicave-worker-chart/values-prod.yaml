@@ -37,6 +37,9 @@ env:
   workerPublicUrl: "https://www.aicave.ai/public/api/v1/worker"
   # Ark เรียก <byteplusCallbackBaseUrl>/webhooks/byteplus/video/:taskId ที่ core (ingress rewrite → /api)
   byteplusCallbackBaseUrl: "https://www.aicave.ai/public/api/v1/core"
+  # BytePlus Advanced Creation Rights 120 QPM แชร์ทุก env (บัญชีเดียว): prod 110 / uat 5 / sit 5
+  byteplusAssetCreateQpm: "110"
+  byteplusAssetGroupMax: "100"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL

@@ -102,6 +102,12 @@ spec:
         # ต้องตรงกับ project ของ endpoint/API key ที่ใช้ generate ไม่งั้น asset ใช้ไม่ได้
         - name: BYTEPLUS_ARK_PROJECT_NAME
           value: {{ .Values.env.byteplusArkProjectName | default "default" | quote }}
+        # CreateAsset ต่อนาทีของบัญชี ตาม rights tier (Entry 3 / Advanced 120 / Premium 300)
+        - name: BYTEPLUS_ASSET_CREATE_QPM
+          value: {{ .Values.env.byteplusAssetCreateQpm | default "3" | quote }}
+        # asset ที่ยังไม่ลบต่อ 1 group ใน pool — ต่ำกว่า quota ของ BytePlus เผื่อ asset ค้าง
+        - name: BYTEPLUS_ASSET_GROUP_MAX
+          value: {{ .Values.env.byteplusAssetGroupMax | default "20" | quote }}
         # OpenTelemetry → Grafana Alloy — ไม่ตั้ง otel.endpoint = ไม่ส่ง telemetry (tracing.ts เป็น no-op)
         {{- if .Values.otel.endpoint }}
         - name: OTEL_SERVICE_NAME

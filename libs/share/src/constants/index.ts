@@ -58,6 +58,8 @@ export interface VideoInflightData {
   userId: string;
   organizationId: string;
   projectId: string;
+  /** set by the worker after the seedance2 asset step so the sweeper can delete them */
+  assets?: { groupId: string; assetIds: string[]; slots?: number };
 }
 
 /** สถานะของ BytePlus Ark task ที่จบแล้ว — ไม่เปลี่ยนอีก */

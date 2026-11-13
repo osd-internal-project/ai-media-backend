@@ -24,7 +24,7 @@ import {
   PrismaService,
 } from '@ai-media/share';
 import { tosConfigs } from 'src/configs';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { AuditAction, Prisma, PrismaClient } from '@prisma/client';
 
 /** Member counters after a settle/refund — what callers publish as used credit */
 export interface MemberCredit {
@@ -37,6 +37,19 @@ export const SETTLEMENT_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const settlementKey = (taskId: string) => `credit:settled:${taskId}`;
 export const unsettledKey = (taskId: string) => `credit:unsettled:${taskId}`;
 const CHARGE_ATTEMPTS = 3;
+// error_logs.environment defaults to 'development' in the schema — every env looked like dev
+const LOG_ENVIRONMENT = (process.env.NODE_ENV || 'development').slice(0, 20);
+
+/** step names written to error_logs.error_code by `logStep` — grep these to trace a task */
+export type GenerateStep =
+  | 'submit.start'
+  | 'asset.done'
+  | 'asset.failed'
+  | 'provider.submitted'
+  | 'provider.rejected'
+  | 'queue.delayed'
+  | 'callback.received'
+  | 'finalize.success';
 const CHARGE_RETRY_MS = 500;
 
 /**
@@ -475,16 +488,17 @@ export class GenerateHelperService {
 
   async logAudit(
     userId: string,
-    action: string,
+    action: AuditAction,
     details: any,
     entityId: string,
+    entityName = 'GenerateImage',
   ) {
     try {
       await this.auditLogRepo.create({
         data: {
           userId,
-          action: 'CREATE',
-          entityName: 'GenerateImage',
+          action,
+          entityName,
           entityId,
           newValues: details,
         } as any,
@@ -526,7 +540,11 @@ export class GenerateHelperService {
       await this.errorLogRepo.create({
         data: {
           serviceName,
+          environment: LOG_ENVIRONMENT,
           severity: 'ERROR',
+          errorCode: context?.providerCode
+            ? String(context.providerCode).slice(0, 50)
+            : undefined,
           message,
           stackTrace: stack,
           context: context,
@@ -535,6 +553,34 @@ export class GenerateHelperService {
       });
     } catch (e) {
       Logger.error(`Failed to create error log: ${e}`);
+    }
+  }
+
+  /**
+   * One error_logs row per generate step so a task can be traced by `context->>'taskId'`.
+   * Never throws; keep payload/token out of `context` (body is already in stdout).
+   */
+  async logStep(
+    serviceName: string,
+    step: GenerateStep,
+    severity: 'INFO' | 'WARN' | 'ERROR',
+    userId: string | undefined,
+    context: { taskId: string } & Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.errorLogRepo.create({
+        data: {
+          serviceName,
+          environment: LOG_ENVIRONMENT,
+          severity,
+          errorCode: step,
+          message: step,
+          context: { step, ...context } as Prisma.InputJsonObject,
+          userId,
+        },
+      });
+    } catch (e) {
+      Logger.error(`[${context.taskId}] failed to log step ${step}: ${e}`);
     }
   }
 }

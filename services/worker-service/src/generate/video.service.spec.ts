@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { DelayedError } from 'bullmq';
+import { AssetStepError } from './byteplus-asset.service';
 import {
   VideoProcessor,
   isProviderBusy,
@@ -122,6 +123,7 @@ describe('VideoProcessor (callback + poll-check)', () => {
       logAudit: jest.fn(),
       saveProviderTaskId: jest.fn(),
       logError: jest.fn(),
+      logStep: jest.fn(),
       getUsedCredit: jest.fn().mockResolvedValue({ credit: 5 }),
       updateUsedCreditSuccess: jest
         .fn()
@@ -204,6 +206,25 @@ describe('VideoProcessor (callback + poll-check)', () => {
     const res = await processor.process(job);
     expect(res).toMatchObject({ submitted: true, videoTaskId: 'cgt-1' });
     expect(helper.saveProviderTaskId).toHaveBeenCalledWith('t1', 'cgt-1');
+    // one error_logs row per step, traceable by taskId
+    expect(helper.logStep.mock.calls.map((c: unknown[]) => c[1])).toEqual([
+      'submit.start',
+      'provider.submitted',
+    ]);
+    expect(helper.logStep).toHaveBeenCalledWith(
+      'GenerateVideoService',
+      'provider.submitted',
+      'INFO',
+      'u1',
+      expect.objectContaining({ taskId: 't1', videoTaskId: 'cgt-1' }),
+    );
+    expect(helper.logAudit).toHaveBeenCalledWith(
+      'u1',
+      'CREATE',
+      expect.anything(),
+      't1',
+      'GenerateVideo',
+    );
     expect(axiosPost.mock.calls[0][1].callback_url).toMatch(
       /^https:\/\/core\/api\/webhooks\/byteplus\/video\/t1\?sig=[0-9a-f]{64}$/,
     );
@@ -260,6 +281,12 @@ describe('VideoProcessor (callback + poll-check)', () => {
     });
     expect(videoStorage.storeVideoWithThumbnail).toHaveBeenCalledTimes(1);
     expect(helper.updateUsedCreditSuccess).toHaveBeenCalledTimes(1);
+    expect(
+      helper.logStep.mock.calls.filter(
+        (c: unknown[]) => c[1] === 'finalize.success',
+      ),
+    ).toHaveLength(1);
+    expect(helper.logStep.mock.calls[0][1]).toBe('callback.received');
     expect(gallery.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ genneratedStatus: 'SUCCESS' }),
@@ -610,6 +637,60 @@ describe('VideoProcessor (callback + poll-check)', () => {
       expect(assetSvc.cleanup).toHaveBeenCalledWith('t1', assets);
     });
 
+    it('asset network error (ETIMEDOUT) → job waits in the queue, task not failed', async () => {
+      assetSvc.swapImagesToAssets.mockRejectedValue(
+        new AssetStepError(
+          'network',
+          'ETIMEDOUT',
+          'CreateAssetGroup:  ETIMEDOUT',
+        ),
+      );
+      const job = {
+        ...seedance2Job(),
+        timestamp: Date.now(),
+        moveToDelayed: jest.fn(),
+      };
+      await expect(processor.process(job, 'tok')).rejects.toBeInstanceOf(
+        DelayedError,
+      );
+      expect(job.moveToDelayed).toHaveBeenCalledWith(expect.any(Number), 'tok');
+      expect(axiosPost).not.toHaveBeenCalled();
+      expect(helper.logError).not.toHaveBeenCalled();
+      expect(helper.updateUsedCreditFail).not.toHaveBeenCalled();
+      expect(helper.logStep.mock.calls.map((c: unknown[]) => c[1])).toEqual([
+        'submit.start',
+        'asset.failed',
+        'queue.delayed',
+      ]);
+      expect(helper.logStep).toHaveBeenCalledWith(
+        'GenerateVideoService',
+        'asset.failed',
+        'WARN',
+        'u1',
+        expect.objectContaining({ kind: 'network', providerCode: 'ETIMEDOUT' }),
+      );
+    });
+
+    it('asset rejected (bad image) → fails once and BullMQ will not retry', async () => {
+      assetSvc.swapImagesToAssets.mockRejectedValue(
+        new AssetStepError('rejected', undefined, 'asset a1 Failed'),
+      );
+      const job = {
+        ...seedance2Job(),
+        timestamp: Date.now(),
+        moveToDelayed: jest.fn(),
+      };
+      const err = await processor.process(job, 'tok').catch((e: Error) => e);
+      expect(err).toBeInstanceOf(AssetStepError);
+      expect((err as Error).name).toBe('UnrecoverableError');
+      expect(job.moveToDelayed).not.toHaveBeenCalled();
+      expect(helper.logError).toHaveBeenCalledTimes(1);
+      expect(helper.logError.mock.calls[0][4]).toMatchObject({
+        assetKind: 'rejected',
+        providerDetail: 'asset a1 Failed',
+      });
+    });
+
     it('seedance1 never touches the asset library', async () => {
       axiosPost.mockResolvedValue({ data: { id: 'cgt-1' } });
       const job = seedance2Job();
@@ -815,7 +896,10 @@ describe('VideoProcessor (callback + poll-check)', () => {
         response: { status: 429, data: { error: { message: 'too many' } } },
       });
       const job = submitJob({ timestamp: Date.now() - 21 * 60 * 1000 });
-      await expect(processor.process(job, 'tok')).rejects.toThrow('too many');
+      const err = await processor.process(job, 'tok').catch((e: Error) => e);
+      expect((err as Error).message).toBe('too many');
+      // already waited the whole window: a BullMQ retry would fail + notify again
+      expect((err as Error).name).toBe('UnrecoverableError');
       expect(job.moveToDelayed).not.toHaveBeenCalled();
       expect(helper.updateUsedCreditFail).toHaveBeenCalledTimes(1);
       expect(holders()).toEqual([]);

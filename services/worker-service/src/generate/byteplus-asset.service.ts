@@ -2,6 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { createHash, createHmac } from 'crypto';
 import * as https from 'https';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import { Redis } from 'ioredis';
+import {
+  assetCreateQpm,
+  lockGroupCreation,
+  releaseGroupSlots,
+  reserveGroupSlots,
+  retireGroup,
+  setCurrentGroup,
+  takeAssetCreateTokens,
+  unlockGroupCreation,
+} from './asset-quota';
 
 const ASSET_API_VERSION = '2024-01-01';
 const ASSET_SERVICE = 'ark';
@@ -10,6 +22,8 @@ const ASSET_SERVICE = 'ark';
 export interface TaskAssets {
   groupId: string;
   assetIds: string[];
+  /** slots reserved in the shared group pool; absent = legacy per-task group (delete the group) */
+  slots?: number;
 }
 
 interface ContentItem {
@@ -28,6 +42,7 @@ type AssetErrorKind =
   | 'rejected'
   | 'missing'
   | 'timeout'
+  | 'network'
   | 'other';
 
 /** error ภายใน — message มีรายละเอียด provider (ห้ามส่งถึงผู้ใช้), kind ใช้เลือกข้อความผู้ใช้ */
@@ -62,17 +77,29 @@ const USER_MESSAGES: Record<AssetErrorKind, string> = {
     'Your reference image is no longer available. Please remove it and upload it again.',
   timeout: 'Preparing your reference image took too long. Please try again.',
   rate: 'The service is busy right now. Please try again in a moment.',
-  auth: "We couldn't prepare your reference image right now. Please try again later.",
-  other:
-    "We couldn't prepare your reference image right now. Please try again later.",
+  network: "We couldn't reach the video service. Please try again in a moment.",
+  // auth/other are our side, not the image — don't make the user swap a good image
+  auth: 'Something went wrong preparing your video. Please try again later.',
+  other: 'Something went wrong preparing your video. Please try again later.',
 };
 
+const REQUEST_TIMEOUT_MS = 30_000;
 const AUTH_CODES = /InvalidAccessKey|SignatureDoesNotMatch|AccessDenied/i;
 const RATE_CODES = /Limit|Throttl/i;
 // Ark fetches the presigned TOS URL itself; this code means the object is gone (seen on prod: "fetch object not found")
 const MISSING_CODES = /DownloadFailed/i;
+// CreateAsset says the group is full or gone — stop using it and retry from the queue with a new one
+const GROUP_UNUSABLE_CODES = /Quota|Exceed|NotFound/i;
+// no HTTP response: connect/DNS/socket failed before BytePlus saw the request
+const NETWORK_CODES =
+  /^(ETIMEDOUT|ECONNRESET|ECONNREFUSED|ECONNABORTED|EAI_AGAIN|ENOTFOUND|ENETUNREACH|EHOSTUNREACH)$/;
 
-const classify = (status: number | undefined, code = ''): AssetErrorKind => {
+const classify = (
+  status: number | undefined,
+  code = '',
+  netCode = '',
+): AssetErrorKind => {
+  if (!status && NETWORK_CODES.test(netCode)) return 'network';
   if (status === 401 || status === 403 || AUTH_CODES.test(code)) return 'auth';
   if (MISSING_CODES.test(code)) return 'missing';
   if (status === 429 || RATE_CODES.test(code)) return 'rate';
@@ -94,6 +121,10 @@ export class ByteplusAssetService {
   private readonly agent = new https.Agent({ rejectUnauthorized: false });
   pollIntervalMs = 3_000;
   waitTimeoutMs = 300_000;
+  groupWaitMs = 500;
+  groupWaitTries = 20;
+
+  constructor(@InjectRedis() private readonly redis: Redis) {}
 
   private get host() {
     return process.env.BYTEPLUS_ARK_OPENAPI_HOST || 'open.byteplusapi.com';
@@ -122,8 +153,17 @@ export class ByteplusAssetService {
 
     let assets: TaskAssets | null = null;
     try {
-      const groupId = await this.createGroup(taskId);
-      assets = { groupId, assetIds: [] };
+      if (!(await takeAssetCreateTokens(this.redis, images.length, taskId))) {
+        throw new AssetApiError(
+          `CreateAsset: account limit ${assetCreateQpm()}/min reached (${
+            images.length
+          } needed)`,
+          'rate',
+          'LOCAL_QPM',
+        );
+      }
+      const groupId = await this.acquireGroup(taskId, images.length);
+      assets = { groupId, assetIds: [], slots: images.length };
       const created = assets;
       let done = 0;
       await onAssetReady?.(0, images.length);
@@ -173,6 +213,10 @@ export class ByteplusAssetService {
       }
     }
     try {
+      const deleteGroup =
+        assets.slots === undefined ||
+        (await releaseGroupSlots(this.redis, assets.groupId, assets.slots));
+      if (!deleteGroup) return;
       await this.call('DeleteAssetGroup', {
         Id: assets.groupId,
         ProjectName: this.projectName,
@@ -187,16 +231,42 @@ export class ByteplusAssetService {
     }
   }
 
+  /** `n` slots in the shared pool group — creates the next group when the current one is full */
+  private async acquireGroup(taskId: string, n: number): Promise<string> {
+    for (let i = 0; i < this.groupWaitTries; i++) {
+      const reserved = await reserveGroupSlots(this.redis, n);
+      if (reserved) return reserved;
+      if (await lockGroupCreation(this.redis)) {
+        // another pod may have finished creating one between reserve and lock
+        const raced = await reserveGroupSlots(this.redis, n);
+        if (raced) {
+          await unlockGroupCreation(this.redis);
+          return raced;
+        }
+        try {
+          const id = await this.createGroup(taskId);
+          await setCurrentGroup(this.redis, id, n);
+          return id;
+        } catch (error) {
+          await unlockGroupCreation(this.redis);
+          throw error;
+        }
+      }
+      await new Promise((r) => setTimeout(r, this.groupWaitMs));
+    }
+    throw new AssetApiError('asset group creation still locked', 'rate');
+  }
+
   private async createGroup(taskId: string): Promise<string> {
     const res = await this.call('CreateAssetGroup', {
-      Name: `task-${taskId}`,
-      Description: `seedance2 task ${taskId}`,
+      Name: `pool-${Date.now()}`,
+      Description: `seedance2 shared pool (first task ${taskId})`,
       ProjectName: this.projectName,
     });
     const id = String(res.Id ?? '');
     if (!id)
       throw new AssetApiError('CreateAssetGroup returned no Id', 'other');
-    this.logger.log(`[${taskId}] asset group created ${id}`);
+    this.logger.log(`[${taskId}] asset group rotated → new pool group ${id}`);
     return id;
   }
 
@@ -206,6 +276,16 @@ export class ByteplusAssetService {
       URL: url,
       AssetType: 'Image',
       ProjectName: this.projectName,
+    }).catch(async (error: unknown) => {
+      if (
+        error instanceof AssetApiError &&
+        GROUP_UNUSABLE_CODES.test(error.code ?? '')
+      ) {
+        await retireGroup(this.redis, groupId);
+        this.logger.warn(`asset group ${groupId} retired: ${error.message}`);
+        throw new AssetApiError(error.message, 'rate', error.code);
+      }
+      throw error;
     });
     const id = String(res.Id ?? '');
     if (!id) throw new AssetApiError('CreateAsset returned no Id', 'other');
@@ -229,7 +309,12 @@ export class ByteplusAssetService {
         this.logger.error(
           `[${taskId}] asset ${assetId} Failed: ${JSON.stringify(res)}`,
         );
-        throw new AssetApiError(`asset ${assetId} Failed`, 'rejected');
+        // reason (e.g. real-person check) must reach error_logs; drop the presigned URL
+        const { URL: _url, ...reason } = res;
+        throw new AssetApiError(
+          `asset ${assetId} Failed: ${JSON.stringify(reason).slice(0, 500)}`,
+          'rejected',
+        );
       }
       if (Date.now() >= deadline) {
         throw new AssetApiError(
@@ -258,11 +343,12 @@ export class ByteplusAssetService {
     const payload = JSON.stringify(body);
     const query = `Action=${action}&Version=${ASSET_API_VERSION}`;
     const headers = this.sign(ak, sk, query, payload);
+    const start = Date.now();
     try {
       const res = await axios.post<OpenApiResponse>(
         `https://${this.host}/?${query}`,
         payload,
-        { headers, httpsAgent: this.agent },
+        { headers, httpsAgent: this.agent, timeout: REQUEST_TIMEOUT_MS },
       );
       const apiError = res.data?.ResponseMetadata?.Error;
       if (apiError) {
@@ -280,17 +366,25 @@ export class ByteplusAssetService {
         ?.ResponseMetadata?.Error;
       // no response = network failure; Node's dual-stack connect gives AggregateError with an empty message — keep code + per-address errors
       // as: CI resolves an older axios whose AxiosError type has no `cause`; Node sets it at runtime
-      const { cause } = error as Error & {
-        cause?: { errors?: NodeJS.ErrnoException[] };
+      type NetError = NodeJS.ErrnoException & {
+        address?: string;
+        port?: number;
       };
-      const attempts = (cause?.errors ?? []).map((e) => `${e.code} ${(e as { address?: string }).address ?? ''}`);
+      const { cause } = error as Error & {
+        cause?: NetError & { errors?: NetError[] };
+      };
+      const addr = (e?: NetError) =>
+        e?.address
+          ? `${e.code ?? ''} ${e.address}${e.port ? `:${e.port}` : ''}`
+          : '';
+      const attempts = [addr(cause), ...(cause?.errors ?? []).map(addr)];
       throw new AssetApiError(
         `${action}: ${status ?? ''} ${
           apiError
             ? `${apiError.Code} ${apiError.Message}`
             : [error.code, error.message, ...attempts].filter(Boolean).join(' ')
-        }`,
-        classify(status, apiError?.Code),
+        } (host=${this.host} ${Date.now() - start}ms)`,
+        classify(status, apiError?.Code, error.code),
         apiError?.Code ?? (status ? `HTTP ${status}` : error.code),
       );
     }

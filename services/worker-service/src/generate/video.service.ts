@@ -32,7 +32,7 @@ import { Redis } from 'ioredis';
 import { OnWorkerEvent } from '@nestjs/bullmq';
 import axios from 'axios';
 import * as https from 'https';
-import { GenerateHelperService } from './generate-helper.service';
+import { GenerateHelperService, GenerateStep } from './generate-helper.service';
 import { VideoStorageService } from './video-storage.service';
 import {
   AssetStepError,
@@ -55,6 +55,7 @@ const VIDEO_SWEEP_STALE_MS = 30 * 60 * 1000;
 const VIDEO_SLOT_RETRY_MS = 15 * 1000;
 const VIDEO_BUSY_RETRY_MS = 30 * 1000;
 const VIDEO_QUEUE_MAX_WAIT_MS = 20 * 60 * 1000;
+const TRANSIENT_ASSET_KINDS: AssetStepError['kind'][] = ['network', 'rate'];
 
 /** provider รับงานไม่ไหวชั่วคราว (slot ของเราเต็ม หรือโดน rate/concurrency limit) — รอแล้วส่งใหม่ได้ */
 class ProviderBusyError extends Error {
@@ -256,6 +257,13 @@ export class VideoProcessor extends WorkerHost {
       }`,
     );
     this.logger.log(`${tag(taskId)} body=${JSON.stringify(body)}`);
+    await this.logStep('submit.start', 'INFO', userId, {
+      taskId,
+      model: body?.model,
+      organizationId: body?.organizationId,
+      attempt: job.attemptsMade + 1,
+      queuedMs: Date.now() - job.timestamp,
+    });
 
     let assets: TaskAssets | null = null;
     try {
@@ -287,10 +295,9 @@ export class VideoProcessor extends WorkerHost {
         const payload = await this.buildPayload(body, sendConfig, taskId);
         // seedance2 ไม่รับรูปคนจริงเป็น URL — แปลงทุกรูปเป็น asset:// ก่อนส่ง
         if (sendConfig?.type === 'seedance2') {
-          assets = await this.byteplusAsset.swapImagesToAssets(
-            payload,
-            taskId,
-            (current, total) =>
+          const assetStart = Date.now();
+          assets = await this.byteplusAsset
+            .swapImagesToAssets(payload, taskId, (current, total) =>
               this.publishToCore(clientId, 'worker:video-progress', {
                 taskId,
                 stage: 'preparing',
@@ -300,23 +307,59 @@ export class VideoProcessor extends WorkerHost {
                 type: 'video',
                 projectId: body.projectId,
               }),
-          );
+            )
+            .catch(async (error: Error) => {
+              await this.logStep('asset.failed', 'WARN', userId, {
+                taskId,
+                model: body.model,
+                ms: Date.now() - assetStart,
+                ...(error instanceof AssetStepError && {
+                  kind: error.kind,
+                  providerCode: error.code,
+                  providerDetail: error.detail,
+                }),
+              });
+              if (!(error instanceof AssetStepError)) throw error;
+              // our network / BytePlus rate limit — wait in the queue like a busy provider
+              if (TRANSIENT_ASSET_KINDS.includes(error.kind)) {
+                throw new ProviderBusyError(error.message, VIDEO_BUSY_RETRY_MS);
+              }
+              // image/auth problem: a BullMQ retry would only fail the task again
+              error.name = 'UnrecoverableError';
+              throw error;
+            });
+          await this.rememberInflightAssets(taskId, assets);
+          await this.logStep('asset.done', 'INFO', userId, {
+            taskId,
+            model: body.model,
+            count: assets?.assetIds.length ?? 0,
+            groupId: assets?.groupId,
+            ms: Date.now() - assetStart,
+          });
         }
         let apiRes: any;
         // header มี Authorization — log แค่ payload
         this.logger.log(
           `${tag(taskId)} → POST ${sendApi} payload=${JSON.stringify(payload)}`,
         );
+        const submitStart = Date.now();
         try {
           apiRes = await axios.post(sendApi, payload, axiosConfig);
           this.logger.log(
             `${tag(taskId)} ← provider response=${JSON.stringify(apiRes.data)}`,
           );
+          await this.logStep('provider.submitted', 'INFO', userId, {
+            taskId,
+            model: body.model,
+            videoTaskId: apiRes.data?.id,
+            ms: Date.now() - submitStart,
+          });
           await this.generateHelperService.logAudit(
             userId,
             'CREATE',
             body,
             taskId,
+            'GenerateVideo',
           );
         } catch (error: any) {
           // Surface the real API rejection reason. Log the verbose detail
@@ -336,6 +379,13 @@ export class VideoProcessor extends WorkerHost {
               apiBody,
             )}`,
           );
+          await this.logStep('provider.rejected', 'WARN', userId, {
+            taskId,
+            model: body.model,
+            status: apiStatus,
+            message: apiMessage,
+            ms: Date.now() - submitStart,
+          });
 
           if (isProviderBusy(apiStatus, apiMessage)) {
             throw new ProviderBusyError(apiMessage, VIDEO_BUSY_RETRY_MS);
@@ -344,7 +394,10 @@ export class VideoProcessor extends WorkerHost {
         }
 
         videoTaskId = apiRes.data.id;
-        await this.generateHelperService.saveProviderTaskId(taskId, videoTaskId);
+        await this.generateHelperService.saveProviderTaskId(
+          taskId,
+          videoTaskId,
+        );
         await this.updateTaskStatus(taskId, { videoTaskId });
         // Persist into the job payload so a BullMQ retry/stalled re-process
         // resumes this provider task instead of submitting a new one.
@@ -402,6 +455,8 @@ export class VideoProcessor extends WorkerHost {
         if (Date.now() - job.timestamp < VIDEO_QUEUE_MAX_WAIT_MS) {
           return this.delaySubmit(job, token, error);
         }
+        // waited the full window already — fail once, no BullMQ retry
+        error.name = 'UnrecoverableError';
       }
       await this.failTask({ taskId, clientId, body, userId }, error as Error);
       await this.clearInflight(taskId);
@@ -417,6 +472,10 @@ export class VideoProcessor extends WorkerHost {
     this.logger.log(
       `${tag(taskId)} 🔔 callback received (attempt ${job.attemptsMade + 1})`,
     );
+    await this.logStep('callback.received', 'INFO', undefined, {
+      taskId,
+      attempt: job.attemptsMade + 1,
+    });
     const ctx = await this.loadCtx(taskId);
     if (!ctx) {
       if (await this.redis.exists(videoFinalKey(taskId))) {
@@ -686,6 +745,21 @@ export class VideoProcessor extends WorkerHost {
       projectId: body.projectId,
     });
     this.logger.log(`${tag(taskId)} 🎉 completed`);
+    await this.logStep('finalize.success', 'INFO', userId, {
+      taskId,
+      model: body.model,
+      videoTaskId: ctx.videoTaskId,
+      totalMs: Date.now() - ctx.submittedAt,
+      tokens: usage.total_tokens,
+      credit: realCredit.credit,
+    });
+    await this.generateHelperService.logAudit(
+      userId,
+      'UPDATE',
+      { status: 'success', credit: realCredit.credit, file: result.file },
+      taskId,
+      'GenerateVideo',
+    );
   }
 
   /** fail path เดิม (เคยอยู่ใน catch ของ process) — สถานะ failed, แจ้ง core, คืนเครดิต, gallery FAILED */
@@ -704,6 +778,7 @@ export class VideoProcessor extends WorkerHost {
       err.stack ?? '',
       {
         taskId,
+        step: 'task.failed',
         model: body.model,
         organizationId: body.organizationId,
         ...(err instanceof AssetStepError && {
@@ -714,6 +789,13 @@ export class VideoProcessor extends WorkerHost {
       },
     );
 
+    await this.generateHelperService.logAudit(
+      userId,
+      'UPDATE',
+      { status: 'failed', error: err.message },
+      taskId,
+      'GenerateVideo',
+    );
     await this.updateTaskStatus(taskId, {
       status: 'failed',
       failedAt: new Date().toISOString(),
@@ -780,9 +862,23 @@ export class VideoProcessor extends WorkerHost {
     } finally {
       await this.redis.del(videoCtxKey(ctx.taskId));
       await this.clearInflight(ctx.taskId);
-      // shortcut: sweeper ที่ไม่มี ctx (หมดอายุ) ไม่รู้ asset → ค้างใน BytePlus; ถ้าเจอบ่อยให้เก็บ assets ใน inflight data
       await this.byteplusAsset.cleanup(ctx.taskId, ctx.assets);
     }
+  }
+
+  private logStep(
+    step: GenerateStep,
+    severity: 'INFO' | 'WARN' | 'ERROR',
+    userId: string | undefined,
+    context: { taskId: string } & Record<string, unknown>,
+  ): Promise<void> {
+    return this.generateHelperService.logStep(
+      'GenerateVideoService',
+      step,
+      severity,
+      userId,
+      context,
+    );
   }
 
   /** หน่วง submit job ไว้ในคิว (ไม่นับเป็น attempt) — gallery ยัง QUEUED จนกว่าจะส่งได้ */
@@ -791,12 +887,18 @@ export class VideoProcessor extends WorkerHost {
     token: string | undefined,
     reason: ProviderBusyError,
   ): Promise<never> {
-    const { taskId } = job.data as VideoProcessJob;
+    const { taskId, userId } = job.data as VideoProcessJob;
     this.logger.warn(
       `${tag(taskId)} ⏳ provider busy (${reason.message}) — retry in ${
         reason.retryMs / 1000
       }s`,
     );
+    await this.logStep('queue.delayed', 'WARN', userId, {
+      taskId,
+      reason: reason.message,
+      retryMs: reason.retryMs,
+      waitedMs: Date.now() - job.timestamp,
+    });
     await job.moveToDelayed(Date.now() + reason.retryMs, token);
     throw new DelayedError();
   }
@@ -880,13 +982,33 @@ export class VideoProcessor extends WorkerHost {
     return 'failed';
   }
 
+  /** sweeper may close this task after ctx expired — it must still know which assets to delete */
+  private async rememberInflightAssets(
+    taskId: string,
+    assets: TaskAssets | null,
+  ): Promise<void> {
+    if (!assets) return;
+    const raw = await this.redis.hget(VIDEO_INFLIGHT_DATA_KEY, taskId);
+    if (!raw) return;
+    const data = { ...(JSON.parse(raw) as VideoInflightData), assets };
+    await this.redis.hset(
+      VIDEO_INFLIGHT_DATA_KEY,
+      taskId,
+      JSON.stringify(data),
+    );
+  }
+
   private ctxFromInflight(
     taskId: string,
     raw: string,
-  ): Pick<VideoTaskContext, 'taskId' | 'clientId' | 'body' | 'userId'> {
+  ): Pick<
+    VideoTaskContext,
+    'taskId' | 'clientId' | 'body' | 'userId' | 'assets'
+  > {
     const data = JSON.parse(raw) as VideoInflightData;
     return {
       taskId,
+      assets: data.assets ?? null,
       clientId: data.clientId,
       userId: data.userId,
       // failTask อ่านจาก body แค่ organizationId / projectId
@@ -933,13 +1055,13 @@ export class VideoProcessor extends WorkerHost {
     const apiBody = (error as { response?: { data?: any } }).response?.data;
     const message = unwrapProviderMessage(
       String(
-        apiBody?.error?.message ??
-          apiBody?.message ??
-          (error as Error).message,
+        apiBody?.error?.message ?? apiBody?.message ?? (error as Error).message,
       ),
     );
     this.logger.error(
-      `${tag(ctx.taskId)} ❌ status request rejected: API ${status}: ${message}`,
+      `${tag(
+        ctx.taskId,
+      )} ❌ status request rejected: API ${status}: ${message}`,
     );
     await this.failOnce(ctx, new Error(message));
     return true;

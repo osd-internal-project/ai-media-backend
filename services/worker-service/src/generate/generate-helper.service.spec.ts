@@ -174,3 +174,77 @@ describe('GenerateHelperService.saveProviderTaskId', () => {
     await expect(service.saveProviderTaskId('t1', 'cgt-1')).resolves.toBeUndefined();
   });
 });
+
+describe('GenerateHelperService error_logs', () => {
+  const build = (fail = false) => {
+    const errorLog = {
+      create: jest.fn(async () => {
+        if (fail) throw new Error('db down');
+        return {};
+      }),
+    };
+    const service = new GenerateHelperService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    // repos are constructor-injected after the ones above; set directly to keep the test independent of arg order
+    Object.assign(service, { errorLogRepo: errorLog });
+    return { service, errorLog };
+  };
+
+  it('logStep writes the step as error_code with the env and taskId', async () => {
+    const { service, errorLog } = build();
+    await service.logStep(
+      'GenerateVideoService',
+      'asset.failed',
+      'WARN',
+      'u1',
+      {
+        taskId: 't1',
+        ms: 512,
+      },
+    );
+    expect(errorLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        serviceName: 'GenerateVideoService',
+        environment: 'test',
+        severity: 'WARN',
+        errorCode: 'asset.failed',
+        userId: 'u1',
+        context: { step: 'asset.failed', taskId: 't1', ms: 512 },
+      }),
+    });
+  });
+
+  it('logError stores the env and the provider code instead of the schema default', async () => {
+    const { service, errorLog } = build();
+    await service.logError('GenerateVideoService', 'u1', 'boom', '', {
+      taskId: 't1',
+      providerCode: 'ETIMEDOUT',
+    });
+    expect(errorLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        environment: 'test',
+        errorCode: 'ETIMEDOUT',
+      }),
+    });
+  });
+
+  it('a DB error in logStep does not fail the generation', async () => {
+    const { service } = build(true);
+    await expect(
+      service.logStep('GenerateVideoService', 'submit.start', 'INFO', 'u1', {
+        taskId: 't1',
+      }),
+    ).resolves.toBeUndefined();
+  });
+});

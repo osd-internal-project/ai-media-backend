@@ -38,6 +38,8 @@ env:
   # Ark เรียก <byteplusCallbackBaseUrl>/webhooks/byteplus/video/:taskId ที่ core (ingress rewrite → /api)
   # SIT รับ callback จากข้างนอกไม่ได้ → ว่าง = ไม่ส่ง callback_url (video จบด้วย poll-check)
   byteplusCallbackBaseUrl: ""
+  # BytePlus Advanced Creation Rights 120 QPM แชร์ทุก env (บัญชีเดียว): prod 110 / uat 5 / sit 5
+  byteplusAssetCreateQpm: "5"
 
 # Secrets managed via GitHub Actions secrets and passed with --set:
 #   secretEnv.DATABASE_URL
