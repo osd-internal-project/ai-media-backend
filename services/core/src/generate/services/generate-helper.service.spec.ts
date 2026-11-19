@@ -71,3 +71,38 @@ describe('GenerateHelperService project org + error labels', () => {
     ).toThrow('Failed to generate video');
   });
 });
+
+describe('GenerateHelperService.buildGenerateConfig reference files', () => {
+  const base = {
+    ratio: '16:9',
+    width: 1280,
+    height: 720,
+    prompt: 'p',
+    duration: 15,
+    modelName: 'dreamina-seedance-2-5-260628',
+    imageCount: 0,
+    resolution: '720p',
+    generateAudio: false,
+  };
+
+  it('keeps reference types and sums reference-video seconds, without urls', () => {
+    const config = makeService('active').buildGenerateConfig({
+      ...base,
+      files: [
+        { type: 'video', url: 'org/u/a.mp4', duration: 10.03 },
+        { type: 'image', url: 'org/u/b.png' },
+      ],
+    });
+    expect(config).toMatchObject({
+      referenceFiles: [{ type: 'video', duration: 10.03 }, { type: 'image' }],
+      inputVideoSec: 10.03,
+    });
+    expect(JSON.stringify(config)).not.toContain('a.mp4');
+  });
+
+  it('adds no reference keys when the request has no files', () => {
+    const config = makeService('active').buildGenerateConfig(base);
+    expect(config).not.toHaveProperty('referenceFiles');
+    expect(config).not.toHaveProperty('inputVideoSec');
+  });
+});

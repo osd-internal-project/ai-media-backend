@@ -14,6 +14,12 @@ import { appConfigs } from '../configs';
 const TEMPLATES_DIR = join(__dirname, '..', 'templates');
 const TEMPLATE_NAME = /^[a-z0-9_-]+$/;
 
+/** SMTP 4xx = "try again later" (e.g. 421 too many connections, 451 temporary server error). */
+function isTransientSmtpError(error: unknown): boolean {
+  const code = (error as { responseCode?: unknown } | null)?.responseCode;
+  return typeof code === 'number' && code >= 400 && code < 500;
+}
+
 /**
  * Sends transactional emails over an unauthenticated SMTP relay using raw
  * nodemailer: no SMTP auth, HELO as osd.co.th, STARTTLS with SNI set to the
@@ -22,6 +28,8 @@ const TEMPLATE_NAME = /^[a-z0-9_-]+$/;
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
+  // O365 answers 421/451 under load; short waits keep callers under the 60s ingress
+  private readonly retryDelaysMs = [1_000, 3_000];
 
   // Unauthenticated direct-send relay (no login), identical to the reference service.
   private readonly transporter = nodemailer.createTransport({
@@ -54,24 +62,34 @@ export class EmailService {
     const html = this.renderBody(dto);
     const from = dto.from ?? appConfigs().EMAIL_FROM;
 
-    try {
-      const info = await this.transporter.sendMail({
-        from,
-        to: dto.to,
-        cc: dto.cc,
-        bcc: dto.bcc,
-        subject: dto.subject,
-        html,
-      });
-      // relay's response carries its queue ID — the key for O365 message trace
-      this.logger.log(
-        `✅ Sent to ${dto.to} | messageId: ${info.messageId} | response: ${info.response} | rejected: ${info.rejected.length}`,
-      );
-      return { success: true, messageId: info.messageId };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`❌ Send failed: ${message}`);
-      return { success: false, error: message };
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const info = await this.transporter.sendMail({
+          from,
+          to: dto.to,
+          cc: dto.cc,
+          bcc: dto.bcc,
+          subject: dto.subject,
+          html,
+        });
+        // relay's response carries its queue ID — the key for O365 message trace
+        this.logger.log(
+          `✅ Sent to ${dto.to} | messageId: ${info.messageId} | response: ${info.response} | rejected: ${info.rejected.length}`,
+        );
+        return { success: true, messageId: info.messageId };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const delay = this.retryDelaysMs[attempt];
+        if (delay !== undefined && isTransientSmtpError(error)) {
+          this.logger.warn(
+            `⚠️ Send to ${dto.to} attempt ${attempt + 1} got transient error, retrying in ${delay}ms: ${message}`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+        this.logger.error(`❌ Send failed: ${message}`);
+        return { success: false, error: message };
+      }
     }
   }
 

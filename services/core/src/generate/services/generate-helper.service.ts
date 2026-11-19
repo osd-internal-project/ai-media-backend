@@ -211,9 +211,20 @@ export class GenerateHelperService {
     watermark?: boolean;
     seed?: number;
     fastMode?: boolean;
-    files?: { type: string; url: string }[];
+    files?: { type: string; url: string; duration?: number }[];
   }) {
+    // BytePlus bills reference-video seconds too — keep them so token_used can be audited from the log alone
+    const referenceFiles = (body?.files ?? []).map((file) => ({
+      type: file.type,
+      ...(file.duration && { duration: file.duration }),
+    }));
+    const inputVideoSec = referenceFiles.reduce(
+      (sum, file) => sum + (file.type === 'video' ? file.duration ?? 0 : 0),
+      0,
+    );
     return {
+      ...(referenceFiles.length && { referenceFiles }),
+      ...(inputVideoSec > 0 && { inputVideoSec }),
       ...(body?.width && { width: body?.width }),
       ...(body?.height && { height: body?.height }),
       ...(body?.ratio && { ratio: body?.ratio }),
