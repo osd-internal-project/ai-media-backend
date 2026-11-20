@@ -17,6 +17,7 @@ import {
   PrismaService,
   ReceiptRepository,
   TQueryClient,
+  resetCycleUsage,
 } from '@ai-media/share';
 import { Prisma, Invoice } from '@prisma/client';
 import * as dayjs from 'dayjs';
@@ -949,6 +950,7 @@ export class InvoiceService {
         currentCycleImage: imageAllowance,
       },
     });
+    await resetCycleUsage(tx, input.organizationId, creditAllowance);
   }
 
   /** Admin list with status + date-range filters and pagination. */

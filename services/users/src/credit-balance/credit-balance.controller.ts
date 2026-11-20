@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Patch, Body } from '@nestjs/common';
+import { AuthUser, CurrentUser } from '@ai-media/share';
 import { CreditBalanceService } from './credit-balance.service';
 
 @Controller('credit-balance')
@@ -19,7 +20,12 @@ export class CreditBalanceController {
   updateExtraCoin(
     @Param('organizationId') organizationId: string,
     @Body() data: { onTopBalance?: number; onTopImage?: number },
+    @CurrentUser() authUser: AuthUser | undefined,
   ) {
-    return this.creditBalanceService.updateExtraCoin(organizationId, data);
+    return this.creditBalanceService.updateExtraCoin(
+      organizationId,
+      data,
+      authUser,
+    );
   }
 }

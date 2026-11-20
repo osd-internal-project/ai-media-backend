@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -11,10 +12,19 @@ import {
   OrganizationMemberRepository,
   OrganizationRepository,
   PrismaService,
+  roundCredit,
+  unallocatedCredit,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { planMemberChanges } from './project-members.plan';
+
+type CreditDb = Pick<Prisma.TransactionClient, 'creditBalance' | 'project'>;
+
+// project ที่ถูกลบจะมี status 'deleted' ส่วนข้อมูลเก่าอาจเป็น null
+const NOT_DELETED_PROJECT: Prisma.ProjectWhereInput = {
+  OR: [{ status: null }, { status: { not: 'deleted' } }],
+};
 
 interface ProjectMemberInput {
   userId: string;
@@ -100,7 +110,19 @@ export class ProjectService {
 
     return organizationMember.role as OrganizationRole;
   }
-  create(createProjectDto: any) {
+  async create(createProjectDto: any) {
+    const limit = Number(createProjectDto.limitCreditAllowance ?? 0);
+    if (limit > 0 && createProjectDto.organizationId) {
+      const available = await this.unallocatedFor(
+        this.prisma,
+        createProjectDto.organizationId,
+      );
+      if (roundCredit(limit) > available) {
+        throw new BadRequestException(
+          `Credit limit ${limit} exceeds organization credit available to assign (${Math.max(available, 0)})`,
+        );
+      }
+    }
     return this.projectRepo.create({
       data: {
         name: createProjectDto.name,
@@ -251,11 +273,18 @@ export class ProjectService {
     );
 
     const { members, userId: _caller, ...fields } = dto;
+    const newLimit = fields.limitCreditAllowance;
+    const limitChanged =
+      newLimit !== undefined && newLimit !== project.limitCreditAllowance;
     return this.prisma.$transaction(async (tx) => {
+      const existing =
+        members !== undefined || limitChanged
+          ? await tx.projectMember.findMany({ where: { projectId: id } })
+          : [];
+      if (limitChanged) {
+        await this.assertProjectLimit(tx, project, newLimit, existing);
+      }
       if (members !== undefined) {
-        const existing = await tx.projectMember.findMany({
-          where: { projectId: id },
-        });
         const changes = planMemberChanges(
           existing,
           members,
@@ -277,6 +306,78 @@ export class ProjectService {
       }
       return tx.project.update({ where: { id }, data: fields });
     });
+  }
+
+  /** Credit the org can still hand out, plus the project's own used credit when editing it */
+  async getCreditCapacity(organizationId: string, excludeProjectId?: string) {
+    const project = excludeProjectId
+      ? await this.projectRepo.findOne({ where: { id: excludeProjectId } })
+      : null;
+    return {
+      unallocated: await this.unallocatedFor(
+        this.prisma,
+        organizationId,
+        excludeProjectId,
+      ),
+      projectUsed: project?.usedCreditAllowance ?? 0,
+    };
+  }
+
+  private async unallocatedFor(
+    db: CreditDb,
+    organizationId: string,
+    excludeProjectId?: string,
+  ): Promise<number> {
+    const pool = await db.creditBalance.findUnique({
+      where: { organizationId },
+      select: { currentCycleBalance: true, onTopBalance: true },
+    });
+    const projects = await db.project.findMany({
+      where: {
+        organizationId,
+        ...(excludeProjectId && { id: { not: excludeProjectId } }),
+        AND: [NOT_DELETED_PROJECT],
+      },
+      select: { limitCreditAllowance: true, usedCreditAllowance: true },
+    });
+    return unallocatedCredit(pool, projects);
+  }
+
+  /**
+   * A project limit may not drop below what is used or held, and may only grow
+   * by what the org has not handed out yet. Lowering is always allowed down to that floor.
+   * @throws BadRequestException when the new limit breaks either rule
+   */
+  private async assertProjectLimit(
+    db: CreditDb,
+    project: {
+      id: string;
+      organizationId: string | null;
+      limitCreditAllowance: number;
+      usedCreditAllowance: number;
+    },
+    newLimit: number,
+    members: { holdCreditAllowance: number }[],
+  ): Promise<void> {
+    const held = members.reduce((sum, m) => sum + m.holdCreditAllowance, 0);
+    const spent = roundCredit(project.usedCreditAllowance + held);
+    if (newLimit < spent) {
+      throw new BadRequestException(
+        `Project credit limit ${newLimit} is below credit already used (${spent})`,
+      );
+    }
+    if (newLimit <= project.limitCreditAllowance || !project.organizationId) {
+      return;
+    }
+    const max = roundCredit(
+      (await this.unallocatedFor(db, project.organizationId, project.id)) +
+        project.usedCreditAllowance,
+    );
+    if (newLimit > max) {
+      throw new BadRequestException(
+        `Project credit limit ${newLimit} exceeds credit available to assign (${Math.max(max, 0)})`,
+      );
+    }
   }
 
   /** @throws ForbiddenException unless the caller is OWNER/ADMIN of the project's org or SUPER_ADMIN */

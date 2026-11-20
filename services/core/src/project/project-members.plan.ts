@@ -44,6 +44,7 @@ export function planMemberChanges(
   const byUser = new Map(existing.map((row) => [row.userId, row]));
   const changes: MemberChanges = { update: [], create: [], removeIds: [] };
   let assigned = 0;
+  let removedUsed = 0;
 
   for (const member of incoming) {
     const row = byUser.get(member.userId);
@@ -86,11 +87,15 @@ export function planMemberChanges(
       );
     }
     changes.removeIds.push(row.id);
+    // their used credit stays in project.used, so it cannot be handed to someone else this cycle
+    removedUsed += row.usedCreditAllowance;
   }
 
-  if (assigned > projectLimit) {
+  if (assigned + removedUsed > projectLimit) {
     throw new BadRequestException(
-      `Member credit limits (${assigned}) exceed the project limit (${projectLimit})`,
+      removedUsed > 0
+        ? `Member credit limits (${assigned}) plus credit used by removed members (${removedUsed}) exceed the project limit (${projectLimit})`
+        : `Member credit limits (${assigned}) exceed the project limit (${projectLimit})`,
     );
   }
   return changes;

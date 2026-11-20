@@ -10,12 +10,12 @@ import {
   CreditBalanceRepository,
   OrganizationMemberRepository,
   OrganizationRepository,
-  OrganizationSubscriptionRepository,
   PrismaTransactionService,
   ProjectMemberRepository,
   ProjectRepository,
   RequestChangePasswordRepository,
   UsersRepository,
+  unallocatedCredit,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { HttpService } from '@nestjs/axios';
@@ -105,7 +105,6 @@ export class OrganizationBulkMemberService {
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
     private readonly usersRepo: UsersRepository,
-    private readonly organizationSubscriptionRepo: OrganizationSubscriptionRepository,
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly keycloakService: KeycloakService,
     private readonly transaction: PrismaTransactionService,
@@ -703,27 +702,16 @@ export class OrganizationBulkMemberService {
     }));
   }
 
-  /** สูตรเดียวกับหน้า Project: max(creditAllowance, currentCycleBalance) + onTop − limit ที่แจกให้ project แล้ว */
+  /** วงเงินที่ org ยังแจกได้ — สูตรเดียวกับ core project.service (unallocatedCredit ใน share) */
   private async orgCreditRemaining(organizationId: string) {
-    const [subscription, balance, projects] = await Promise.all([
-      this.organizationSubscriptionRepo.findOne({ where: { organizationId } }),
+    const [balance, projects] = await Promise.all([
       this.creditBalanceRepo.findOne({ where: { organizationId } }),
       this.projectRepo.findMany({
         where: { organizationId, AND: [NOT_DELETED_PROJECT] },
-        select: { limitCreditAllowance: true },
+        select: { limitCreditAllowance: true, usedCreditAllowance: true },
       }),
     ]);
-    // org event ได้ credit นอกแพ็กเกจ: creditAllowance = 0 แต่ credit จริงอยู่ใน currentCycleBalance
-    const pool =
-      Math.max(
-        subscription?.creditAllowance ?? 0,
-        balance?.currentCycleBalance ?? 0,
-      ) + (balance?.onTopBalance ?? 0);
-    const assigned = projects.reduce(
-      (sum, p) => sum + (p.limitCreditAllowance ?? 0),
-      0,
-    );
-    return pool - assigned;
+    return unallocatedCredit(balance, projects);
   }
 
   private async sumAssignedCredit(projectIds: string[]) {

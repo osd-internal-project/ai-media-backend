@@ -37,7 +37,7 @@ interface FakeDb {
   org: { organizationId: string; maxUserAccess: number | null } | null;
   members: { userId: string }[];
   users: { userId: string; username: string; email: string }[];
-  projects: { id: string; name: string; limitCreditAllowance: number }[];
+  projects: { id: string; name: string; limitCreditAllowance: number; usedCreditAllowance?: number }[];
   projectMembers: {
     projectId: string;
     userId: string;
@@ -98,7 +98,7 @@ describe('OrganizationBulkMemberService', () => {
       db.projectMembers.filter((m) => where.projectId.in.includes(m.projectId)),
     );
     subscriptionRepo.findOne.mockResolvedValue({ creditAllowance: 1000 });
-    creditBalanceRepo.findOne.mockResolvedValue({ onTopBalance: 0 });
+    creditBalanceRepo.findOne.mockResolvedValue({ currentCycleBalance: 1000, onTopBalance: 0 });
     keycloak.findUserByUsernameOrEmail.mockResolvedValue([]);
     keycloak.getPasswordPolicy.mockResolvedValue('length(8) and digits(1)');
     keycloak.createUser.mockImplementation(async (u) => `kc-${u.username}`);
@@ -341,6 +341,15 @@ describe('OrganizationBulkMemberService', () => {
       const result = await validate([row({ projectName: 'Beta', credit: 901 })]);
       expect(result.credit.orgRemaining).toBe(900);
       expect(result.rows[0].errors.join()).toContain('900 remaining');
+    });
+
+    it('does not subtract used credit twice after on-top was consumed', async () => {
+      // Alpha limit 100, used 80 → only 20 still committed; balance left = on-top 300
+      db.projects = [{ id: 'p-1', name: 'Alpha', limitCreditAllowance: 100, usedCreditAllowance: 80 }];
+      creditBalanceRepo.findOne.mockResolvedValue({ currentCycleBalance: 0, onTopBalance: 300 });
+      const result = await validate([row({ projectName: 'Beta', credit: 280 })]);
+      expect(result.credit.orgRemaining).toBe(280);
+      expect(result.valid).toBe(true);
     });
 
     it('counts cycle balance granted outside the plan (event org)', async () => {

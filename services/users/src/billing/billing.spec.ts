@@ -86,12 +86,16 @@ describe('changeCycleSubscription with billing disabled', () => {
     const organizationRepo = { findOne: jest.fn(), update: jest.fn() };
     const planRepo = { findOne: jest.fn() };
     const planPriceRepo = { findOne: jest.fn() };
+    const prisma = {
+      project: { updateMany: jest.fn() },
+      projectMember: { updateMany: jest.fn() },
+    };
     const service = new OrganizationSubscriptionService(
       subRepo as never,
       creditRepo as never,
       planRepo as never,
       planPriceRepo as never,
-      {} as never,
+      prisma as never,
       organizationRepo as never,
       { create: jest.fn() } as never,
       omise as never,
@@ -105,6 +109,7 @@ describe('changeCycleSubscription with billing disabled', () => {
       organizationRepo,
       planRepo,
       planPriceRepo,
+      prisma,
     };
   };
 
@@ -151,12 +156,16 @@ describe('changeCycleSubscription with billing disabled', () => {
   });
 
   it('autoRenew on → rolls the cycle and resets credits without charging', async () => {
-    const { service, subRepo, creditRepo, omise } = makeService(paidSub(true));
+    const { service, subRepo, creditRepo, omise, prisma } = makeService(paidSub(true));
     await withBilling(undefined, () => service.changeCycleSubscription());
     expect(omise.chargeCustomerCard).not.toHaveBeenCalled();
     expect(creditRepo.update).toHaveBeenCalledWith({
       where: { organizationId: 'org-1' },
       data: { currentCycleBalance: 100, currentCycleImage: 50 },
+    });
+    expect(prisma.project.updateMany).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1' },
+      data: { usedCreditAllowance: 0, usedImageAllowance: 0 },
     });
     const nextStart = dayjs().add(1, 'day').startOf('day');
     const update = subRepo.update.mock.calls[0][0];

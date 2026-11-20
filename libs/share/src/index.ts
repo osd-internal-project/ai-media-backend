@@ -16,3 +16,5 @@ export * from './storage';
 export * from './social';
 export * from './community';
 export * from './chat';
+export * from './credit';
+

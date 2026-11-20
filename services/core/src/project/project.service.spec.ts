@@ -20,11 +20,22 @@ type Member = {
 const PROJECT_ID = 'p-1';
 const ORG_ID = 'org-1';
 
-function setup(members: Member[], orgRoles: Record<string, string> = { admin: 'ADMIN' }) {
+function setup(
+  members: Member[],
+  orgRoles: Record<string, string> = { admin: 'ADMIN' },
+  credit: { pool?: { currentCycleBalance: number; onTopBalance: number }; projectUsed?: number; others?: { limitCreditAllowance: number; usedCreditAllowance: number }[] } = {},
+) {
   const db = {
-    project: { id: PROJECT_ID, organizationId: ORG_ID, limitCreditAllowance: 40000 } as Record<string, unknown>,
+    project: {
+      id: PROJECT_ID,
+      organizationId: ORG_ID,
+      limitCreditAllowance: 40000,
+      usedCreditAllowance: credit.projectUsed ?? 0,
+    } as Record<string, unknown>,
     members: members.map((m) => ({ ...m })),
   };
+  const pool = credit.pool ?? { currentCycleBalance: 0, onTopBalance: 0 };
+  const others = credit.others ?? [];
   const tx = {
     projectMember: {
       findMany: jest.fn(async () => db.members.map((m) => ({ ...m }))),
@@ -42,7 +53,10 @@ function setup(members: Member[], orgRoles: Record<string, string> = { admin: 'A
     },
     project: {
       update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => Object.assign(db.project, data)),
+      // the edited project is excluded by id, so only the org's other projects come back
+      findMany: jest.fn(async () => others),
     },
+    creditBalance: { findUnique: jest.fn(async () => pool) },
   };
   const users: Record<string, { userId: string; token: string; role: string | null }> = {
     admin: { userId: 'admin', token: 'sub-admin', role: 'USER' },
@@ -133,6 +147,53 @@ describe('ProjectService.update', () => {
 
     expect(db.members).toEqual(existing);
     expect(tx.project.update).not.toHaveBeenCalled();
+  });
+
+  it('raises a project limit by what the org has not handed out, without counting used credit twice', async () => {
+    // CTD's Event: on-top 147,000 left; this project 150,000 / used 148,330; others 100,000/54,777 and 100,000/99,857
+    const { service, db } = setup([], { admin: 'ADMIN' }, {
+      pool: { currentCycleBalance: 0, onTopBalance: 147000 },
+      projectUsed: 148330,
+      others: [
+        { limitCreditAllowance: 100000, usedCreditAllowance: 54777 },
+        { limitCreditAllowance: 100000, usedCreditAllowance: 99857 },
+      ],
+    });
+    db.project.limitCreditAllowance = 150000;
+
+    await service.update(PROJECT_ID, { userId: 'admin', limitCreditAllowance: 249964 });
+    expect(db.project.limitCreditAllowance).toBe(249964);
+
+    await expect(
+      service.update(PROJECT_ID, { userId: 'admin', limitCreditAllowance: 249965 }),
+    ).rejects.toThrow('exceeds credit available to assign (249964)');
+  });
+
+  it('rejects a project limit below credit used plus held', async () => {
+    const { service, tx } = setup([member('me', { holdCreditAllowance: 50 })], { admin: 'ADMIN' }, { projectUsed: 1000 });
+
+    await expect(
+      service.update(PROJECT_ID, { userId: 'admin', limitCreditAllowance: 1049 }),
+    ).rejects.toThrow('below credit already used (1050)');
+    expect(tx.project.update).not.toHaveBeenCalled();
+  });
+
+  it('lets an over-allocated org still lower a limit or rename', async () => {
+    const { service, db } = setup([], { admin: 'ADMIN' }, { pool: { currentCycleBalance: 0, onTopBalance: 0 } });
+
+    await service.update(PROJECT_ID, { userId: 'admin', name: 'renamed', limitCreditAllowance: 30000 });
+    expect(db.project).toMatchObject({ name: 'renamed', limitCreditAllowance: 30000 });
+  });
+
+  it('keeps credit used by a removed member out of the limits handed to others', async () => {
+    // project 40,000: gone used 30,000, so me can get at most 10,000
+    const existing = [member('me'), member('gone', { usedCreditAllowance: 30000 })];
+    const { service } = setup(existing);
+
+    await expect(
+      service.update(PROJECT_ID, { userId: 'admin', members: [{ userId: 'me', limitCreditAllowance: 10001 }] }),
+    ).rejects.toThrow('credit used by removed members (30000)');
+    await service.update(PROJECT_ID, { userId: 'admin', members: [{ userId: 'me', limitCreditAllowance: 10000 }] });
   });
 
   it('only org OWNER/ADMIN or SUPER_ADMIN may edit', async () => {

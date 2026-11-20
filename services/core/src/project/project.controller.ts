@@ -36,6 +36,17 @@ export class ProjectController {
     return this.projectService.findByOrganizationId(organizationId, query);
   }
 
+  @Get('organization/:organizationId/credit-capacity')
+  getCreditCapacity(
+    @Param('organizationId') organizationId: string,
+    @Query('excludeProjectId') excludeProjectId?: string,
+  ) {
+    return this.projectService.getCreditCapacity(
+      organizationId,
+      excludeProjectId || undefined,
+    );
+  }
+
   @Get('manage/:id')
   findManageRoles(@Param('id') id: string) {
     return this.projectService.findById(id);

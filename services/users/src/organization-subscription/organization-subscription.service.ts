@@ -15,6 +15,7 @@ import {
   PlanPriceRepository,
   PlanRepository,
   PrismaService,
+  resetCycleUsage,
 } from '@ai-media/share';
 import { OrganizationSubscription, Prisma } from '@prisma/client';
 import * as dayjs from 'dayjs';
@@ -261,6 +262,7 @@ export class OrganizationSubscriptionService {
         currentCycleImage: sub.imageAllowance,
       },
     });
+    await resetCycleUsage(this.prisma, sub.organizationId, sub.creditAllowance);
     await this.organizationSubscriptionRepo.update({
       where: { id: sub.id },
       data: {
@@ -423,6 +425,11 @@ export class OrganizationSubscriptionService {
               currentCycleImage: imageAllowance,
             },
           });
+          await resetCycleUsage(
+            this.prisma,
+            newSub.organizationId,
+            creditAllowance,
+          );
           // ไม่แตะ Organization.status — สวิตช์ซ่อน org ของ admin แยกจากการต่ออายุ
           await this.organizationRepo.update({
             where: { organizationId: newSub.organizationId },
@@ -473,6 +480,11 @@ export class OrganizationSubscriptionService {
               currentCycleImage: sub.imageAllowance,
             },
           });
+          await resetCycleUsage(
+            this.prisma,
+            sub.organizationId,
+            sub.creditAllowance,
+          );
           await this.organizationSubscriptionRepo.update({
             where: { id: sub.id },
             data: {
@@ -586,6 +598,7 @@ export class OrganizationSubscriptionService {
             currentCycleImage: sub.imageAllowance,
           },
         });
+        await resetCycleUsage(tx, organizationId, sub.creditAllowance);
       }
       const subscription = await tx.organizationSubscription.update({
         where: { id: sub.id },
@@ -656,6 +669,7 @@ export class OrganizationSubscriptionService {
           currentCycleImage: imageAllowance,
         },
       });
+      await resetCycleUsage(tx, organizationId, creditAllowance);
       await tx.organization.update({
         where: { organizationId },
         data: { maxUserAccess },

@@ -44,6 +44,8 @@ describe('OrganizationSubscriptionService', () => {
     organizationSubscription: { update: jest.fn() },
     organization: { update: jest.fn() },
     packageTransaction: { create: jest.fn() },
+    project: { updateMany: jest.fn() },
+    projectMember: { updateMany: jest.fn() },
   };
   const prisma = {
     $transaction: jest.fn((run: (client: typeof tx) => unknown) => run(tx)),
@@ -169,6 +171,7 @@ describe('OrganizationSubscriptionService', () => {
       expect(data.nextBillingDate.toISOString().slice(0, 10)).toBe('2027-02-28');
       expect(data.currentPeriodStart).toBeUndefined();
       expect(tx.creditBalance.update).not.toHaveBeenCalled();
+      expect(tx.project.updateMany).not.toHaveBeenCalled();
       expect(tx.packageTransaction.create.mock.calls[0][0].data).toMatchObject({
         paymentMethod: 'admin_renewal',
         amountPaid: 0,
@@ -184,7 +187,11 @@ describe('OrganizationSubscriptionService', () => {
       });
       const { data } = tx.organizationSubscription.update.mock.calls[0][0];
       expect(data).toMatchObject({ status: 'active', autoRenew: true, periodCurrent: 1 });
-      expect(data.currentPeriodStart.toDateString()).toBe(new Date().toDateString());
+      expect(data.currentPeriodStart.toDateString()).toBe(new Date().toDateString());      // new cycle: project/member used restarts, holds untouched
+      expect(tx.project.updateMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1' },
+        data: { usedCreditAllowance: 0, usedImageAllowance: 0 },
+      });
     });
 
     it('falls back to the stored period when nextPlanPriceId belongs to another plan', async () => {
@@ -219,6 +226,10 @@ describe('OrganizationSubscriptionService', () => {
       expect(tx.organization.update).toHaveBeenCalledWith({
         where: { organizationId: 'org-1' },
         data: { maxUserAccess: 10 },
+      });      // new cycle: project/member used restarts, holds untouched
+      expect(tx.project.updateMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1' },
+        data: { usedCreditAllowance: 0, usedImageAllowance: 0 },
       });
     });
 
