@@ -56,6 +56,11 @@ export class GenerationLogFilterDto extends DashboardFilterDto {
   @IsString()
   type?: string;
 
+  /** Model id as stored in `generate_config.modelName`. */
+  @IsOptional()
+  @IsString()
+  model?: string;
+
   /** Defaults to `success` so totals match the Overview stat cards. */
   @IsOptional()
   @IsIn(['success', 'pending', 'failed', 'all'])

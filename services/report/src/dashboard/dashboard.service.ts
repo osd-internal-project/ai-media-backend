@@ -39,6 +39,13 @@ const DEFAULT_LOOKBACK_MONTHS = 5;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/** Model id the core service stored in `generate_config.modelName`; '' reads as none. */
+const modelNameOf = (config: Prisma.JsonValue): string | null =>
+  config && typeof config === 'object' && !Array.isArray(config) &&
+  typeof config.modelName === 'string' && config.modelName
+    ? config.modelName
+    : null;
+
 /** Series key for generations whose type is NULL or not in GENERATION_TYPES. */
 const OTHER_TYPE_KEY = 'other';
 
@@ -61,6 +68,7 @@ type GenerationLogRow = {
   usedCredit: number | null;
   usedImage: number | null;
   createdAt: Date;
+  generateConfig: Prisma.JsonValue;
   project: { id: string; name: string } | null;
   users: { userId: string; fullname: string; username: string } | null;
 };
@@ -112,6 +120,9 @@ export class DashboardService {
       },
       ...(filter.userId && { userId: filter.userId }),
       ...(filter.type && this.buildTypeWhere(filter.type)),
+      ...(filter.model && {
+        generateConfig: { path: ['modelName'], equals: filter.model },
+      }),
       createdAt: { gte: from, lte: to },
     };
   }
@@ -500,6 +511,7 @@ export class DashboardService {
         galleryId: row.galleryId,
         resolution: row.resolution,
         ratio: row.ratio,
+        modelName: modelNameOf(row.generateConfig),
       })),
       total,
       page,
@@ -538,6 +550,7 @@ export class DashboardService {
         galleryId: true,
         resolution: true,
         ratio: true,
+        generateConfig: true,
         project: { select: { id: true, name: true } },
         users: { select: { userId: true, fullname: true, username: true } },
       },

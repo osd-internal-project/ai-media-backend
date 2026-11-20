@@ -142,6 +142,15 @@ export class LogsController {
     return conversation;
   }
 
+  @Get('used-credit-by-model/:projectId')
+  findUsedCreditByModel(
+    @Param('projectId') projectId: string,
+    @Query('organizationId') organizationId: string,
+    @Query('userId') userId: string,
+  ) {
+    return this.logsService.findUsedCreditByModel(projectId, organizationId, userId);
+  }
+
   @Get('detail/:logId')
   findDetail(
     @Param('logId') logId: string,

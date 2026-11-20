@@ -13,6 +13,7 @@ const logRow = (overrides: Record<string, unknown> = {}) => ({
   galleryId: 'gal-1',
   resolution: '720p',
   ratio: '16:9',
+  generateConfig: { modelName: 'omnihuman-1-5' },
   project: { id: 'p-1', name: 'AI Expo' },
   users: { userId: 'u-1', fullname: null, username: 'tk' },
   ...overrides,
@@ -92,6 +93,7 @@ describe('DashboardService.findGenerationLogs', () => {
           galleryId: 'gal-1',
           resolution: '720p',
           ratio: '16:9',
+          modelName: 'omnihuman-1-5',
         },
       ],
       total: 31,
@@ -115,6 +117,17 @@ describe('DashboardService.findGenerationLogs', () => {
     expect(args.where.project).toEqual({ organizationId: 'org-1', id: 'p-1' });
     expect(args.where.userId).toBe('u-1');
     expect(args.take).toBe(50);
+  });
+
+  it('filters by the stored model id', async () => {
+    const { service, logRepo } = setup();
+
+    await service.findGenerationLogs('org-1', { model: 'seedance-2-5' });
+
+    expect(logRepo.findMany.mock.calls[0][0].where.generateConfig).toEqual({
+      path: ['modelName'],
+      equals: 'seedance-2-5',
+    });
   });
 
   it('filters "other" to NULL or unrecognised types', async () => {

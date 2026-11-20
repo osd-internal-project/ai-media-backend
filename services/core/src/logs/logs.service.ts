@@ -17,6 +17,7 @@ import {
 } from '@ai-media/share';
 import { LogSeverity, AuditAction, Prisma } from '@prisma/client';
 import * as dayjs from 'dayjs';
+import { modelNameOf } from '../gallery/org-gallery.service';
 
 @Injectable()
 export class LogsService {
@@ -839,6 +840,40 @@ export class LogsService {
       usedCredit: currentCredit,
       totalCredit,
     };
+  }
+
+  /**
+   * Credit one member spent in a project, per model, for the credit-bar popover.
+   * Counts success + pending (pending = credit still on hold); failed jobs are refunded.
+   */
+  async findUsedCreditByModel(
+    projectId: string,
+    organizationId: string,
+    token: string,
+  ): Promise<{ modelName: string | null; credit: number }[]> {
+    const user = await this.userRepo.findOne({ where: { token } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const rows = (await this.logrepo.findMany({
+      where: {
+        projectId,
+        userId: user.userId,
+        status: { in: ['success', 'pending'] },
+        project: { organizationId },
+      },
+      select: { generateConfig: true, usedCredit: true },
+    })) as { generateConfig: Prisma.JsonValue; usedCredit: number | null }[];
+
+    const totals = new Map<string | null, number>();
+    for (const row of rows) {
+      // '' (DreamActor's first step) and missing names group under "unknown".
+      const name = modelNameOf(row.generateConfig) || null;
+      totals.set(name, (totals.get(name) ?? 0) + (row.usedCredit ?? 0));
+    }
+    return [...totals]
+      .map(([modelName, credit]) => ({ modelName, credit }))
+      .sort((a, b) => b.credit - a.credit);
   }
   async logError(
     serviceName: string,

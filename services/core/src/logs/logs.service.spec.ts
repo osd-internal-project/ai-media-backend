@@ -115,3 +115,52 @@ describe('LogsService.findDetail', () => {
     expect(detail.thumbnailUrl).toBeNull();
   });
 });
+
+describe('LogsService.findUsedCreditByModel', () => {
+  const build = (rows: unknown[], user: unknown = { userId: 'u-1' }) => {
+    const logRepo = { findMany: jest.fn().mockResolvedValue(rows) };
+    const userRepo = { findOne: jest.fn().mockResolvedValue(user) };
+    const service = new LogsService(
+      logRepo as never,
+      {} as never,
+      userRepo as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    return { service, logRepo };
+  };
+
+  it('sums credit per model, largest first, unnamed rows grouped as null', async () => {
+    const { service, logRepo } = build([
+      { generateConfig: { modelName: 'seedream-4-5' }, usedCredit: 20 },
+      { generateConfig: { modelName: 'seedance-2-5' }, usedCredit: 2152 },
+      { generateConfig: { modelName: 'seedream-4-5' }, usedCredit: 20.5 },
+      { generateConfig: { modelName: '' }, usedCredit: 7 },
+      { generateConfig: null, usedCredit: null },
+    ]);
+
+    const result = await service.findUsedCreditByModel('p-1', 'org-1', 'tok');
+
+    expect(logRepo.findMany.mock.calls[0][0].where).toEqual({
+      projectId: 'p-1',
+      userId: 'u-1',
+      status: { in: ['success', 'pending'] },
+      project: { organizationId: 'org-1' },
+    });
+    expect(result).toEqual([
+      { modelName: 'seedance-2-5', credit: 2152 },
+      { modelName: 'seedream-4-5', credit: 40.5 },
+      { modelName: null, credit: 7 },
+    ]);
+  });
+
+  it('rejects an unknown user token', async () => {
+    const { service } = build([], null);
+
+    await expect(
+      service.findUsedCreditByModel('p-1', 'org-1', 'bad'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
