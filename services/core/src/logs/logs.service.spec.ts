@@ -62,7 +62,7 @@ describe('LogsService.findDetail', () => {
     const detail = await service.findDetail('log-1', 'org-1');
 
     expect(logRepo.findOne.mock.calls[0][0].where).toEqual({
-      id: 'log-1',
+      OR: [{ id: 'log-1' }, { galleryId: 'log-1' }, { taskId: 'log-1' }],
       project: { organizationId: 'org-1' },
     });
     expect(galleryRepo.findOne).toHaveBeenCalledWith({

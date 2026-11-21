@@ -931,7 +931,11 @@ export class LogsService {
       throw new NotFoundException(`Log ${logId} not found`);
     }
     const log = await this.logrepo.findOne({
-      where: { id: logId, project: { organizationId } },
+      // Project activity opens this from a gallery row: generate services link logs by taskId, rarely galleryId.
+      where: {
+        OR: [{ id: logId }, { galleryId: logId }, { taskId: logId }],
+        project: { organizationId },
+      },
       include: {
         project: { select: { id: true, name: true } },
         users: { select: { userId: true, fullname: true, username: true } },
