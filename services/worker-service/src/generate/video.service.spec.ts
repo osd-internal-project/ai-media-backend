@@ -583,6 +583,25 @@ describe('VideoProcessor (callback + poll-check)', () => {
       expect(await submitPayload({}, {})).toHaveProperty('draft', false);
     });
 
+    it('draftTaskId sends only the draft_task item, resolution and watermark', async () => {
+      const payload = await submitPayload(
+        { supportDraft: true, supportDraftFinal: true },
+        {
+          draftTaskId: 'cgt-draft-1',
+          resolution: '1080p',
+          watermark: false,
+          files: [{ type: 'video', url: '', duration: 5 }],
+          image: ['https://s3/first.png'],
+        },
+      );
+      expect(payload).toEqual({
+        model: expect.any(String),
+        content: [{ type: 'draft_task', draft_task: { id: 'cgt-draft-1' } }],
+        resolution: '1080p',
+        watermark: false,
+      });
+    });
+
     it('submit publishes preparing k/N for the asset step', async () => {
       assetSvc.swapImagesToAssets.mockImplementation(
         async (_payload, _taskId, onAssetReady) => {

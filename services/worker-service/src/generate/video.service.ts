@@ -1204,6 +1204,16 @@ export class VideoProcessor extends WorkerHost {
     body: RequestVideoGenerateDto,
     sendConfig: { framesRatio?: string; supportDraft?: boolean } | undefined,
   ) {
+    // Final from a draft: the provider reuses the draft's prompt, media, duration and ratio;
+    // resending any of them is rejected. `files` stays on the body only for credit.
+    if (body.draftTaskId) {
+      return {
+        model: body.model,
+        content: [{ type: 'draft_task', draft_task: { id: body.draftTaskId } }],
+        resolution: body.resolution,
+        watermark: body.watermark,
+      };
+    }
     const filesUrl = await Promise.all(
       body.files.map(async (file) => {
         if (file.type === 'image') {

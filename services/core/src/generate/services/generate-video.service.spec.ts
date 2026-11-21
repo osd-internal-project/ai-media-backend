@@ -85,6 +85,32 @@ describe('unsupportedVideoOption', () => {
     expect(unsupportedVideoOption(v25, { resolution: '720p', duration: 30 })).toBeNull();
     expect(unsupportedVideoOption(v25, { resolution: '720p', duration: 4 })).toBeNull();
   });
+
+  it('allows a final-from-draft only when sendConfig.supportDraftFinal is true', () => {
+    const final = { resolution: '4k', duration: 5, draftTaskId: 'cgt-1' };
+    expect(unsupportedVideoOption({ ...mini, supportDraft: true }, final)).toBe(
+      'Creating a final video from a draft is not available for this model',
+    );
+    expect(unsupportedVideoOption(null, final)).not.toBeNull();
+    // resolution list belongs to the normal form; the final may go to 1080p/4k
+    expect(
+      unsupportedVideoOption({ ...mini, supportDraftFinal: true }, final),
+    ).toBeNull();
+  });
+
+  it('rejects a draft that is not 480p on a model that supports drafts', () => {
+    const draft25 = { ...v25, supportDraft: true };
+    expect(
+      unsupportedVideoOption(draft25, { resolution: '720p', duration: 5, draft: true }),
+    ).toBe('Draft videos are 480p only (got 720p)');
+    expect(
+      unsupportedVideoOption(draft25, { resolution: '480p', duration: 5, draft: true }),
+    ).toBeNull();
+    // supportDraft unset: the worker drops `draft`, so nothing to reject
+    expect(
+      unsupportedVideoOption(v25, { resolution: '720p', duration: 5, draft: true }),
+    ).toBeNull();
+  });
 });
 
 describe('GenerateVideoService.calculateCreditToken (credit hold)', () => {

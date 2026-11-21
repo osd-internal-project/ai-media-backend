@@ -26,6 +26,9 @@ import { Span } from 'nestjs-otel';
 interface VideoLimits {
   resolutions?: string[];
   duration?: { min: number; max: number };
+  supportDraft?: boolean;
+  /** เปิดการสร้างตัวจริงจาก draft — ปิดได้จาก DB จนกว่า gateway รองรับ `draft_task` */
+  supportDraftFinal?: boolean;
 }
 
 /**
@@ -34,9 +37,20 @@ interface VideoLimits {
  */
 export function unsupportedVideoOption(
   sendConfig: VideoLimits | null | undefined,
-  body: Pick<RequestVideoGenerateDto, 'resolution' | 'duration'>,
+  body: Pick<RequestVideoGenerateDto, 'resolution' | 'duration'> &
+    Partial<Pick<RequestVideoGenerateDto, 'draft' | 'draftTaskId'>>,
 ): string | null {
-  const { resolutions, duration } = sendConfig ?? {};
+  const { resolutions, duration, supportDraft, supportDraftFinal } =
+    sendConfig ?? {};
+  if (body.draftTaskId) {
+    // ตัวจริงใช้ prompt/duration ของ draft — ข้ามการเช็ค resolutions/duration ของ form ปกติ
+    return supportDraftFinal === true
+      ? null
+      : 'Creating a final video from a draft is not available for this model';
+  }
+  if (body.draft && supportDraft === true && body.resolution !== '480p') {
+    return `Draft videos are 480p only (got ${body.resolution})`;
+  }
   if (resolutions && !resolutions.includes(body.resolution)) {
     return `Resolution ${body.resolution} is not supported (use ${resolutions.join(', ')})`;
   }

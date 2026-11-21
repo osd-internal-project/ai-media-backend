@@ -17,6 +17,8 @@ export class RequestVideoGenerateDto {
   typeGenerate: string;
   generateAudio: boolean;
   draft: boolean;
+  /** Provider task id of a Seedance 2.5 draft; set = render that draft at `resolution` */
+  draftTaskId?: string;
   resolution: string;
   organizationId?: string;
   /** `duration` (seconds) is sent for video refs so the credit hold counts them */
