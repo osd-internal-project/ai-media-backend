@@ -70,8 +70,12 @@ export class AuthController {
    * `exists` is kept for frontends deployed before this change.
    */
   @Post('check')
-  async check(@Body() body: { email: string }) {
-    const user = await this.authService.checkUser(body.email);
+  async check(@Body() body: { accessToken?: string; email?: string }) {
+    // Without either, the lookup would have no filter and return an arbitrary user.
+    if (!body?.accessToken && !body?.email) {
+      throw new BadRequestException('Missing access token');
+    }
+    const user = await this.authService.checkUser(body);
     return { exists: !!user, ...user };
   }
 

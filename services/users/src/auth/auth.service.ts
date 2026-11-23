@@ -1,13 +1,16 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { IdpHint, KeycloakService } from '../keycloak/keycloak.service';
-import { KeycloakJwtVerifier, UsersRepository } from '@ai-media/share';
+import { BLOCKED_STATUSES, KeycloakJwtVerifier, UsersRepository } from '@ai-media/share';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly keycloakService: KeycloakService,
     private readonly usersRepo: UsersRepository,
@@ -79,20 +82,42 @@ export class AuthService {
    * Local user backing a Keycloak SSO sign-in — the session's only source of
    * role and organization.
    *
-   * @param email Email claim from the Keycloak id_token.
+   * With a token the user is matched by `sub` (what the API guard uses); `email` alone is
+   * the form sent by frontends deployed before the token form.
+   * @returns the user, with `blocked: true` when its status cannot sign in; null when none.
    */
-  async checkUser(email: string) {
-    return this.usersRepo.findOne({
-      where: { email },
-      select: {
-        userId: true,
-        username: true,
-        email: true,
-        role: true,
-        status: true,
-        recentOrganizationId: true,
-      },
-    });
+  async checkUser(input: { accessToken?: string; email?: string }) {
+    const find = (where: { token: string } | { email: string }) =>
+      this.usersRepo.findOne({
+        where,
+        select: {
+          userId: true,
+          username: true,
+          email: true,
+          role: true,
+          status: true,
+          recentOrganizationId: true,
+        },
+      });
+
+    let user: Awaited<ReturnType<typeof find>> = null;
+    if (input.accessToken) {
+      const claims = await this.jwtVerifier.verify(input.accessToken).catch((error: Error) => {
+        throw new UnauthorizedException(error.message);
+      });
+      user = await find({ token: claims.sub });
+      if (!user && claims.email) {
+        user = await find({ email: claims.email });
+        // The API guard rejects this user in AUTH_MODE=enforce; nothing is changed here.
+        if (user) this.logger.warn(`[auth:check] sub mismatch for userId ${user.userId}`);
+      }
+    } else if (input.email) {
+      user = await find({ email: input.email });
+    }
+    if (user && BLOCKED_STATUSES.includes(user.status)) {
+      return { ...user, blocked: true };
+    }
+    return user;
   }
 
   async validateToken(token: string) {

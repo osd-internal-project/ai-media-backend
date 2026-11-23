@@ -13,7 +13,7 @@ export function authMode(): AuthMode {
 
 const USER_CACHE_TTL_MS = 5 * 60 * 1000;
 const USER_CACHE_MAX = 10_000;
-const BLOCKED_STATUSES = ['deleted', 'banned', 'inactive'];
+export const BLOCKED_STATUSES =['deleted', 'banned', 'inactive'];
 
 /** token → user ของระบบ (`sub` = `users.token`) — ใช้ร่วมกันระหว่าง HTTP guard และ socket */
 @Injectable()
