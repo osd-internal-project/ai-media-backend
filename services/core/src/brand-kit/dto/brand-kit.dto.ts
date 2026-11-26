@@ -1,4 +1,5 @@
 import {
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -29,6 +30,15 @@ export class UpdateBrandKitDto {
   @IsOptional()
   @IsString()
   negativePrompt?: string;
+
+  @IsOptional()
+  @IsString()
+  customPrompt?: string;
+
+  /** only the move to the composed prompt (2) is accepted; a kit never goes back to 1 */
+  @IsOptional()
+  @IsIn([2])
+  promptVersion?: number;
 }
 
 export class CreateBrandKitDto extends UpdateBrandKitDto {

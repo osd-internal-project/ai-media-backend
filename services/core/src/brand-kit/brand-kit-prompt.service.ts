@@ -9,7 +9,7 @@ import {
   composeBrandPrompt,
 } from '@ai-media/share';
 import { isUUID } from 'class-validator';
-import { BrandKitService } from './brand-kit.service';
+import { BrandKitService, DETAIL_ORDER } from './brand-kit.service';
 
 export interface BrandModelLimits extends BrandPromptLimits {
   /** the user's prompt plus the kit's text may not exceed this */
@@ -74,6 +74,7 @@ export class BrandKitPromptService {
     if (!kit) return null;
     const details = await this.brandKitDetailRepo.findMany({
       where: { brandKitId: kit.id },
+      orderBy: DETAIL_ORDER,
     });
     return {
       kit: {

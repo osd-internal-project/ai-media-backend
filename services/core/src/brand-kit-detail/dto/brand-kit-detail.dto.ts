@@ -1,11 +1,14 @@
 import {
+  IsBoolean,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 export const BRAND_KIT_DETAIL_TYPES = ['colors', 'typography', 'logo'];
@@ -25,6 +28,15 @@ export class UpdateBrandKitDetailDto {
   @IsOptional()
   @IsObject()
   detail?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  includeInPrompt?: boolean;
 }
 
 export class CreateBrandKitDetailDto extends UpdateBrandKitDetailDto {

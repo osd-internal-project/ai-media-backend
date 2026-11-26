@@ -5,7 +5,11 @@ import {
 } from '@nestjs/common';
 import { AuthUser, BrandKitDetailRepository } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
-import { BrandKitAccess, BrandKitService } from '../brand-kit/brand-kit.service';
+import {
+  BrandKitAccess,
+  BrandKitService,
+  DETAIL_ORDER,
+} from '../brand-kit/brand-kit.service';
 import {
   CreateBrandKitDetailDto,
   UpdateBrandKitDetailDto,
@@ -71,6 +75,7 @@ export class BrandKitDetailService {
     await this.brandKitService.getKitFor(authUser, brandKitId, 'read');
     return this.brandKitDetailRepo.findMany({
       where: { brandKitId, type },
+      orderBy: DETAIL_ORDER,
     });
   }
 
@@ -78,6 +83,7 @@ export class BrandKitDetailService {
     await this.brandKitService.getKitFor(authUser, brandKitId, 'read');
     return this.brandKitDetailRepo.findMany({
       where: { brandKitId },
+      orderBy: DETAIL_ORDER,
     });
   }
 

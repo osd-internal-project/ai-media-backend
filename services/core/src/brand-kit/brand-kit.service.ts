@@ -19,6 +19,12 @@ const SUPER_ADMIN = 'SUPER_ADMIN';
 
 export type BrandKitAccess = 'read' | 'edit';
 
+/** The order the board shows and the composer reads: the user's drag order, then age. */
+export const DETAIL_ORDER = [
+  { sortOrder: 'asc' as const },
+  { createdAt: 'asc' as const },
+];
+
 // TQueryClient does not omit `$extends`, so Prisma's transaction client needs the same cast community-post uses
 const asQueryClient = (tx: unknown) => tx as TQueryClient;
 
@@ -88,7 +94,8 @@ export class BrandKitService {
 
   async create(authUser: AuthUser | undefined, data: CreateBrandKitDto) {
     await this.assertAccess(authUser, data.organizationId, 'edit');
-    return this.brandKitRepo.create({ data });
+    // a new kit has no saved text to preserve, so it starts on the composed prompt
+    return this.brandKitRepo.create({ data: { ...data, promptVersion: 2 } });
   }
 
   async setDefault(authUser: AuthUser | undefined, id: string) {
@@ -120,7 +127,7 @@ export class BrandKitService {
     await this.getKitFor(authUser, id, 'read');
     return this.brandKitRepo.findOne({
       where: { id },
-      include: { brandKitDetails: true },
+      include: { brandKitDetails: { orderBy: DETAIL_ORDER } },
     });
   }
 
@@ -141,7 +148,7 @@ export class BrandKitService {
     await this.assertAccess(authUser, organizationId, 'read');
     return this.brandKitRepo.findMany({
       where: { organizationId },
-      include: { brandKitDetails: true },
+      include: { brandKitDetails: { orderBy: DETAIL_ORDER } },
     });
   }
 
