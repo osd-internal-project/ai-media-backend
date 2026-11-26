@@ -327,6 +327,14 @@ export abstract class BaseGenerateService {
         };
       }
 
+      // before credit is reserved: an unknown kit or an over-long prompt must not leave a hold
+      const brandKitError =
+        await this.generateHelperService.brandKitPrompt.applyToGenerate(
+          body,
+          modelDetail,
+        );
+      if (brandKitError) return brandKitError;
+
       // Resolve the org's LLM gateway key BEFORE reserving credit, so a missing
       // key fails cleanly without leaving an orphaned credit hold. Gateway-backed
       // types (image/video) require it; others carry it for a future migration.
@@ -380,6 +388,9 @@ export abstract class BaseGenerateService {
         user,
         creditResult,
       );
+      if (galleryData && body.brandPrompt !== undefined) {
+        galleryData.brandKitId = body.brandKitId;
+      }
       if (galleryData) await this.galleryRepo.create({ data: galleryData });
 
       const logData = this.buildLogData(taskId, body, user, creditResult);

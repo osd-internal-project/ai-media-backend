@@ -32,6 +32,7 @@ const setup = (
       organizationId: opts.projectOrg ?? 'org',
     })),
     logAudit: jest.fn(),
+    brandKitPrompt: { applyToGenerate: jest.fn(async () => null) },
     getUsedCredit: jest.fn(async () => ({ token: 0, credit: 20 })),
     getAvailableCredit: jest.fn(async () => opts.available ?? { project: 1000, organization: 1000 }),
     reserveHold: jest.fn(async () => opts.reserved ?? true),

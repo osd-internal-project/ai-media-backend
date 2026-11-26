@@ -18,6 +18,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import axios from 'axios';
+import { BrandKitPromptService } from '../../brand-kit/brand-kit-prompt.service';
 import { Prisma } from '@prisma/client';
 
 /**
@@ -58,6 +59,7 @@ export class GenerateHelperService {
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly storageUrl: StorageUrlService,
     private readonly prisma: PrismaService,
+    readonly brandKitPrompt: BrandKitPromptService,
   ) {}
 
   /**
@@ -212,6 +214,8 @@ export class GenerateHelperService {
     seed?: number;
     fastMode?: boolean;
     files?: { type: string; url: string; duration?: number }[];
+    userPrompt?: string;
+    brandPrompt?: string;
   }) {
     // BytePlus bills reference-video seconds too — keep them so token_used can be audited from the log alone
     const referenceFiles = (body?.files ?? []).map((file) => ({
@@ -233,6 +237,11 @@ export class GenerateHelperService {
       ...(body?.modelName && { modelName: body?.modelName }),
       ...(body?.duration && { duration: body?.duration }),
       content: body?.prompt,
+      // set by BrandKitPromptService when a kit was applied: the two halves of `content`
+      ...(body?.brandPrompt !== undefined && {
+        userPrompt: body.userPrompt,
+        brandPrompt: body.brandPrompt,
+      }),
       ...(body?.generateAudio && { generateAudio: body?.generateAudio }),
       ...(body?.draft && { draft: body?.draft }),
       ...(body?.watermark && { watermark: body?.watermark }),

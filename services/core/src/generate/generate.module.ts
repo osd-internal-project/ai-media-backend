@@ -12,6 +12,7 @@ import {
   LlmGatewayModule,
 } from '@ai-media/share';
 import { BullModule } from '@nestjs/bullmq';
+import { BrandKitModule } from '../brand-kit/brand-kit.module';
 import { GenerateService } from './services/generate.service';
 import { GenerateHelperService } from './services/generate-helper.service';
 import { GenerateImageService } from './services/generate-image.service';
@@ -23,6 +24,7 @@ import { GenerateAudioService } from './services/generate-audio.service';
 @Module({
   imports: [
     PrismaModule,
+    BrandKitModule,
     TosModule,
     StorageModule,
     LlmGatewayModule,

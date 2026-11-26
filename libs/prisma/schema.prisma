@@ -76,6 +76,9 @@ model Project {
   photoEventPhotos      PhotoEventPhoto[]
   printTemplates        PhotoEventPrintTemplate[]
   organizationId        String?                @map("organization_id") @db.VarChar(50)
+  /// kit ประจำ project — ว่าง = ใช้ default ขององค์กร
+  brandKitId            String?                @map("brand_kit_id") @db.Uuid
+  brandKit              BrandKit?              @relation(fields: [brandKitId], references: [id], onDelete: SetNull)
   // ยอดจำกัด ของ Project
   limitImageAllowance   Int                    @default(0) @map("limit_image_allowance")
   limitCreditAllowance  Float                  @default(0) @map("limit_credit_allowance")
@@ -159,6 +162,8 @@ model Gallery {
   generateAudio    Boolean? @default(false) @map("generate_audio")
   tokenUsed        Float?   @default(0) @map("token_used")
   ImageUsed        Int?     @default(0) @map("image_used")
+  /// kit ที่ใช้กับงานนี้ — ไม่มี FK เพื่อให้ลบ kit ได้โดยประวัติงานไม่หาย
+  brandKitId       String?  @map("brand_kit_id") @db.Uuid
   publication      CommunityPublication?
 
   @@map("gallery")
@@ -962,7 +967,15 @@ model BrandKit {
   organizationId  String           @map("organization_id") @db.VarChar(50)
   organization    Organization     @relation(fields: [organizationId], references: [organizationId])
   brandKitDetails BrandKitDetail[]
+  /// { mood, look, lighting, mustHave[] } — ส่วน visual style ที่ backend ใช้ประกอบ prompt
+  style           Json?            @db.JsonB
+  /// ข้อความเพิ่มเติมที่ผู้ใช้เขียนเอง ต่อท้ายส่วนที่ประกอบให้
+  customPrompt    String?          @map("custom_prompt") @db.Text
+  /// 1 = ส่ง brand_ci_prompt เดิมตามตัวอักษร, 2 = backend ประกอบจากรายการ (composeBrandPrompt)
+  promptVersion   Int              @default(1) @map("prompt_version")
+  projects        Project[]
 
+  @@index([organizationId])
   @@map("brand_kit")
 }
 
@@ -976,7 +989,11 @@ model BrandKitDetail {
 
   brandKit   BrandKit? @relation(fields: [brandKitId], references: [id])
   brandKitId String?   @map("brand_kit_id") @db.Uuid
+  sortOrder       Int     @default(0) @map("sort_order")
+  /// false = เก็บไว้ใน kit แต่ไม่ส่งให้ model (ค่าเริ่มของฟอนต์ที่สร้างใหม่)
+  includeInPrompt Boolean @default(true) @map("include_in_prompt")
 
+  @@index([brandKitId, type])
   @@map("brand_kit_detail")
 }
 

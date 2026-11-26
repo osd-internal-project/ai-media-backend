@@ -7,6 +7,7 @@ export * from './access';
 export * from './utils';
 export * from './interceptor';
 export * from './auth';
+export * from './brand-kit/compose-brand-prompt';
 export * from './email';
 export * from './constants';
 export * from './llm-gateway';
