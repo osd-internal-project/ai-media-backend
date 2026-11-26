@@ -15,9 +15,11 @@ import {
   RefImageRepository,
   StorageUrlService,
   TosService,
+  buildBrandKitKey,
   buildOutputKey,
   buildPromptGuideKey,
   buildUploadKey,
+  parseBrandKitKey,
 } from '@ai-media/share';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import {
@@ -39,7 +41,12 @@ const EDITOR_EXPORT_MIME = 'video/mp4';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** `editor-export` = MP4 ที่ export จาก video editor ใน browser แล้วบันทึกเข้า Library */
-export type DirectUploadKind = 'ref' | 'prompt-guide' | 'editor-export';
+/** `brand-kit` = โลโก้/รูปอ้างอิงสไตล์ของ Brand Kit — เจ้าของคือ kit ไม่ใช่ project จึงไม่มี row ใน ref_image */
+export type DirectUploadKind =
+  | 'ref'
+  | 'prompt-guide'
+  | 'editor-export'
+  | 'brand-kit';
 
 /** object key เก็บใน generateConfig เพราะ Gallery ไม่มี organizationId ให้ประกอบ key ใหม่ */
 function editorObjectKey(generateConfig: unknown): string | null {
@@ -62,6 +69,8 @@ export interface PresignUploadInput {
   projectId?: string;
   /** kind = 'prompt-guide' */
   promptGuideId?: string;
+  /** kind = 'brand-kit' */
+  brandKitId?: string;
 }
 
 @Injectable()
@@ -253,6 +262,31 @@ export class UploadImageService {
         `File extension ${ext} does not match ${input.contentType}`,
       );
     }
+    if (input.kind === 'brand-kit') {
+      if (mediaType !== 'image') {
+        throw new BadRequestException('A brand kit takes image files only');
+      }
+      if (!input.brandKitId || !UUID_RE.test(input.brandKitId)) {
+        throw new BadRequestException('brandKitId is required');
+      }
+      // shortcut: no pending row, so an upload that is never confirmed stays in TOS; add a sweep if abandoned files matter
+      const key = buildBrandKitKey(
+        input.organizationId,
+        input.brandKitId,
+        input.uid,
+        ext,
+      );
+      return {
+        uid: input.uid,
+        imagePath: key,
+        uploadUrl: this.tosService.getPreSignedPutUrl(
+          tosConfigs().tosBucket,
+          key,
+          PRESIGN_PUT_EXPIRES_SEC,
+        ),
+        expiresIn: PRESIGN_PUT_EXPIRES_SEC,
+      };
+    }
     const row = {
       uid: input.uid,
       userId: input.userId,
@@ -305,8 +339,14 @@ export class UploadImageService {
    * ไฟล์ที่ชนิด/ขนาดไม่ผ่านจะถูกลบทั้ง object และ row
    * @returns shape เดียวกับ `uploadImage` / `uploadPromptGuideImage`
    */
-  async confirmUpload(kind: DirectUploadKind, uid: string, user?: AuthUser) {
+  async confirmUpload(
+    kind: DirectUploadKind,
+    uid: string,
+    user?: AuthUser,
+    imagePath?: string,
+  ) {
     if (kind === 'editor-export') return this.confirmEditorExport(uid, user);
+    if (kind === 'brand-kit') return this.confirmBrandKit(uid, imagePath, user);
     const repo =
       kind === 'ref'
         ? this.refImageRepository
@@ -355,6 +395,55 @@ export class UploadImageService {
       name: file.imageName,
       url: await this.storageUrl.toDisplayUrl(file.imagePath),
       imagePath: file.imagePath,
+      status: 'waiting',
+    };
+  }
+
+  /**
+   * ยืนยันรูปของ Brand Kit: ไม่มี row ให้ค้น จึงรับ key ที่ presign คืนไปกลับมา แล้วตรวจว่าเป็น key
+   * ของ brand kit ในองค์กรที่ผู้เรียกเป็นสมาชิก และไฟล์ใน TOS เป็นรูปที่อนุญาต (ไม่ผ่าน → ลบ object)
+   * @throws BadRequestException เมื่อ key ไม่ตรงกับ uid / ยังไม่มีไฟล์ / ชนิดหรือขนาดไม่ผ่าน
+   */
+  private async confirmBrandKit(
+    uid: string,
+    imagePath: string | undefined,
+    user?: AuthUser,
+  ) {
+    const parsed = imagePath ? parseBrandKitKey(imagePath) : null;
+    if (
+      !imagePath ||
+      !parsed ||
+      !uid ||
+      path.parse(parsed.fileName).name !== uid
+    ) {
+      throw new BadRequestException('imagePath does not match this upload');
+    }
+    await this.access.assertCanWrite(user, {
+      organizationId: parsed.organizationId,
+    });
+    const bucketname = tosConfigs().tosBucket;
+    const head = await this.tosService.headObject(bucketname, imagePath);
+    if (!head) throw new BadRequestException('File has not been uploaded yet');
+    const size = Number(head['content-length']);
+    const rawType = head['content-type'];
+    const contentType = typeof rawType === 'string' ? rawType : undefined;
+    if (
+      mediaTypeOfMime(contentType ?? '') !== 'image' ||
+      !isAllowedUpload(contentType, size)
+    ) {
+      this.logger.warn(
+        `Rejecting brand kit upload ${imagePath}: type=${contentType} size=${size}`,
+      );
+      await this.tosService.deleteObject(bucketname, imagePath);
+      throw new BadRequestException(
+        'Uploaded file type or size is not allowed',
+      );
+    }
+    return {
+      uid,
+      name: parsed.fileName,
+      url: await this.storageUrl.toDisplayUrl(imagePath),
+      imagePath,
       status: 'waiting',
     };
   }

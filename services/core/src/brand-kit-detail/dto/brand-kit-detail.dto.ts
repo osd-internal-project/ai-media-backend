@@ -11,7 +11,12 @@ import {
   Min,
 } from 'class-validator';
 
-export const BRAND_KIT_DETAIL_TYPES = ['colors', 'typography', 'logo'];
+export const BRAND_KIT_DETAIL_TYPES = [
+  'colors',
+  'typography',
+  'logo',
+  'style_ref',
+];
 
 /** PATCH /brand-kit-detail/:id — a detail never moves to another kit, so `brandKitId` is not accepted */
 export class UpdateBrandKitDetailDto {

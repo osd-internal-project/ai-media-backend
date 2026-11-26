@@ -7,6 +7,7 @@ import {
   BrandPromptLimits,
   MasterdataModelTypeRepository,
   composeBrandPrompt,
+  parseBrandKitKey,
 } from '@ai-media/share';
 import { isUUID } from 'class-validator';
 import { BrandKitService, DETAIL_ORDER } from './brand-kit.service';
@@ -24,6 +25,10 @@ const FALLBACK_LIMITS: Record<string, BrandModelLimits> = {
   omnihumen: { promptMaxChars: 2000, brandKitBudget: 300 },
   dreamactor: { promptMaxChars: 2000, brandKitBudget: 300 },
 };
+
+const IMAGE_DETAIL_TYPES = ['logo', 'style_ref'];
+/** style images a kit may add to one generation */
+const MAX_KIT_REFS = 2;
 
 const positive = (value: unknown, fallback: number) =>
   typeof value === 'number' && value > 0 ? value : fallback;
@@ -53,6 +58,9 @@ export function brandLimitsFor(model: {
 /** Body fields this service reads and writes on a generate request. */
 interface GenerateBody {
   brandKitId?: unknown;
+  /** object keys of this kit's style images to send as reference images (image models only) */
+  brandKitRefs?: unknown;
+  image?: unknown;
   organizationId?: string;
   prompt?: unknown;
   userPrompt?: string;
@@ -115,9 +123,21 @@ export class BrandKitPromptService {
     if (!loaded) return notFound;
 
     const brand = composeBrandPrompt(loaded.kit, loaded.details, limits);
+    const refs = model.type === 'image' ? this.kitRefs(body, loaded.details) : [];
     const userPrompt =
       typeof body.prompt === 'string' ? body.prompt.trim() : '';
-    const prompt = [userPrompt, brand.text].filter(Boolean).join('\n\n');
+    const prompt = [
+      userPrompt,
+      brand.text,
+      // tells the model what the extra images are for; without it a reference is often copied as content
+      refs.length
+        ? `Use the last ${refs.length} reference image${
+            refs.length === 1 ? '' : 's'
+          } for visual style only, not for their subject.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
     if (prompt.length > limits.promptMaxChars) {
       return {
         status: 400,
@@ -129,10 +149,36 @@ export class BrandKitPromptService {
     body.userPrompt = userPrompt;
     body.brandPrompt = brand.text;
     body.prompt = prompt;
+    if (refs.length) {
+      // the user's own references stay first
+      body.image = [...(Array.isArray(body.image) ? body.image : []), ...refs];
+    }
     if (brand.avoid && limits.negativePromptParam) {
       body[limits.negativePromptParam] = brand.avoid;
     }
     return null;
+  }
+
+  /** The requested keys that really are images saved on this kit, at most MAX_KIT_REFS of them. */
+  private kitRefs(
+    body: GenerateBody,
+    details: { type: string; detail: unknown }[],
+  ): string[] {
+    if (!Array.isArray(body.brandKitRefs)) return [];
+    const owned = new Set(
+      details.flatMap((d) => {
+        const key =
+          IMAGE_DETAIL_TYPES.includes(d.type) &&
+          d.detail &&
+          typeof d.detail === 'object'
+            ? (d.detail as { key?: unknown }).key
+            : undefined;
+        return typeof key === 'string' && parseBrandKitKey(key) ? [key] : [];
+      }),
+    );
+    return [...new Set(body.brandKitRefs)]
+      .filter((key): key is string => typeof key === 'string' && owned.has(key))
+      .slice(0, MAX_KIT_REFS);
   }
 
   /** What the kit adds for every active model that takes one, for the Brand Prompt card and the form counter. */

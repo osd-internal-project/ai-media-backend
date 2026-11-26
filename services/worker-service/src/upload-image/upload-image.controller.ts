@@ -108,8 +108,10 @@ export class UploadImageController {
     @Body('kind') kind: DirectUploadKind,
     @Body('uid') uid: string,
     @CurrentUser() user?: AuthUser,
+    /** kind = 'brand-kit' only: the key presign returned (that kind keeps no pending row) */
+    @Body('imagePath') imagePath?: string,
   ) {
-    return this.uploadImageService.confirmUpload(kind, uid, user);
+    return this.uploadImageService.confirmUpload(kind, uid, user, imagePath);
   }
 
   @Delete('delete/:uid')

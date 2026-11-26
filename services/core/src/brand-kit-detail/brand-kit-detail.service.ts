@@ -3,7 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuthUser, BrandKitDetailRepository } from '@ai-media/share';
+import {
+  AuthUser,
+  BrandKitDetailRepository,
+  parseBrandKitKey,
+} from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import {
   BrandKitAccess,
@@ -18,9 +22,33 @@ import {
 // #RGB is accepted too: rows saved before validation existed use it and must stay editable
 const HEX_COLOR = /^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
 
-function assertValidDetail(type: string, detail?: Record<string, unknown>) {
+const IMAGE_TYPES = ['logo', 'style_ref'];
+
+/**
+ * @param kit the kit the detail belongs to; an image key must sit in that kit's own folder,
+ *   so a detail can never point at another organization's file
+ */
+function assertValidDetail(
+  type: string,
+  detail: Record<string, unknown> | undefined,
+  kit: { id: string; organizationId: string },
+) {
   if (type === 'colors' && !HEX_COLOR.test(String(detail?.hex ?? ''))) {
     throw new BadRequestException('Color hex must look like #1A2B3C or #1AB');
+  }
+  if (IMAGE_TYPES.includes(type) && detail?.key !== undefined) {
+    const parsed =
+      typeof detail.key === 'string' ? parseBrandKitKey(detail.key) : null;
+    if (
+      !parsed ||
+      parsed.organizationId !== kit.organizationId ||
+      parsed.brandKitId !== kit.id
+    ) {
+      throw new BadRequestException('Image does not belong to this brand kit');
+    }
+  }
+  if (type === 'style_ref' && detail?.key === undefined) {
+    throw new BadRequestException('A style image needs an uploaded file');
   }
 }
 
@@ -43,13 +71,21 @@ export class BrandKitDetailService {
       await this.brandKitService.memberOrganizationIds(authUser);
       throw new NotFoundException('Brand kit detail not found');
     }
-    await this.brandKitService.getKitFor(authUser, detail.brandKitId, level);
-    return detail;
+    const kit = await this.brandKitService.getKitFor(
+      authUser,
+      detail.brandKitId,
+      level,
+    );
+    return { ...detail, kit };
   }
 
   async create(authUser: AuthUser | undefined, data: CreateBrandKitDetailDto) {
-    await this.brandKitService.getKitFor(authUser, data.brandKitId, 'edit');
-    assertValidDetail(data.type, data.detail);
+    const kit = await this.brandKitService.getKitFor(
+      authUser,
+      data.brandKitId,
+      'edit',
+    );
+    assertValidDetail(data.type, data.detail, kit);
     return this.brandKitDetailRepo.create({
       data: { ...data, detail: data.detail as Prisma.InputJsonValue },
     });
@@ -64,7 +100,12 @@ export class BrandKitDetailService {
   }
 
   async findOne(authUser: AuthUser | undefined, id: string) {
-    return this.getDetailFor(authUser, id, 'read');
+    const { kit: _kit, ...detail } = await this.getDetailFor(
+      authUser,
+      id,
+      'read',
+    );
+    return detail;
   }
 
   async findByBrandKitAndType(
@@ -93,7 +134,9 @@ export class BrandKitDetailService {
     data: UpdateBrandKitDetailDto,
   ) {
     const existing = await this.getDetailFor(authUser, id, 'edit');
-    if (data.detail) assertValidDetail(data.type ?? existing.type, data.detail);
+    if (data.detail) {
+      assertValidDetail(data.type ?? existing.type, data.detail, existing.kit);
+    }
     return this.brandKitDetailRepo.update({
       where: { id },
       data: { ...data, detail: data.detail as Prisma.InputJsonValue },

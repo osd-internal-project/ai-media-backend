@@ -8,6 +8,7 @@ import { BrandKitService } from './brand-kit.service';
 import { BrandKitDetailService } from '../brand-kit-detail/brand-kit-detail.service';
 
 const KIT = { id: 'kit-a', organizationId: 'org-a', default: false };
+const STYLE_KEY = 'organize/org-a/brand-kit/kit-a/style1.png';
 const DETAIL = { id: 'd1', brandKitId: 'kit-a', type: 'colors' };
 
 /** members: `${organizationId}:${userId}` → role */
@@ -44,12 +45,29 @@ const setup = (members: Record<string, string>) => {
     ),
   };
   const tx = { tx: true };
-  const prisma = { $transaction: jest.fn(async (run) => run(tx)) };
+  const prisma = {
+    $transaction: jest.fn(async (run) => run(tx)),
+    brandKit: {
+      findMany: jest.fn(async () => [
+        {
+          ...KIT,
+          brandKitDetails: [
+            { id: 'd1', type: 'colors', detail: { hex: '#D62A84' } },
+            { id: 'd2', type: 'style_ref', detail: { key: STYLE_KEY } },
+          ],
+        },
+      ]),
+    },
+  };
+  const storageUrl = {
+    toDisplayUrl: jest.fn(async (key: string) => `https://cdn/${key}`),
+  };
   const kits = new BrandKitService(
     brandKitRepo as never,
     brandKitDetailRepo as never,
     orgMemberRepo as never,
     prisma as never,
+    storageUrl as never,
   );
   const details = new BrandKitDetailService(brandKitDetailRepo as never, kits);
   return { kits, details, brandKitRepo, brandKitDetailRepo, tx };
@@ -114,7 +132,7 @@ describe('brand kit organization scoping', () => {
   it('lets a plain member read but not change', async () => {
     const { kits, details } = setup(MEMBERS);
     const member = user('member');
-    await expect(kits.findOne(member, KIT.id)).resolves.toBe(KIT);
+    await expect(kits.findOne(member, KIT.id)).resolves.toMatchObject(KIT);
     await expect(kits.setDefault(member, KIT.id)).rejects.toThrow(
       ForbiddenException,
     );
@@ -197,5 +215,53 @@ describe('brand kit colour detail', () => {
     await expect(
       details.update(user('owner'), DETAIL.id, { detail: { hex: '#fff' } }),
     ).resolves.toMatchObject({ where: { id: DETAIL.id } });
+  });
+});
+
+describe('brand kit images', () => {
+  it('returns a display URL beside the stored key and leaves other details alone', async () => {
+    const { kits } = setup(MEMBERS);
+    const [kit] = await kits.findByOrganization(user('member'), 'org-a');
+    expect(kit.brandKitDetails).toEqual([
+      { id: 'd1', type: 'colors', detail: { hex: '#D62A84' } },
+      {
+        id: 'd2',
+        type: 'style_ref',
+        detail: { key: STYLE_KEY, url: `https://cdn/${STYLE_KEY}` },
+      },
+    ]);
+  });
+
+  it('saves a style image whose file is in this kit\'s folder', async () => {
+    const { details } = setup(MEMBERS);
+    await expect(
+      details.create(user('owner'), {
+        name: 'mood.png',
+        type: 'style_ref',
+        brandKitId: KIT.id,
+        detail: { key: STYLE_KEY },
+      }),
+    ).resolves.toMatchObject({ type: 'style_ref', detail: { key: STYLE_KEY } });
+  });
+
+  it('refuses a file from another kit or organization, and a style image with no file', async () => {
+    const { details, brandKitDetailRepo } = setup(MEMBERS);
+    const owner = user('owner');
+    for (const detail of [
+      { key: 'organize/org-b/brand-kit/kit-a/x.png' },
+      { key: 'organize/org-a/brand-kit/kit-other/x.png' },
+      { key: 'organize/org-a/proj/upload/x.png' },
+      {},
+    ]) {
+      await expect(
+        details.create(owner, {
+          name: 'x.png',
+          type: 'style_ref',
+          brandKitId: KIT.id,
+          detail,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    }
+    expect(brandKitDetailRepo.create).not.toHaveBeenCalled();
   });
 });

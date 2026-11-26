@@ -10,6 +10,7 @@ import {
   BrandKitDetailRepository,
   OrganizationMemberRepository,
   PrismaService,
+  StorageUrlService,
   TQueryClient,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
@@ -44,6 +45,7 @@ export class BrandKitService {
     private readonly brandKitDetailRepo: BrandKitDetailRepository,
     private readonly orgMemberRepo: OrganizationMemberRepository,
     private readonly prisma: PrismaService,
+    private readonly storageUrl: StorageUrlService,
   ) {}
 
   /** No token user is always a 401 here, even when AUTH_MODE=report lets the request through. */
@@ -91,6 +93,28 @@ export class BrandKitService {
     return kit;
   }
 
+  /**
+   * Gives each stored image (logo, style reference) a display URL next to its object key.
+   * A logo saved before files existed keeps the data URL already in `detail.url`.
+   */
+  private async withImageUrls<T extends { detail: unknown }>(
+    details: T[],
+  ): Promise<T[]> {
+    return Promise.all(
+      details.map(async (item) => {
+        const detail = item.detail;
+        if (!detail || typeof detail !== 'object' || !('key' in detail)) {
+          return item;
+        }
+        const key = (detail as { key?: unknown }).key;
+        if (typeof key !== 'string' || !key) return item;
+        // null placeholder: a missing file shows as missing, not as a stock "No Image" picture
+        const url = await this.storageUrl.toDisplayUrl(key, null);
+        return { ...item, detail: { ...detail, url } };
+      }),
+    );
+  }
+
   /** Organizations the caller is an active member of. */
   async memberOrganizationIds(authUser: AuthUser | undefined) {
     const user = this.requireUser(authUser);
@@ -99,6 +123,20 @@ export class BrandKitService {
       select: { organizationId: true },
     });
     return memberships.map((m) => m.organizationId);
+  }
+
+  /** Kits with their details in board order, stored images resolved to display URLs. */
+  private async kitsWithDetails(where: Prisma.BrandKitWhereInput) {
+    const kits = await this.prisma.brandKit.findMany({
+      where,
+      include: { brandKitDetails: { orderBy: DETAIL_ORDER } },
+    });
+    return Promise.all(
+      kits.map(async (kit) => ({
+        ...kit,
+        brandKitDetails: await this.withImageUrls(kit.brandKitDetails),
+      })),
+    );
   }
 
   async create(authUser: AuthUser | undefined, data: CreateBrandKitDto) {
@@ -136,10 +174,8 @@ export class BrandKitService {
 
   async findOne(authUser: AuthUser | undefined, id: string) {
     await this.getKitFor(authUser, id, 'read');
-    return this.brandKitRepo.findOne({
-      where: { id },
-      include: { brandKitDetails: { orderBy: DETAIL_ORDER } },
-    });
+    const [kit] = await this.kitsWithDetails({ id });
+    return kit ?? null;
   }
 
   async findDefaultByOrganization(
@@ -157,10 +193,7 @@ export class BrandKitService {
     organizationId: string,
   ) {
     await this.assertAccess(authUser, organizationId, 'read');
-    return this.brandKitRepo.findMany({
-      where: { organizationId },
-      include: { brandKitDetails: { orderBy: DETAIL_ORDER } },
-    });
+    return this.kitsWithDetails({ organizationId });
   }
 
   async update(

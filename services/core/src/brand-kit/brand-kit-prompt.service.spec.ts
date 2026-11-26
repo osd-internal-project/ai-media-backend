@@ -4,6 +4,10 @@ import {
 } from './brand-kit-prompt.service';
 
 const KIT_ID = '7f1c2a34-5b6d-4e8f-9a0b-1c2d3e4f5a6b';
+const folder = `organize/org-a/brand-kit/${KIT_ID}`;
+const REF_A = `${folder}/a.png`;
+const REF_B = `${folder}/b.png`;
+const REF_C = `${folder}/c.png`;
 
 const setup = (kit: Record<string, unknown> | null) => {
   const brandKitRepo = {
@@ -16,6 +20,9 @@ const setup = (kit: Record<string, unknown> | null) => {
   const brandKitDetailRepo = {
     findMany: jest.fn(async () => [
       { name: 'Vibrant Pink', type: 'colors', detail: { hex: '#D62A84', type: 'primary' } },
+      { name: 'a.png', type: 'style_ref', detail: { key: REF_A } },
+      { name: 'b.png', type: 'style_ref', detail: { key: REF_B } },
+      { name: 'c.png', type: 'style_ref', detail: { key: REF_C } },
     ]),
   };
   const masterModelTypeRepo = {
@@ -133,6 +140,44 @@ describe('BrandKitPromptService.applyToGenerate', () => {
     expect(result?.status).toBe(400);
     expect(result?.data).toMatch(/^PROMPT_TOO_LONG: .* 40 over this model's limit of 2000$/);
     expect(body.prompt).toHaveLength(1990);
+  });
+});
+
+describe('BrandKitPromptService style images', () => {
+  const request = (over: Record<string, unknown> = {}) => ({
+    prompt: 'a cat',
+    organizationId: 'org-a',
+    brandKitId: KIT_ID,
+    image: ['organize/org-a/proj/upload/mine.png'],
+    ...over,
+  });
+
+  it('adds at most two of the kit\'s own images after the user\'s, and says what they are for', async () => {
+    const { service } = setup({});
+    const body: Record<string, unknown> = request({
+      brandKitRefs: [REF_B, 'organize/org-b/brand-kit/other/x.png', REF_A, REF_C, REF_B],
+    });
+    await service.applyToGenerate(body, IMAGE);
+    expect(body.image).toEqual(['organize/org-a/proj/upload/mine.png', REF_B, REF_A]);
+    expect(body.prompt).toBe(
+      'a cat\n\nBrand palette — primary: Vibrant Pink (#D62A84).\n\nUse the last 2 reference images for visual style only, not for their subject.',
+    );
+    expect(body.brandPrompt).toBe('Brand palette — primary: Vibrant Pink (#D62A84).');
+  });
+
+  it('adds nothing for a video model, where an image is a frame and not a style', async () => {
+    const { service } = setup({});
+    const body: Record<string, unknown> = request({ brandKitRefs: [REF_A] });
+    await service.applyToGenerate(body, { type: 'video' });
+    expect(body.image).toEqual(['organize/org-a/proj/upload/mine.png']);
+    expect(body.prompt).toBe('a cat\n\nBrand palette — primary: Vibrant Pink (#D62A84).');
+  });
+
+  it('leaves the references alone when none are requested', async () => {
+    const { service } = setup({});
+    const body: Record<string, unknown> = request();
+    await service.applyToGenerate(body, IMAGE);
+    expect(body.image).toEqual(['organize/org-a/proj/upload/mine.png']);
   });
 });
 

@@ -74,6 +74,43 @@ export function buildUploadKey(
  * @param ext นามสกุลไฟล์ รวมจุด เช่น `.png`
  * @returns organize/{org}/prompt-guide/{uid}{ext}
  */
+/**
+ * Folder of one brand kit's images (logos, style references). The kit is the owner, not a project.
+ *
+ * @returns organize/{org}/brand-kit/{brandKitId}/
+ */
+export function brandKitKeyPrefix(
+  organizationId: string,
+  brandKitId: string,
+): string {
+  return `${ROOT_DIR}/${organizationId}/brand-kit/${brandKitId}/`;
+}
+
+/** @returns organize/{org}/brand-kit/{brandKitId}/{uid}{ext} */
+export function buildBrandKitKey(
+  organizationId: string,
+  brandKitId: string,
+  uid: string,
+  ext = '',
+): string {
+  return `${brandKitKeyPrefix(organizationId, brandKitId)}${uid}${ext}`;
+}
+
+/**
+ * Reads the organization and kit back out of a brand kit image key.
+ * @returns null when the key is not a brand kit image key
+ */
+export function parseBrandKitKey(
+  key: string,
+): { organizationId: string; brandKitId: string; fileName: string } | null {
+  const match = new RegExp(
+    `^${ROOT_DIR}/([^/]+)/brand-kit/([^/]+)/([^/]+)$`,
+  ).exec(key);
+  return match
+    ? { organizationId: match[1], brandKitId: match[2], fileName: match[3] }
+    : null;
+}
+
 export function buildPromptGuideKey(
   organizationId: string,
   uid: string,

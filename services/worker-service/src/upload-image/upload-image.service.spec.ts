@@ -329,4 +329,66 @@ describe('UploadImageService direct upload', () => {
       expect(galleryRepo.deleteMany).toHaveBeenCalledWith({ where: { id: uid } });
     });
   });
+
+  describe('brand-kit', () => {
+    const kitId = '7f1c2a34-5b6d-4e8f-9a0b-1c2d3e4f5a6b';
+    const key = `organize/org/brand-kit/${kitId}/abc.png`;
+    const input: PresignUploadInput = {
+      ...base,
+      kind: 'brand-kit',
+      projectId: undefined,
+      brandKitId: kitId,
+    };
+
+    it('presigns a key under the kit folder and reserves no row', async () => {
+      const res = await service.presignUpload(input);
+      expect(res).toMatchObject({ uid: 'abc', imagePath: key, uploadUrl: 'https://put' });
+      expect(access.assertCanWrite).toHaveBeenCalledWith(undefined, {
+        organizationId: 'org',
+        projectId: undefined,
+        promptGuideId: undefined,
+      });
+      expect(refRepo.create).not.toHaveBeenCalled();
+      expect(guideRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a video and a missing kit id', async () => {
+      await expect(
+        service.presignUpload({ ...input, fileName: 'a.mp4', contentType: 'video/mp4' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.presignUpload({ ...input, brandKitId: undefined }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('confirms an uploaded image and returns its display URL', async () => {
+      tos.headObject.mockResolvedValue({ 'content-length': '2048', 'content-type': 'image/png' });
+      const res = await service.confirmUpload('brand-kit', 'abc', undefined, key);
+      expect(access.assertCanWrite).toHaveBeenCalledWith(undefined, { organizationId: 'org' });
+      expect(res).toEqual({
+        uid: 'abc',
+        name: 'abc.png',
+        url: 'https://get',
+        imagePath: key,
+        status: 'waiting',
+      });
+    });
+
+    it('refuses a key that is not a brand kit key or belongs to another upload', async () => {
+      for (const path of [undefined, 'organize/org/proj/upload/abc.png', `organize/org/brand-kit/${kitId}/other.png`]) {
+        await expect(
+          service.confirmUpload('brand-kit', 'abc', undefined, path),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      }
+      expect(tos.headObject).not.toHaveBeenCalled();
+    });
+
+    it('deletes the object when what was uploaded is not an allowed image', async () => {
+      tos.headObject.mockResolvedValue({ 'content-length': '2048', 'content-type': 'video/mp4' });
+      await expect(
+        service.confirmUpload('brand-kit', 'abc', undefined, key),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(tos.deleteObject).toHaveBeenCalledWith('bucket', key);
+    });
+  });
 });
