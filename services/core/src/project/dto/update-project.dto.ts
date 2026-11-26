@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -60,6 +61,11 @@ export class UpdateProjectDto {
   @IsInt()
   @Min(0)
   limitImageAllowance?: number;
+
+  /** kit this project generates with; null clears it so the organization default applies */
+  @IsOptional()
+  @IsUUID()
+  brandKitId?: string | null;
 
   @IsOptional()
   @IsArray()

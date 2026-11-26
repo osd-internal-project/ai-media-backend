@@ -12,7 +12,12 @@ import {
   PrismaService,
   TQueryClient,
 } from '@ai-media/share';
-import { CreateBrandKitDto, UpdateBrandKitDto } from './dto/brand-kit.dto';
+import { Prisma } from '@prisma/client';
+import {
+  BrandKitStyleDto,
+  CreateBrandKitDto,
+  UpdateBrandKitDto,
+} from './dto/brand-kit.dto';
 
 const EDITOR_ROLES = ['OWNER', 'ADMIN'];
 const SUPER_ADMIN = 'SUPER_ADMIN';
@@ -24,6 +29,10 @@ export const DETAIL_ORDER = [
   { sortOrder: 'asc' as const },
   { createdAt: 'asc' as const },
 ];
+
+/** A validated style DTO as the plain JSON Prisma stores; undefined leaves the column untouched. */
+const styleJson = (style?: BrandKitStyleDto): Prisma.InputJsonObject | undefined =>
+  style && { ...style };
 
 // TQueryClient does not omit `$extends`, so Prisma's transaction client needs the same cast community-post uses
 const asQueryClient = (tx: unknown) => tx as TQueryClient;
@@ -95,7 +104,9 @@ export class BrandKitService {
   async create(authUser: AuthUser | undefined, data: CreateBrandKitDto) {
     await this.assertAccess(authUser, data.organizationId, 'edit');
     // a new kit has no saved text to preserve, so it starts on the composed prompt
-    return this.brandKitRepo.create({ data: { ...data, promptVersion: 2 } });
+    return this.brandKitRepo.create({
+      data: { ...data, style: styleJson(data.style), promptVersion: 2 },
+    });
   }
 
   async setDefault(authUser: AuthUser | undefined, id: string) {
@@ -158,7 +169,10 @@ export class BrandKitService {
     data: UpdateBrandKitDto,
   ) {
     await this.getKitFor(authUser, id, 'edit');
-    return this.brandKitRepo.update({ where: { id }, data });
+    return this.brandKitRepo.update({
+      where: { id },
+      data: { ...data, style: styleJson(data.style) },
+    });
   }
 
   async remove(authUser: AuthUser | undefined, id: string) {

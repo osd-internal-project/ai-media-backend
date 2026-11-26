@@ -272,6 +272,19 @@ export class ProjectService {
       authUser?.userId ?? dto.userId,
     );
 
+    if (dto.brandKitId) {
+      // a project may only use a kit of its own organization
+      const kit = await this.prisma.brandKit.findFirst({
+        where: { id: dto.brandKitId, organizationId: project.organizationId },
+        select: { id: true },
+      });
+      if (!kit) {
+        throw new BadRequestException(
+          'Brand kit not found in this organization',
+        );
+      }
+    }
+
     const { members, userId: _caller, ...fields } = dto;
     const newLimit = fields.limitCreditAllowance;
     const limitChanged =
