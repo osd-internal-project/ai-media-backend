@@ -622,6 +622,8 @@ model Organization {
   remainImageAmount   Int?                      @default(0) @map("remain_image_amount")
   maxUserAccess       Int?                      @map("max_user_access")
   accessCodes         String[]                  @default(["image", "video", "omni", "dream"]) @map("access_codes")
+  // master_model_type.id ที่ org ใช้ได้ — ว่าง = ทุก model ที่ active
+  allowedModelIds     Int[]                     @default([]) @map("allowed_model_ids")
   subscription        OrganizationSubscription?
   creditBalance       CreditBalance?
   packageTransactions PackageTransaction[]
@@ -832,6 +834,8 @@ model Plan {
   status        Boolean                    @default(false)
   orderIndex    Int                        @default(0) @map("order_index")
   accessCodes   String[]                   @default(["image", "video", "omni", "dream"]) @map("access_codes")
+  // คัดลอกไป organization.allowedModelIds ตอนสร้าง org / เปลี่ยน plan — ว่าง = ทุก model ที่ active
+  allowedModelIds Int[]                    @default([]) @map("allowed_model_ids")
 
   @@map("plans")
 }

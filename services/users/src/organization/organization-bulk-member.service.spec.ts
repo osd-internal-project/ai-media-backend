@@ -19,6 +19,7 @@ import { HttpService } from '@nestjs/axios';
 import { of } from 'rxjs';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
 import { OrganizationBulkMemberService } from './organization-bulk-member.service';
+import { OrganizationSeatService } from './organization-seat.service';
 import { BulkMemberRowDto } from './dto/bulk-add-members.dto';
 
 const ORG = 'org-1';
@@ -50,6 +51,9 @@ describe('OrganizationBulkMemberService', () => {
   let db: FakeDb;
 
   const organizationRepo = { findOne: jest.fn() };
+  let pendingInvites = 0;
+  // active = สมาชิกใน fake db, pending = คำเชิญค้างที่ test ตั้งเอง
+  const seatService = { usage: jest.fn() };
   const memberRepo = {
     findMany: jest.fn(),
     create: jest.fn(),
@@ -73,6 +77,11 @@ describe('OrganizationBulkMemberService', () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    seatService.usage.mockImplementation(async () => ({
+      active: db.members.length,
+      pending: pendingInvites,
+      max: db.org?.maxUserAccess ?? null,
+    }));
     db = {
       org: { organizationId: ORG, maxUserAccess: 10 },
       members: [],
@@ -131,9 +140,11 @@ describe('OrganizationBulkMemberService', () => {
           useValue: requestChangePasswordRepo,
         },
         { provide: HttpService, useValue: http },
+        { provide: OrganizationSeatService, useValue: seatService },
       ],
     }).compile();
     service = moduleRef.get(OrganizationBulkMemberService);
+    pendingInvites = 0;
   });
 
   const validate = (rows: BulkMemberRowDto[]) =>
@@ -247,6 +258,16 @@ describe('OrganizationBulkMemberService', () => {
       const result = await validate([row()]);
       expect(result.valid).toBe(false);
       expect(result.errors[0]).toContain('Seat limit exceeded');
+    });
+
+    it('counts pending invites toward the seats', async () => {
+      db.org.maxUserAccess = 2;
+      db.members = [{ userId: 'u-x' }];
+      pendingInvites = 1;
+      const result = await validate([row()]);
+      expect(result.valid).toBe(false);
+      expect(result.errors[0]).toContain('1 members + 1 pending invites + 1 new > 2 seats');
+      expect(result.seat).toEqual({ current: 2, adding: 1, max: 2 });
     });
 
     it('treats a null maxUserAccess as unlimited', async () => {

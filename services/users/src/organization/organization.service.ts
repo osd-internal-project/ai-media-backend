@@ -4,6 +4,8 @@ import {
   Logger,
   ConflictException,
   ForbiddenException,
+  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApproveInviteUserDto } from './dto/approve-invite-user.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
@@ -19,6 +21,13 @@ import {
   CreditBalanceRepository,
   PackageTransactionRepository,
   LlmGatewayService,
+  AuthUser,
+  authMode,
+  isSystemAdmin,
+  AuditLogRepository,
+  changedFields,
+  recordAdminAudit,
+  matchesPlan,
 } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
@@ -26,6 +35,36 @@ import { HttpService } from '@nestjs/axios';
 import configs from 'src/configs';
 import { firstValueFrom } from 'rxjs';
 import * as dayjs from 'dayjs';
+import { OrganizationSeatService } from './organization-seat.service';
+
+/** ฟิลด์ที่คนที่ไม่ใช่ system admin แก้ผ่าน PATCH /organization/:id ได้ */
+const OWNER_EDITABLE_FIELDS = ['name', 'description'];
+const ORGANIZATION_MANAGER_ROLES = ['OWNER', 'ADMIN'];
+
+function adminListInclude(now: Date) {
+  return Prisma.validator<Prisma.OrganizationInclude>()({
+    subscription: { select: { planId: true, planName: true } },
+    _count: {
+      select: {
+        organizationMember: { where: { status: 'active' } },
+        invitations: { where: { status: 'PENDING', expiresAt: { gt: now } } },
+      },
+    },
+  });
+}
+
+function invitationEmail(email: string, organizationName: string, token: string) {
+  return {
+    to: email,
+    subject: `You are invited to join ${organizationName}!`,
+    template: 'invite',
+    context: {
+      teamName: organizationName,
+      email,
+      action_url: `${configs().frontendUrl}/accept-invite?token=${token}`,
+    },
+  };
+}
 
 @Injectable()
 export class OrganizationService {
@@ -42,6 +81,8 @@ export class OrganizationService {
     private readonly creditBalanceRepo: CreditBalanceRepository,
     private readonly organizationSubscriptionRepo: OrganizationSubscriptionRepository,
     private readonly llmGateway: LlmGatewayService,
+    private readonly seatService: OrganizationSeatService,
+    private readonly auditLogRepo: AuditLogRepository,
   ) {}
 
   create(createOrganizationDto: Prisma.OrganizationCreateInput) {
@@ -107,6 +148,7 @@ export class OrganizationService {
         status: true,
         maxUserAccess: maxUserAccess,
         accessCodes: plan?.accessCodes || [],
+        allowedModelIds: plan?.allowedModelIds ?? [],
       },
     });
     // Non-blocking: a gateway outage must not fail organization creation. When this yields
@@ -203,6 +245,11 @@ export class OrganizationService {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 48);
 
+    // คำเชิญที่ค้างอยู่ถูกนับ seat ไปแล้ว — เช็คเฉพาะคำเชิญใหม่
+    if (!existingInvite) {
+      await this.seatService.assertAvailable(dto.organizationId, 1);
+    }
+
     if (existingInvite) {
       // Update existing
       await this.invitationRepo.update({
@@ -230,23 +277,66 @@ export class OrganizationService {
     const organization = await this.organizationRepo.findOne({
       where: { organizationId: dto.organizationId },
     });
-    // Email Dispatch
-    const emailPayload = {
-      to: dto.email,
-      subject: `You are invited to join ${organization.name}!`,
-      template: 'invite',
-      context: {
-        teamName: organization.name, // Or fetch Org Name
-        email: dto.email,
-        action_url: `${configs().frontendUrl}/accept-invite?token=${token}`,
-      },
-    };
-
     // SMTP relay อาจค้างนานกว่า ingress 60s — ไม่รอ ให้ invite ตอบทันที
-    void this.sendInvitationEmail(emailPayload);
+    void this.sendInvitationEmail(invitationEmail(dto.email, organization.name, token));
     void this.notifyInvitationChanged(dto.email);
 
     return { message: 'Invitation sent', token };
+  }
+
+  /** ส่งคำเชิญเดิมซ้ำ: token เดิม (ลิงก์ในอีเมลเก่ายังใช้ได้) แค่ต่ออายุ 48 ชม. */
+  async resendInvitation(id: string, authUser?: AuthUser) {
+    const invite = await this.findManageableInvitation(id, authUser);
+    // คำเชิญที่หมดอายุไม่ถูกนับ seat แล้ว — ต่ออายุ = จอง seat ใหม่
+    if (invite.expiresAt <= new Date()) {
+      await this.seatService.assertAvailable(invite.organizationId, 1);
+    }
+    const expiresAt = dayjs().add(48, 'hour').toDate();
+    await this.invitationRepo.update({ where: { id }, data: { expiresAt } });
+    const organization = await this.organizationRepo.findOne({
+      where: { organizationId: invite.organizationId },
+    });
+    void this.sendInvitationEmail(
+      invitationEmail(invite.email, organization?.name ?? '', invite.token),
+    );
+    void this.notifyInvitationChanged(invite.email);
+    return { message: 'Invitation resent', expiresAt };
+  }
+
+  /** ไม่ลบแถว — เก็บไว้ให้เห็นในประวัติคำเชิญ */
+  async cancelInvitation(id: string, authUser?: AuthUser) {
+    const invite = await this.findManageableInvitation(id, authUser);
+    await this.invitationRepo.update({ where: { id }, data: { status: 'CANCELLED' } });
+    void this.notifyInvitationChanged(invite.email);
+    return { message: 'Invitation cancelled' };
+  }
+
+  private async findManageableInvitation(id: string, authUser?: AuthUser) {
+    const invite = await this.invitationRepo.findOne({ where: { id } });
+    if (!invite) throw new NotFoundException('Invitation not found');
+    if (invite.status !== 'PENDING') {
+      throw new BadRequestException(`Invitation is already ${invite.status.toLowerCase()}`);
+    }
+    await this.assertOrganizationManager(authUser, invite.organizationId);
+    return invite;
+  }
+
+  /** system admin หรือ OWNER / ADMIN ของ org — หน้า admin และหน้า org ของ owner ใช้ปุ่มเดียวกัน */
+  private async assertOrganizationManager(
+    authUser: AuthUser | undefined,
+    organizationId: string,
+  ) {
+    if (authMode() === 'off' || isSystemAdmin(authUser)) return;
+    if (!authUser) throw new ForbiddenException('Missing authenticated user');
+    const member = await this.organizationMemberRepo.findOne({
+      where: { organizationId, userId: authUser.userId, status: 'active' },
+      select: { role: true },
+    });
+    if (!member || !ORGANIZATION_MANAGER_ROLES.includes(member.role)) {
+      throw new ForbiddenException(
+        'Only an organization owner or admin can manage invitations',
+      );
+    }
   }
 
   /** คำเชิญที่ยังรอตอบของ email นี้ — ใช้แสดงกระดิ่ง noti */
@@ -455,13 +545,48 @@ export class OrganizationService {
     });
     return organization.accessCodes;
   }
-  findAll(search: { searchText?: string; type?: string }) {
-    return this.organizationRepo.findMany({
+
+  async findAllowedModelIds(organizationId: string): Promise<number[]> {
+    const organization = await this.organizationRepo.findOne({
+      where: { organizationId },
+      select: { allowedModelIds: true },
+    });
+    if (!organization) throw new NotFoundException('Organization not found');
+    return organization.allowedModelIds;
+  }
+  /** list ของ admin + seat ที่ใช้, ชื่อ plan และ "กำหนดเอง" (ค่าต่างจาก plan ปัจจุบัน) — ฟิลด์เดิมไม่เปลี่ยน */
+  async findAll(search: { searchText?: string; type?: string }) {
+    const include = adminListInclude(new Date());
+    // repository ไม่ส่ง generic ต่อ — type ของ include หายจึงระบุ payload เอง
+    const orgs = (await this.organizationRepo.findMany({
       where: {
         ...(search.type && { type: search.type }),
         ...(search.searchText && { name: { contains: search.searchText } }),
       },
       orderBy: { createdAt: 'desc' },
+      include,
+    })) as Prisma.OrganizationGetPayload<{ include: typeof include }>[];
+    const planIds = [...new Set(orgs.flatMap((org) => org.subscription?.planId ?? []))];
+    const plans = await this.planRepo.findMany({
+      where: { OR: [{ id: { in: planIds } }, { isDefault: true }] },
+      select: { id: true, name: true, isDefault: true, accessCodes: true, allowedModelIds: true },
+    });
+    const byId = new Map(plans.map((plan) => [plan.id, plan]));
+    const defaultPlan = plans.find((plan) => plan.isDefault);
+    return orgs.map(({ _count, ...org }) => {
+      // org personal ไม่มี subscription — ได้ค่ามาจาก plan ค่าเริ่มต้นตอนสมัคร
+      const plan = org.subscription
+        ? byId.get(org.subscription.planId)
+        : org.type?.toLowerCase() === 'personal'
+        ? defaultPlan
+        : undefined;
+      return {
+        ...org,
+        seatUsed: _count.organizationMember,
+        seatPending: _count.invitations,
+        planName: plan?.name ?? org.subscription?.planName ?? null,
+        isCustomized: plan ? !matchesPlan(org, plan) : false,
+      };
     });
   }
 
@@ -491,21 +616,51 @@ export class OrganizationService {
     });
   }
 
-  findOne(id: string) {
-    return this.organizationRepo.findOne({
+  /** + seatUsed / seatPending แบบเดียวกับ list ของ admin — ฟิลด์เดิมไม่เปลี่ยน */
+  async findOne(id: string) {
+    const organization = await this.organizationRepo.findOne({
       where: { organizationId: id },
       include: {
         subscription: true,
         creditBalance: true,
       },
     });
+    if (!organization) return organization;
+    const seat = await this.seatService.usage(id);
+    return { ...organization, seatUsed: seat.active, seatPending: seat.pending };
   }
 
-  update(id: string, updateOrganizationDto: Prisma.OrganizationUpdateInput) {
-    return this.organizationRepo.update({
+  async update(
+    id: string,
+    updateOrganizationDto: Prisma.OrganizationUpdateInput,
+    authUser?: AuthUser,
+  ) {
+    // ที่เหลือคือสิทธิ์/โควต้า (limit, access, credit) — หน้า org ของ owner ส่งมาแค่ name, description
+    if (authMode() !== 'off' && !isSystemAdmin(authUser)) {
+      const locked = Object.keys(updateOrganizationDto).filter(
+        (field) => !OWNER_EDITABLE_FIELDS.includes(field),
+      );
+      if (locked.length > 0) {
+        throw new ForbiddenException(
+          `Only a system administrator can change: ${locked.join(', ')}`,
+        );
+      }
+    }
+    const before = await this.organizationRepo.findOne({ where: { organizationId: id } });
+    const updated = await this.organizationRepo.update({
       where: { organizationId: id },
       data: updateOrganizationDto,
     });
+    if (before) {
+      await recordAdminAudit(this.auditLogRepo, {
+        userId: authUser?.userId,
+        entityName: 'organization',
+        entityId: id,
+        // body เป็นค่า field ตรง ๆ จากฟอร์ม admin / owner
+        ...changedFields(before, updateOrganizationDto as Record<string, unknown>),
+      });
+    }
+    return updated;
   }
 
   remove(id: string) {

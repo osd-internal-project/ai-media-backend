@@ -1,8 +1,9 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
 import { NEVER } from 'rxjs';
 import {
+  AuditLogRepository,
   CreditBalanceRepository,
   InvitationRepository,
   LlmGatewayService,
@@ -16,6 +17,7 @@ import {
 } from '@ai-media/share';
 import { KeycloakService } from 'src/keycloak/keycloak.service';
 import { OrganizationService } from './organization.service';
+import { OrganizationSeatService } from './organization-seat.service';
 
 const invite = {
   id: 'inv-1',
@@ -38,6 +40,7 @@ describe('OrganizationService invitations', () => {
   const memberRepo = { findOne: jest.fn(), create: jest.fn() };
   const organizationRepo = { findOne: jest.fn(), create: jest.fn() };
   const creditBalanceRepo = { create: jest.fn() };
+  const seatService = { assertAvailable: jest.fn() };
   const keycloakService = { createUser: jest.fn() };
 
   beforeEach(async () => {
@@ -52,12 +55,14 @@ describe('OrganizationService invitations', () => {
         { provide: OrganizationRepository, useValue: organizationRepo },
         { provide: CreditBalanceRepository, useValue: creditBalanceRepo },
         { provide: KeycloakService, useValue: keycloakService },
+        { provide: OrganizationSeatService, useValue: seatService },
         ...[
           PlanRepository,
           PlanPriceRepository,
           PackageTransactionRepository,
           OrganizationSubscriptionRepository,
           LlmGatewayService,
+          AuditLogRepository,
         ].map((provide) => ({ provide, useValue: {} })),
       ],
     }).compile();
@@ -118,6 +123,8 @@ describe('OrganizationService invitations', () => {
     expect(memberRepo.create).toHaveBeenCalledWith({
       data: { organizationId: 'org-1', userId: 'u-new', role: 'MEMBER' },
     });
+    // คำเชิญที่ส่งไปแล้ว (รวมก่อน deploy) รับได้เสมอ แม้ org จะเต็ม
+    expect(seatService.assertAvailable).not.toHaveBeenCalled();
   });
 
   it('lists only pending, unexpired invitations for the email', async () => {
@@ -138,6 +145,81 @@ describe('OrganizationService invitations', () => {
   it('returns nothing for an empty email', async () => {
     expect(await service.findPendingInvitations('')).toEqual([]);
     expect(invitationRepo.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a new invite when the seats are full, without saving it', async () => {
+    usersRepo.findOne.mockResolvedValue(null);
+    invitationRepo.findOne.mockResolvedValue(null);
+    seatService.assertAvailable.mockRejectedValue(new ConflictException('Seat limit reached'));
+    const create = jest.fn();
+    service['invitationRepo'].create = create;
+
+    await expect(
+      service.createInvitation({
+        email: 'c@example.com',
+        organizationId: 'org-1',
+      } as Parameters<typeof service.createInvitation>[0]),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(seatService.assertAvailable).toHaveBeenCalledWith('org-1', 1);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('re-sends an existing pending invite without a seat check', async () => {
+    usersRepo.findOne.mockResolvedValue(null);
+    service['organizationRepo'].findOne = jest.fn().mockResolvedValue({ name: 'Org' });
+    (service['httpService'].post as jest.Mock).mockReturnValue(NEVER);
+
+    await service.createInvitation({
+      email: 'b@example.com',
+      organizationId: 'org-1',
+    } as Parameters<typeof service.createInvitation>[0]);
+    expect(seatService.assertAvailable).not.toHaveBeenCalled();
+  });
+
+  describe('resend and cancel', () => {
+    const original = process.env.AUTH_MODE;
+    const owner = { userId: 'u-owner', token: 't', role: 'USER' };
+    beforeEach(() => {
+      process.env.AUTH_MODE = 'report';
+      service['organizationRepo'].findOne = jest.fn().mockResolvedValue({ name: 'Org' });
+      (service['httpService'].post as jest.Mock).mockReturnValue(NEVER);
+      memberRepo.findOne.mockResolvedValue({ role: 'OWNER' });
+    });
+    afterEach(() => {
+      process.env.AUTH_MODE = original;
+    });
+
+    it('resends with the same token, a later expiry, and no seat check', async () => {
+      const result = await service.resendInvitation('inv-1', owner);
+      const [[update]] = invitationRepo.update.mock.calls;
+      expect(update.where).toEqual({ id: 'inv-1' });
+      expect(Object.keys(update.data)).toEqual(['expiresAt']);
+      expect(result.expiresAt.getTime()).toBeGreaterThan(invite.expiresAt.getTime());
+      expect(seatService.assertAvailable).not.toHaveBeenCalled();
+    });
+
+    it('re-checks seats before reviving an expired invite', async () => {
+      invitationRepo.findOne.mockResolvedValue({ ...invite, expiresAt: new Date(Date.now() - 1000) });
+      seatService.assertAvailable.mockRejectedValue(new ConflictException('Seat limit reached'));
+      await expect(service.resendInvitation('inv-1', owner)).rejects.toBeInstanceOf(ConflictException);
+      expect(invitationRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('cancels by status, keeping the row', async () => {
+      await service.cancelInvitation('inv-1', owner);
+      expect(invitationRepo.update).toHaveBeenCalledWith({
+        where: { id: 'inv-1' },
+        data: { status: 'CANCELLED' },
+      });
+    });
+
+    it('refuses a plain member and an invite that is no longer pending', async () => {
+      memberRepo.findOne.mockResolvedValue({ role: 'MEMBER' });
+      await expect(service.cancelInvitation('inv-1', owner)).rejects.toBeInstanceOf(ForbiddenException);
+      invitationRepo.findOne.mockResolvedValue({ ...invite, status: 'ACCEPTED' });
+      await expect(service.cancelInvitation('inv-1', owner)).rejects.toThrow('Invitation is already accepted');
+      expect(invitationRepo.update).not.toHaveBeenCalled();
+    });
   });
 
   it('responds without waiting for a hung email send', async () => {

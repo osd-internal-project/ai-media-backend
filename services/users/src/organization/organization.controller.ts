@@ -7,13 +7,14 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { OrganizationService } from './organization.service';
 import { ApproveInviteUserDto } from './dto/approve-invite-user.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { Prisma } from '@prisma/client';
-import { AuthUser, CurrentUser } from '@ai-media/share';
+import { AuthUser, CurrentUser, SystemAdminGuard } from '@ai-media/share';
 import { OrganizationBulkMemberService } from './organization-bulk-member.service';
 import {
   BulkAddMembersDto,
@@ -41,6 +42,7 @@ export class OrganizationController {
     return this.organizationService.createOwner(createOrganizationDto);
   }
   @Post('system-admin')
+  @UseGuards(SystemAdminGuard)
   createBySystemAdmin(
     @Body()
     createOrganizationDto: {
@@ -70,6 +72,16 @@ export class OrganizationController {
   @Get('invitation/:token')
   verifyInvitation(@Param('token') token: string) {
     return this.organizationService.verifyInvitation(token);
+  }
+
+  @Post('invitation/:id/resend')
+  resendInvitation(@Param('id') id: string, @CurrentUser() authUser?: AuthUser) {
+    return this.organizationService.resendInvitation(id, authUser);
+  }
+
+  @Delete('invitation/:id')
+  cancelInvitation(@Param('id') id: string, @CurrentUser() authUser?: AuthUser) {
+    return this.organizationService.cancelInvitation(id, authUser);
   }
 
   @Post('invitation/accept')
@@ -142,6 +154,12 @@ export class OrganizationController {
     );
   }
 
+  /** model ที่ org ใช้ได้ — ว่าง = ทุก model ที่ active (workspace ใช้กรอง dropdown) */
+  @Get('allowed-models/:organizationId')
+  findAllowedModelIds(@Param('organizationId') organizationId: string) {
+    return this.organizationService.findAllowedModelIds(organizationId);
+  }
+
   @Get('access-code/:organizationId')
   findAccessCodeByOrganizationId(
     @Param('organizationId') organizationId: string,
@@ -173,11 +191,13 @@ export class OrganizationController {
   update(
     @Param('id') id: string,
     @Body() updateOrganizationDto: Prisma.OrganizationUpdateInput,
+    @CurrentUser() authUser?: AuthUser,
   ) {
-    return this.organizationService.update(id, updateOrganizationDto);
+    return this.organizationService.update(id, updateOrganizationDto, authUser);
   }
 
   @Delete(':id')
+  @UseGuards(SystemAdminGuard)
   remove(@Param('id') id: string) {
     return this.organizationService.remove(id);
   }

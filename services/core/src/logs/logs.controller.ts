@@ -7,12 +7,28 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
+import { SystemAdminGuard } from '@ai-media/share';
 import { LogsService } from './logs.service';
 
 @Controller('logs')
 export class LogsController {
   constructor(private readonly logsService: LogsService) {}
+
+  @Get('audit')
+  @UseGuards(SystemAdminGuard)
+  listAudit(
+    @Query('entityName') entityName?: string,
+    @Query('entityId') entityId?: string,
+    @Query('take') take?: string,
+  ) {
+    if (!entityName || !entityId) {
+      throw new BadRequestException('entityName and entityId are required');
+    }
+    return this.logsService.listAudit(entityName, entityId, Number(take) || 50);
+  }
 
   @Get('find-image/:projectId')
   findProjectImageByPage(

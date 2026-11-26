@@ -209,6 +209,8 @@ describe('OrganizationSubscriptionService', () => {
         name: 'Pro',
         status: true,
         detailJson: { creditAllowance: 5000, imageAllowance: '200', maxUserAccess: 10 },
+        accessCodes: ['image', 'video'],
+        allowedModelIds: [3, 7],
       });
       await service.adminChangePackage('org-1', 'price-1');
       expect(tx.organizationSubscription.update.mock.calls[0][0].data).toMatchObject({
@@ -225,11 +227,28 @@ describe('OrganizationSubscriptionService', () => {
       });
       expect(tx.organization.update).toHaveBeenCalledWith({
         where: { organizationId: 'org-1' },
-        data: { maxUserAccess: 10 },
+        data: { maxUserAccess: 10, accessCodes: ['image', 'video'], allowedModelIds: [3, 7] },
       });      // new cycle: project/member used restarts, holds untouched
       expect(tx.project.updateMany).toHaveBeenCalledWith({
         where: { organizationId: 'org-1' },
         data: { usedCreditAllowance: 0, usedImageAllowance: 0 },
+      });
+    });
+
+    it('keeps the org access and models when only the price of the same plan changes', async () => {
+      planPriceRepo.findOne.mockResolvedValue({ id: 'price-2', planId: 'plan-current', price: 9900, interval: 'YEAR', periodCount: 12 });
+      planRepo.findOne.mockResolvedValue({
+        id: 'plan-current',
+        name: 'Pro',
+        status: true,
+        detailJson: { maxUserAccess: 10 },
+        accessCodes: ['image'],
+        allowedModelIds: [3],
+      });
+      await service.adminChangePackage('org-1', 'price-2');
+      expect(tx.organization.update).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1' },
+        data: { maxUserAccess: 10 },
       });
     });
 

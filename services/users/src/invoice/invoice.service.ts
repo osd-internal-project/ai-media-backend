@@ -805,6 +805,7 @@ export class InvoiceService {
         status: true,
         maxUserAccess,
         accessCodes: plan?.accessCodes || [],
+        allowedModelIds: plan?.allowedModelIds ?? [],
         // carry over the saved-card customer created during payment (if any)
         omiseCustomerId: invoice.omiseCustomerId,
       },

@@ -17,13 +17,22 @@ import {
   PrismaService,
   resetCycleUsage,
 } from '@ai-media/share';
-import { OrganizationSubscription, Prisma } from '@prisma/client';
+import { OrganizationSubscription, Plan, Prisma } from '@prisma/client';
 import * as dayjs from 'dayjs';
 import configs from '../configs';
 import { OmiseService } from '../omise/omise.service';
 import { CancelMode } from './dto/admin-subscription.dto';
 
 const SYSTEM_ADMIN_ROLES = ['SUPER_ADMIN', 'SYSTEM_ADMIN'];
+
+/** เปลี่ยน plan จริง → คัดลอก access + model ของ plan ใหม่; ต่ออายุ plan เดิมไม่ทับค่าที่ admin ตั้งเอง */
+export function planChangeEntitlements(
+  currentPlanId: string,
+  plan: Pick<Plan, 'id' | 'accessCodes' | 'allowedModelIds'>,
+): Pick<Prisma.OrganizationUpdateInput, 'accessCodes' | 'allowedModelIds'> {
+  if (plan.id === currentPlanId) return {};
+  return { accessCodes: plan.accessCodes, allowedModelIds: plan.allowedModelIds ?? [] };
+}
 const ORGANIZATION_MANAGER_ROLES = ['OWNER', 'ADMIN'];
 
 @Injectable()
@@ -433,7 +442,10 @@ export class OrganizationSubscriptionService {
           // ไม่แตะ Organization.status — สวิตช์ซ่อน org ของ admin แยกจากการต่ออายุ
           await this.organizationRepo.update({
             where: { organizationId: newSub.organizationId },
-            data: { maxUserAccess: maxUserAccess },
+            data: {
+              maxUserAccess: maxUserAccess,
+              ...planChangeEntitlements(sub.planId, plan),
+            },
           });
         } catch (error) {
           Logger.error(
@@ -672,7 +684,7 @@ export class OrganizationSubscriptionService {
       await resetCycleUsage(tx, organizationId, creditAllowance);
       await tx.organization.update({
         where: { organizationId },
-        data: { maxUserAccess },
+        data: { maxUserAccess, ...planChangeEntitlements(sub.planId, plan) },
       });
       await tx.packageTransaction.create({
         data: {

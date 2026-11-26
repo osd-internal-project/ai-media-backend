@@ -22,6 +22,7 @@ const setup = (
     reserved?: boolean;
     failAt?: 'gallery' | 'afterQueue';
     projectOrg?: string;
+    allowedModelIds?: number[];
   } = {},
 ) => {
   const helper = {
@@ -65,14 +66,34 @@ const setup = (
     helper as never,
     galleryRepo as never,
     { create: jest.fn() } as never,
-    { findOne: jest.fn(async () => ({ modelType: 'm' })) } as never,
+    { findOne: jest.fn(async () => ({ id: 7, name: 'Model M', modelType: 'm' })) } as never,
     redis as never,
     queue as never,
-    {} as never,
+    { findOne: jest.fn(async () => ({ allowedModelIds: opts.allowedModelIds ?? [] })) } as never,
     { getOrCreateApiKey: jest.fn(async () => 'key') } as never,
   );
   return { service, helper, queue };
 };
+
+describe('generation model entitlement', () => {
+  it('lets an org with an empty list use any active model (existing orgs)', async () => {
+    const { service } = setup({ allowedModelIds: [] });
+    expect((await service.createGenerationTask(body, 'c1')).status).toBe(200);
+  });
+
+  it('refuses a model outside the org list before holding credit or queueing', async () => {
+    const { service, helper, queue } = setup({ allowedModelIds: [3] });
+
+    const res = await service.createGenerationTask(body, 'c1');
+
+    expect(res).toEqual({
+      status: 403,
+      data: "MODEL_NOT_ALLOWED: this organization's plan does not include Model M",
+    });
+    expect(helper.reserveHold).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+});
 
 describe('generation credit check + hold', () => {
   it('reserves the hold on the real user id (body.userId is the Keycloak token)', async () => {

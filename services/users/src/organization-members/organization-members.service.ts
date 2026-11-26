@@ -1,23 +1,30 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateOrganizationMemberDto } from './dto/create-organization-members.dto';
 import { UpdateOrganizationMemberDto } from './dto/update-organization-members.dto';
 import { OrganizationMemberRepository } from '@ai-media/share';
 import { UsersRepository } from '@ai-media/share';
 import { Prisma } from '@prisma/client';
+import { OrganizationSeatService } from '../organization/organization-seat.service';
 
 @Injectable()
 export class OrganizationMembersService {
   constructor(
     private readonly organizationMemberRepo: OrganizationMemberRepository,
     private readonly usersRepo: UsersRepository,
+    private readonly seatService: OrganizationSeatService,
   ) {}
 
-  create(createOrganizationMembersDto: Prisma.OrganizationMemberCreateInput) {
+  async create(createOrganizationMembersDto: Prisma.OrganizationMemberCreateInput) {
+    await this.seatService.assertAvailable(
+      memberOrganizationId(createOrganizationMembersDto),
+      1,
+    );
     return this.organizationMemberRepo.create({
       data: createOrganizationMembersDto,
     });
   }
-  createFromInvite(createOrganizationMembersDto: CreateOrganizationMemberDto) {
+  async createFromInvite(createOrganizationMembersDto: CreateOrganizationMemberDto) {
+    await this.seatService.assertAvailable(createOrganizationMembersDto.organizationId, 1);
     return this.organizationMemberRepo.create({
       data: {
         ...createOrganizationMembersDto,
@@ -67,4 +74,12 @@ export class OrganizationMembersService {
       where: { id },
     });
   }
+}
+
+/** body ของ POST /organization-members ส่งได้ทั้งแบบ organizationId ตรง ๆ และแบบ connect ของ Prisma */
+function memberOrganizationId(dto: Prisma.OrganizationMemberCreateInput): string {
+  const unchecked = dto as Prisma.OrganizationMemberCreateInput & { organizationId?: string };
+  const id = unchecked.organizationId ?? dto.organization?.connect?.organizationId;
+  if (!id) throw new BadRequestException('organizationId is required');
+  return id;
 }

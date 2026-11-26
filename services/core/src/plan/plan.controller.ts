@@ -7,7 +7,9 @@ import {
   Patch,
   Delete,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthUser, CurrentUser, SystemAdminGuard } from '@ai-media/share';
 import { PlanService } from './plan.service';
 
 @Controller('plans')
@@ -29,17 +31,25 @@ export class PlanController {
     return this.planService.findAllFormatted();
   }
 
+  @Get(':id/organizations-impact')
+  @UseGuards(SystemAdminGuard)
+  organizationsImpact(@Param('id') id: string) {
+    return this.planService.organizationsImpact(id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.planService.findById(id);
   }
 
   @Post()
+  @UseGuards(SystemAdminGuard)
   create(@Body() data: any) {
     return this.planService.create(data);
   }
 
   @Patch(':id/status')
+  @UseGuards(SystemAdminGuard)
   updateStatus(@Param('id') id: string, @Body('status') status: unknown) {
     if (typeof status !== 'boolean') {
       throw new BadRequestException('status must be a boolean');
@@ -48,11 +58,17 @@ export class PlanController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() data: any) {
-    return this.planService.update(id, data);
+  @UseGuards(SystemAdminGuard)
+  update(
+    @Param('id') id: string,
+    @Body() data: any,
+    @CurrentUser() authUser?: AuthUser,
+  ) {
+    return this.planService.update(id, data, authUser);
   }
 
   @Delete(':id')
+  @UseGuards(SystemAdminGuard)
   remove(@Param('id') id: string) {
     return this.planService.delete(id);
   }

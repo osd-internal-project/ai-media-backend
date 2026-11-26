@@ -340,6 +340,8 @@ export class UsersService {
       password: password,
       email: register.email,
       fullname: register.fullname,
+      // The register token came from the link we emailed, so the address is proven.
+      emailVerified: true,
     });
 
     if (!tokenKeycloak) {
@@ -567,7 +569,7 @@ export class UsersService {
    * credit/accessCodes มาจาก free plan (isDefault) แต่ไม่สร้าง subscription
    */
   private async provisionPersonalAccount(userId: string, displayName: string) {
-    const { creditAllowance, imageAllowance, accessCodes } =
+    const { creditAllowance, imageAllowance, accessCodes, allowedModelIds } =
       await this.getFreePlanAllowance();
 
     const personalOrg = await this.organizationRepo.create({
@@ -584,6 +586,7 @@ export class UsersService {
 
         maxUserAccess: 1,
         accessCodes,
+        allowedModelIds,
       },
     });
 
@@ -657,6 +660,7 @@ export class UsersService {
       creditAllowance: price?.creditAllowance || planDetails.creditAllowance || 0,
       imageAllowance: price?.imageAllowance || planDetails.imageAllowance || 0,
       accessCodes: plan.accessCodes,
+      allowedModelIds: plan.allowedModelIds ?? [],
     };
   }
 

@@ -32,6 +32,7 @@ import {
   BulkNewProjectDto,
 } from './dto/bulk-add-members.dto';
 import { MemberStatus } from './dto/bulk-member-actions.dto';
+import { OrganizationSeatService } from './organization-seat.service';
 
 const ACCESS_LINK_TTL_DAYS = 7;
 const SYSTEM_ADMIN_ROLES = ['SUPER_ADMIN', 'SYSTEM_ADMIN'];
@@ -110,6 +111,7 @@ export class OrganizationBulkMemberService {
     private readonly transaction: PrismaTransactionService,
     private readonly requestChangePasswordRepo: RequestChangePasswordRepository,
     private readonly httpService: HttpService,
+    private readonly seatService: OrganizationSeatService,
   ) {}
 
   /** ลบ membership ของ org นี้ (ไม่ลบ user/Keycloak) — OWNER และ id ของ org อื่นถูกข้าม */
@@ -378,12 +380,13 @@ export class OrganizationBulkMemberService {
       orgRemaining,
     );
 
-    const current = members.length;
+    const seat = await this.seatService.usage(organizationId);
+    const current = seat.active + seat.pending;
     const adding = plans.filter((p) => p.isNewOrgMember).length;
-    const max = org.maxUserAccess ?? null;
+    const max = seat.max;
     if (max !== null && current + adding > max) {
       batchErrors.push(
-        `Seat limit exceeded: ${current} members + ${adding} new > ${max} seats`,
+        `Seat limit exceeded: ${seat.active} members + ${seat.pending} pending invites + ${adding} new > ${max} seats`,
       );
     }
 

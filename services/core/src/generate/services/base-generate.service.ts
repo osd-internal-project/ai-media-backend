@@ -1,6 +1,7 @@
 import {
   GalleryRepository,
   injectTraceContext,
+  isModelAllowed,
   LlmGatewayService,
   LogRepository,
   MasterdataModelTypeRepository,
@@ -313,6 +314,18 @@ export abstract class BaseGenerateService {
         where: { modelType: body.model, type: this.modelType, isActive: true },
       });
       if (!modelDetail) return { status: 400, data: 'Model not found' };
+
+      // ทุกทาง (tab, workflow, photo event) ผ่านจุดนี้ — เช็คก่อนจอง credit
+      const entitlement = await this.organizationRepository.findOne({
+        where: { organizationId: body.organizationId },
+        select: { allowedModelIds: true },
+      });
+      if (!isModelAllowed(entitlement?.allowedModelIds, modelDetail.id)) {
+        return {
+          status: 403,
+          data: `MODEL_NOT_ALLOWED: this organization's plan does not include ${modelDetail.name ?? body.model}`,
+        };
+      }
 
       // Resolve the org's LLM gateway key BEFORE reserving credit, so a missing
       // key fails cleanly without leaving an orphaned credit hold. Gateway-backed

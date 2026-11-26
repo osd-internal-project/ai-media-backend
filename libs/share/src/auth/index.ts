@@ -7,3 +7,4 @@ export * from './keycloak-auth.service';
 export * from './keycloak-auth.guard';
 export * from './keycloak-auth.module';
 export * from './api-key.guard';
+export * from './system-admin.guard';

@@ -9,6 +9,7 @@ import {
 import { KeycloakModule } from '../keycloak/keycloak.module';
 import { HttpModule } from '@nestjs/axios';
 import { OrganizationBulkMemberService } from './organization-bulk-member.service';
+import { OrganizationSeatService } from './organization-seat.service';
 
 @Module({
   imports: [PrismaModule, LlmGatewayModule, KeycloakModule, HttpModule],
@@ -16,6 +17,7 @@ import { OrganizationBulkMemberService } from './organization-bulk-member.servic
   providers: [
     OrganizationService,
     OrganizationBulkMemberService,
+    OrganizationSeatService,
     PrismaTransactionService,
   ],
 })

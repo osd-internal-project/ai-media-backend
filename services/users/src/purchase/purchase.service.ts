@@ -286,6 +286,7 @@ export class PurchaseService {
           status: true,
           maxUserAccess,
           accessCodes: plan.accessCodes || [],
+          allowedModelIds: plan.allowedModelIds ?? [],
         },
       });
       await tx.organizationMember.create({

@@ -129,7 +129,7 @@ describe('changeCycleSubscription with billing disabled', () => {
 
   it('paid renewal keeps an org the admin switched off inactive', async () => {
     const { service, subRepo, omise, organizationRepo, planRepo, planPriceRepo } =
-      makeService({ ...paidSub(true), status: 'active', nextPlanId: 'p', nextPlanPriceId: 'pp' });
+      makeService({ ...paidSub(true), status: 'active', planId: 'p', nextPlanId: 'p', nextPlanPriceId: 'pp' });
     subRepo.update.mockResolvedValue({ organizationId: 'org-1' });
     organizationRepo.findOne.mockResolvedValue({ omiseCustomerId: 'cust' });
     omise.chargeCustomerCard.mockResolvedValue({ id: 'c', status: 'successful' });
@@ -152,6 +152,36 @@ describe('changeCycleSubscription with billing disabled', () => {
     expect(organizationRepo.update).toHaveBeenCalledWith({
       where: { organizationId: 'org-1' },
       data: { maxUserAccess: 5 },
+    });
+  });
+
+  it('paid renewal into a scheduled new plan copies its access and models', async () => {
+    const { service, subRepo, omise, organizationRepo, planRepo, planPriceRepo } =
+      makeService({ ...paidSub(true), status: 'active', planId: 'old', nextPlanId: 'p', nextPlanPriceId: 'pp' });
+    subRepo.update.mockResolvedValue({ organizationId: 'org-1' });
+    organizationRepo.findOne.mockResolvedValue({ omiseCustomerId: 'cust' });
+    omise.chargeCustomerCard.mockResolvedValue({ id: 'c', status: 'successful' });
+    planRepo.findOne.mockResolvedValue({
+      id: 'p',
+      name: 'Pro',
+      detailJson: { creditAllowance: 100, imageAllowance: 50, maxUserAccess: 5 },
+      accessCodes: ['image'],
+      allowedModelIds: [7],
+    });
+    planPriceRepo.findOne.mockResolvedValue({ id: 'pp', price: 990, periodCount: 1 });
+    // configs() อ่าน env ระหว่าง await — withBilling คืนค่า env ก่อน promise จบ
+    const before = process.env.BILLING_ENABLED;
+    process.env.BILLING_ENABLED = 'true';
+    try {
+      await service.changeCycleSubscription();
+    } finally {
+      if (before === undefined) delete process.env.BILLING_ENABLED;
+      else process.env.BILLING_ENABLED = before;
+    }
+    expect(omise.chargeCustomerCard).toHaveBeenCalled();
+    expect(organizationRepo.update).toHaveBeenCalledWith({
+      where: { organizationId: 'org-1' },
+      data: { maxUserAccess: 5, accessCodes: ['image'], allowedModelIds: [7] },
     });
   });
 

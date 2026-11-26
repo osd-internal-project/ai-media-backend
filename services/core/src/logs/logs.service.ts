@@ -31,6 +31,29 @@ export class LogsService {
     private readonly projectMemberRepository: ProjectMemberRepository,
   ) {}
 
+  /** ประวัติการแก้ของ admin ต่อ 1 รายการ (org / plan / model) ล่าสุดก่อน พร้อมชื่อคนแก้ */
+  async listAudit(entityName: string, entityId: string, take = 50) {
+    const rows = await this.auditLogRepo.findMany({
+      where: { entityName, entityId },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Math.max(take, 1), 200),
+    });
+    const userIds = [...new Set(rows.map((row) => row.userId))];
+    const users = await this.userRepo.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, fullname: true, email: true },
+    });
+    const byId = new Map(users.map((user) => [user.userId, user]));
+    return rows.map((row) => ({
+      id: String(row.id),
+      action: row.action,
+      oldValues: row.oldValues,
+      newValues: row.newValues,
+      createdAt: row.createdAt,
+      user: byId.get(row.userId) ?? { userId: row.userId, fullname: null, email: null },
+    }));
+  }
+
   /**
    * แปลงชื่อไฟล์ผลลัพธ์ของ gallery row เป็น URL สำหรับแสดงผล
    *
