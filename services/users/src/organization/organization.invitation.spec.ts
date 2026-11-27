@@ -114,6 +114,9 @@ describe('OrganizationService invitations', () => {
     });
 
     expect(result.organizationId).toBe('org-1');
+    expect(keycloakService.createUser).toHaveBeenCalledWith(
+      expect.objectContaining({ email: invite.email, emailVerified: true }),
+    );
     expect(usersRepo.create.mock.calls[0][0].data.recentOrganizationId).toBe(
       'org-1',
     );

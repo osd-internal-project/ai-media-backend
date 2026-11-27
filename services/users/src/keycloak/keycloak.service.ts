@@ -133,7 +133,8 @@ export class KeycloakService {
           userDto.fullname?.trim().split(' ').slice(1).join(' ') ||
           '-',
         email: userDto.email || '',
-        emailVerified: false,
+        // Community rejects tokens with email_verified=false; only callers that proved the email pass true.
+        emailVerified: userDto.emailVerified === true,
         enabled: true,
       };
       // Create User

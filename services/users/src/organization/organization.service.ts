@@ -477,6 +477,8 @@ export class OrganizationService {
         email: invite.email,
         firstName: dto.fullname,
         lastName: dto.fullname,
+        // The invite link arrived at this address, so it is already proven.
+        emailVerified: true,
       });
       console.log(`token`, token);
       if (!token) {
